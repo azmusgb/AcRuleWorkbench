@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-ui-build="v37-quiet-tree-no-function-info">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>AC Rule Workbench</title>
+<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css">
+
+</head>
+<body class="density-standard">
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<div class="app">
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <div class="brand-title"><div class="logo" aria-hidden="true">AC</div><div><h1>AC Rule Workbench</h1><div class="brand-sub" id="sourceSubtitle">Loading embedded evidence snapshot...</div></div></div>
+    </div>
+    <div class="global-search"><label class="sr-only" for="globalSearch">Search all evidence</label><input id="globalSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="searchPopover" autocomplete="off" placeholder="Search rules, functions, fields, routes, diagnostics..."><span class="kbd">/</span><div id="searchPopover" class="search-popover" role="listbox" aria-label="Search results"></div></div>
+    <div class="top-actions">
+      <button class="btn focus-mode-btn" type="button" data-action="toggle-rca-focus" title="Dim unrelated content and emphasize RCA hotspots" aria-pressed="false">RCA Focus</button>
+      <span class="pill" id="qualityPill"><span class="dot warn"></span> Loading</span>
+      <button class="btn" type="button" data-action="export-view" title="Open advanced export builder" aria-label="Open export builder">Export</button><button class="btn" type="button" data-action="open-report-builder" title="Generate reviewer report" aria-label="Generate reviewer report">Report</button>
+      <button class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+      <button class="btn icon-btn" type="button" data-action="open-help" title="Help" aria-label="Help">?</button>
+      <div id="topActionHint" class="top-action-hint" aria-live="polite"></div>
+    </div>
+  </header>
+  <div class="shell">
+    <aside class="pane left" aria-label="Editor object tree">
+      <div class="pane-head"><div class="eyebrow">Editor object tree</div><div class="caption caption-shell-muted">Browse structure model and global resources/configuration.</div><input id="scopeSearch" class="scope-search" type="search" placeholder="Filter object scopes..."><div class="scope-kind-filter" role="toolbar" aria-label="Scope quick filters"><button class="chip-btn active" type="button" data-scope-filter="all">All</button><button class="chip-btn" type="button" data-scope-filter="page">Page</button><button class="chip-btn" type="button" data-scope-filter="document">Document</button></div></div>
+      <div id="recentScopes" class="recent-scopes" aria-label="Recently viewed scopes"></div>
+      <div id="scopeList" class="scope-list scroll"></div>
+    </aside>
+    <main class="pane main" id="mainContent" tabindex="-1">
+      <div class="main-head">
+        <div class="scope-title"><div class="scope-heading-stack"><div class="scope-kicker">Structure view</div><h2 id="scopeTitle">Scope</h2><div id="scopeCaption" class="caption"></div><div id="crumbs" class="crumbs"></div></div><div class="scope-actions"><button class="btn inspector-mobile" type="button" data-action="show-inspector">Inspector</button></div></div>
+        <div id="tabs" class="tabs" aria-hidden="true"></div>
+        <div id="viewbar" class="viewbar"></div>
+      </div>
+      <div id="content" class="content scroll" aria-live="polite" aria-busy="false"></div>
+    </main>
+    <aside class="pane right" aria-label="Inspector">
+      <div class="inspector-head"><div class="inspector-title"><div><div class="eyebrow">Inspector</div><h3 id="inspectorTitle">Nothing selected</h3><div id="inspectorCaption" class="caption"></div></div><button class="btn" type="button" data-action="copy-rule-evidence" title="Copy selected rule evidence">Copy evidence</button><button class="btn icon-btn" type="button" data-action="close-inspector" aria-label="Close inspector">×</button></div><div id="inspectorTabs" class="inspector-tabs"></div></div>
+      <div id="inspectorBody" class="inspector-body scroll"></div>
+    </aside>
+  </div>
+</div>
+<div id="modalBackdrop" class="modal-backdrop" data-action="close-modal"></div>
+<section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1"><div class="modal-head"><div><h2 id="helpTitle">Workbench help</h2><div id="helpCaption" class="caption">Evidence-first rule inspection. No runtime execution is simulated.</div></div><button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">×</button></div><div id="helpBody" class="modal-body"></div></section>
+<div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script defer src="ac-rule-viewer.js"></script>
+</body>
+</html>
+
+

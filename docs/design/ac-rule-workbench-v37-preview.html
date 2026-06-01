@@ -1,0 +1,65 @@
+<!--  -->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AC Rule Workbench - Preview (v37)</title>
+<link rel="stylesheet" href="ac-rule-workbench-v37.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-title">
+          <div class="logo">AC</div>
+          <div>
+            <h1>AC Rule Workbench</h1>
+            <div class="brand-sub">v37 preview shell</div>
+          </div>
+        </div>
+      </div>
+      <div class="global-search">
+        <input type="search" placeholder="Search rules, functions, fields, routes, diagnostics...">
+        <span class="kbd">/</span>
+      </div>
+      <div class="top-actions">
+        <button class="btn focus-mode-btn" type="button" aria-pressed="false">RCA Focus</button>
+        <span class="pill"><span class="dot warn"></span> Preview</span>
+      </div>
+    </header>
+    <div class="shell">
+      <aside class="pane left">
+        <div class="pane-head">
+          <div class="eyebrow">Scope navigator</div>
+          <input class="scope-search" type="search" placeholder="Filter scopes...">
+        </div>
+        <div class="scope-list scroll">
+          <div class="scope-item active"><span class="scope-name">ClaimsEntry - pg1</span></div>
+          <div class="scope-item"><span class="scope-name">ClaimsEntry - pg2</span></div>
+        </div>
+      </aside>
+      <main class="pane main">
+        <div class="main-head">
+          <div class="scope-title"><div class="scope-heading-stack"><div class="scope-kicker">Structure view</div><h2>ClaimsEntry - pg1</h2></div></div>
+          <div class="tabs"><button class="tab active">Rules</button><button class="tab">Diagnostics</button></div>
+          <div class="viewbar"></div>
+        </div>
+        <div class="content scroll">
+          <div class="rule-card expanded selected">
+            <div class="rule-card-head">
+              <span class="rule-id">ACR-001</span>
+              <span class="rule-name">ClaimType visibility - whitelist gate</span>
+              <span class="rule-badge allow">ALLOW</span>
+            </div>
+          </div>
+        </div>
+      </main>
+      <aside class="pane right">
+        <div class="inspector-head"><div class="inspector-title"><div><h3>Inspector</h3></div></div></div>
+        <div class="inspector-body scroll"></div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

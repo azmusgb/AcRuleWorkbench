@@ -1,0 +1,2 @@
+Managed FormWorks/DCM wrapper assemblies are staged here by scripts/setup-dcm-deps.ps1.
+Do not commit proprietary DLLs.

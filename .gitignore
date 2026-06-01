@@ -1,0 +1,34 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+TestResults/
+*.user
+*.suo
+*.rsuser
+.vs/
+
+# Logs and diagnostics
+*.log
+*.trace
+*.dmp
+*.etl
+*_diagnostics_*.zip
+
+# Generated Workbench evidence/viewer outputs
+ac-rule-viewer.flow.json
+ac-rule-viewer.rel.json
+ac-rule-viewer.rules.json
+ac-rule-viewer.tree.json
+ac-rule-viewer-live.html
+ac-rule-viewer-live.css
+
+# Local runtime configuration
+scripts/runtime-path.generated.ps1
+appsettings.local.json
+*.local.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak

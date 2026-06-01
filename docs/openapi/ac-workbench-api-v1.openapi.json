@@ -1,0 +1,2104 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AC Rule Workbench API",
+    "version": "1.0.0",
+    "description": "Stable product API for FormWorks/DCM AutoCapture rule inspection. This contract is evidence-first, read-only by default, and separates structural order proof from flat inventory evidence."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8787/api/v1",
+      "description": "Local AC Rule Workbench API"
+    }
+  ],
+  "tags": [
+    {
+      "name": "system"
+    },
+    {
+      "name": "snapshot"
+    },
+    {
+      "name": "scopes"
+    },
+    {
+      "name": "rules"
+    },
+    {
+      "name": "search"
+    },
+    {
+      "name": "export"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "get_root",
+        "summary": "API help and route summary.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/help": {
+      "get": {
+        "operationId": "get_help",
+        "summary": "API help and route summary.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "get_openapi_json",
+        "summary": "OpenAPI 3.0 contract.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/routes": {
+      "get": {
+        "operationId": "get_routes",
+        "summary": "Machine-readable route catalog.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/capabilities": {
+      "get": {
+        "operationId": "get_capabilities",
+        "summary": "Server capabilities and feature flags.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "get_health_live",
+        "summary": "Cheap process liveness check.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "get_health_ready",
+        "summary": "Readiness check for FWD path and snapshot availability.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "operationId": "get_status",
+        "summary": "Combined server/source/snapshot status.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshot": {
+      "get": {
+        "operationId": "get_snapshot",
+        "summary": "Current normalized snapshot summary.",
+        "tags": [
+          "snapshot"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/snapshot/refresh": {
+      "post": {
+        "operationId": "post_snapshot_refresh",
+        "summary": "Rebuild cached snapshot when refresh is enabled.",
+        "tags": [
+          "snapshot"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes": {
+      "get": {
+        "operationId": "get_scopes",
+        "summary": "List rule scopes.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes/{scopeId}": {
+      "get": {
+        "operationId": "get_scopes_scopeId",
+        "summary": "Deep scope summary.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes/{scopeId}/structure": {
+      "get": {
+        "operationId": "get_scopes_scopeId_structure",
+        "summary": "Structural rule tree for a scope.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "scopeStructure": {
+                    "summary": "Scope structural tree with route labels",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.ScopeStructure",
+                      "data": {
+                        "scopeId": "AC/Pages/DentalADA",
+                        "evidenceClass": "Structural",
+                        "summary": {
+                          "nodeCount": 4196,
+                          "edgeCount": 4196,
+                          "directDisabled": 128,
+                          "inheritedDisabled": 1624
+                        },
+                        "nodes": [
+                          {
+                            "nodeId": "node-000419",
+                            "name": "First page?",
+                            "functionName": "CheckPageNum",
+                            "incomingBranch": {
+                              "label": "No",
+                              "actionNameResolved": true
+                            }
+                          }
+                        ],
+                        "edges": [
+                          {
+                            "fromNodeId": "node-000416",
+                            "toNodeId": "node-000419",
+                            "label": "No",
+                            "actionNameResolved": true
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes/{scopeId}/inventory": {
+      "get": {
+        "operationId": "get_scopes_scopeId_inventory",
+        "summary": "Flat inventory rows for a scope.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "scopeInventory": {
+                    "summary": "Flat inventory with structural disabled authority when matched",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.ScopeInventory",
+                      "data": {
+                        "scopeId": "AC/Pages/DentalADA",
+                        "evidenceClass": "FlatInventory",
+                        "summary": {
+                          "total": 4863,
+                          "structuralMatch": 4196,
+                          "flatOnly": 667
+                        },
+                        "items": [
+                          {
+                            "inventoryId": "flat-000419",
+                            "classification": "StructuralMatch",
+                            "structuralNodeId": "node-000419",
+                            "disabled": {
+                              "state": "Enabled",
+                              "authority": "Structural",
+                              "flatInventory": {
+                                "state": "PossiblyDisabledInherited",
+                                "authority": "FlatInventory"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes/{scopeId}/references": {
+      "get": {
+        "operationId": "get_scopes_scopeId_references",
+        "summary": "Evidence-coded static references for a scope.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "scopeReferences": {
+                    "summary": "Confidence-coded static references",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.ScopeReferences",
+                      "data": {
+                        "scopeId": "AC/Pages/DentalADA",
+                        "summary": {
+                          "total": 2201,
+                          "returned": 1000,
+                          "runtimeDependencies": 920,
+                          "heuristicMentions": 118
+                        },
+                        "items": [
+                          {
+                            "sourceNodeId": "node-000419",
+                            "kind": "UsesField",
+                            "targetType": "Field",
+                            "target": "ProviderNPI",
+                            "confidence": "High",
+                            "runtimeDependency": true,
+                            "evidence": "RuleParameter"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/scopes/{scopeId}/diagnostics": {
+      "get": {
+        "operationId": "get_scopes_scopeId_diagnostics",
+        "summary": "Actionable diagnostics for a scope.",
+        "tags": [
+          "scopes"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "scopeDiagnostics": {
+                    "summary": "Actionable scope diagnostics",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.ScopeDiagnostics",
+                      "data": {
+                        "scopeId": "AC/Pages/DentalADA",
+                        "health": {
+                          "status": "Warning",
+                          "diagnosticCount": 1
+                        },
+                        "checks": [
+                          {
+                            "code": "FlatOnlyRows",
+                            "severity": "Info",
+                            "impact": "Flat rows are not execution-order evidence.",
+                            "recommendation": "Open inventory with classification=FlatOnly."
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{nodeId}": {
+      "get": {
+        "operationId": "get_rules_nodeId",
+        "summary": "Deep rule evidence packet.",
+        "tags": [
+          "rules"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "ruleDetail": {
+                    "summary": "Rule detail evidence packet",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.RuleDetail",
+                      "data": {
+                        "identity": {
+                          "nodeId": "node-000419",
+                          "name": "First page?",
+                          "functionName": "CheckPageNum",
+                          "scopeId": "AC/Pages/DentalADA"
+                        },
+                        "position": {
+                          "depth": 8,
+                          "parentNodeId": "node-000416",
+                          "branch": {
+                            "label": "No",
+                            "actionNameResolved": true
+                          },
+                          "routePath": [
+                            "Run Rules or FIP Reject?",
+                            "Run normal Rules/Does RejectLetter attr exist?",
+                            "Is this DV/KE?",
+                            "Is this an EDI claim?"
+                          ]
+                        },
+                        "disabled": {
+                          "state": "Enabled",
+                          "authority": "Structural"
+                        },
+                        "reconciliation": {
+                          "structuralNode": true,
+                          "flatInventoryMatch": true,
+                          "runtimeOrderProof": true
+                        },
+                        "notProven": [
+                          "Native runtime execution was not simulated.",
+                          "ac-flow.json is experimental / low-confidence."
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{nodeId}/subtree": {
+      "get": {
+        "operationId": "get_rules_nodeId_subtree",
+        "summary": "Selected rule and descendants.",
+        "tags": [
+          "rules"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/diagnostics": {
+      "get": {
+        "operationId": "get_diagnostics",
+        "summary": "Global diagnostics summary.",
+        "tags": [
+          "system"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search": {
+      "get": {
+        "operationId": "get_search",
+        "summary": "Evidence-aware global search.",
+        "tags": [
+          "search"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "routeActionSearch": {
+                    "summary": "Search by route/action label",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.Search",
+                      "data": {
+                        "query": "Match",
+                        "count": 1,
+                        "caveat": "Search hits are not dependencies.",
+                        "items": [
+                          {
+                            "kind": "StructuralRule",
+                            "scopeId": "AC/Pages/DentalADA",
+                            "nodeId": "node-000419",
+                            "title": "First page?",
+                            "subtitle": "CheckPageNum - incoming route: No - outgoing action: Match",
+                            "evidenceClass": "Structural",
+                            "routeState": "Resolved"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "actionBranchSearch": {
+                    "summary": "Search by action branch label",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.Search",
+                      "data": {
+                        "query": "action:\"No - Run normal rules\"",
+                        "count": 2,
+                        "caveat": "Search hits are evidence pointers, not runtime proof.",
+                        "items": [
+                          {
+                            "kind": "ActionBranch",
+                            "scopeId": "AC/Pages/DentalADA",
+                            "branchId": "AC/Pages/DentalADA|node-000416|action:0",
+                            "title": "Action: No - Run normal rules",
+                            "subtitle": "Parent: Run normal Rules/Does RejectLetter attr exist? - 32 child rules",
+                            "evidenceClass": "Structural",
+                            "routeState": "Resolved"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export": {
+      "post": {
+        "operationId": "post_export",
+        "summary": "Export a product-safe analytical slice.",
+        "tags": [
+          "export"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": {
+                  "ruleExport": {
+                    "summary": "Product-safe JSON export with provenance",
+                    "value": {
+                      "ok": true,
+                      "schema": "AcWorkbench.Export",
+                      "data": {
+                        "format": "json",
+                        "view": "rule",
+                        "nodeId": "node-000419",
+                        "provenance": {
+                          "snapshotId": "fwd-20260527-113018",
+                          "apiVersion": "1.0.0"
+                        },
+                        "payload": {
+                          "identity": {
+                            "nodeId": "node-000419",
+                            "name": "First page?"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scopeId": {
+                    "type": "string",
+                    "example": "AC/Pages/DentalADA"
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "example": "node-000419"
+                  },
+                  "view": {
+                    "$ref": "#/components/schemas/ExportView",
+                    "example": "rule"
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ],
+                    "example": "json"
+                  },
+                  "includeEvidence": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "includeReferences": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "includeDiagnostics": {
+                    "type": "boolean",
+                    "example": true
+                  },
+                  "includeRawAttributes": {
+                    "type": "boolean",
+                    "example": false
+                  },
+                  "reportFormat": {
+                    "type": "string",
+                    "enum": [
+                      "json",
+                      "markdown"
+                    ],
+                    "example": "json"
+                  }
+                }
+              },
+              "examples": {
+                "selectedRuleEvidenceExport": {
+                  "summary": "Export selected rule evidence",
+                  "value": {
+                    "format": "json",
+                    "view": "rule",
+                    "nodeId": "node-000419",
+                    "includeEvidence": true
+                  }
+                },
+                "scopeStructureExport": {
+                  "summary": "Export scope structure",
+                  "value": {
+                    "format": "json",
+                    "view": "structure",
+                    "scopeId": "AC/Pages/DentalADA",
+                    "includeEvidence": true
+                  }
+                },
+                "selectedActionBranchExport": {
+                  "summary": "Export selected action branch subtree",
+                  "value": {
+                    "format": "json",
+                    "view": "branch",
+                    "scopeId": "AC/Pages/DentalADA",
+                    "nodeId": "node-000416",
+                    "includeEvidence": true,
+                    "includeReferences": true,
+                    "includeDiagnostics": true
+                  }
+                },
+                "reviewerReportExport": {
+                  "summary": "Generate reviewer report data",
+                  "value": {
+                    "format": "json",
+                    "view": "reviewerReport",
+                    "scopeId": "AC/Pages/DentalADA",
+                    "nodeId": "node-000419",
+                    "includeEvidence": true,
+                    "reportFormat": "markdown"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiEnvelope": {
+        "type": "object",
+        "required": [
+          "ok",
+          "schema",
+          "schemaVersion",
+          "apiVersion",
+          "requestId",
+          "data"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "snapshotId": {
+            "type": "string",
+            "nullable": true
+          },
+          "generatedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "data": {
+            "type": "object"
+          },
+          "meta": {
+            "type": "object"
+          }
+        }
+      },
+      "ApiErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "ok",
+          "apiVersion",
+          "requestId",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "correlationId"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string",
+            "nullable": true
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "resolution": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        }
+      },
+      "DisabledState": {
+        "type": "string",
+        "description": "Structural disabled state is authoritative when a structural node is available. Flat inventory disabled state is lower-confidence audit evidence only.",
+        "enum": [
+          "Enabled",
+          "DisabledDirect",
+          "DisabledInherited",
+          "PossiblyDisabledInherited",
+          "Unknown"
+        ]
+      },
+      "Confidence": {
+        "type": "string",
+        "description": "Evidence confidence label; not runtime certainty.",
+        "enum": [
+          "High",
+          "Medium",
+          "Low",
+          "Unknown"
+        ]
+      },
+      "RelationshipKind": {
+        "type": "string",
+        "description": "Common static relationship kinds extracted from AC rules.",
+        "enum": [
+          "UsesField",
+          "MutatesField",
+          "RejectsField",
+          "EmitsRejectMessage",
+          "UsesRejectCode",
+          "UsesSource",
+          "UsesOption",
+          "UsesParameter",
+          "WritesAttribute",
+          "ReadsAttribute",
+          "MentionsToken",
+          "PossiblyDisabledInheritedFrom"
+        ]
+      },
+      "RouteState": {
+        "type": "string",
+        "description": "Route-label resolution status for structural edges.",
+        "enum": [
+          "Root",
+          "Resolved",
+          "Unresolved",
+          "IndexOnly"
+        ]
+      },
+      "EvidenceClass": {
+        "type": "string",
+        "description": "Trust class for returned evidence.",
+        "enum": [
+          "Structural",
+          "FlatInventory",
+          "FlatInventory+Structural",
+          "Relationship",
+          "Diagnostic",
+          "ExperimentalFlow"
+        ]
+      },
+      "ActionBranch": {
+        "type": "object",
+        "description": "Selectable structural action branch. A branch is not a rule; it is a parent rule action-list entry that groups child rules.",
+        "required": [
+          "branchId",
+          "parentNodeId",
+          "actionListIndex",
+          "routeState",
+          "childCount"
+        ],
+        "properties": {
+          "branchId": {
+            "type": "string",
+            "example": "AC/Pages/DentalADA|node-000416|action:0"
+          },
+          "parentNodeId": {
+            "type": "string",
+            "example": "node-000416"
+          },
+          "actionListIndex": {
+            "type": "integer",
+            "example": 0
+          },
+          "actionName": {
+            "type": "string",
+            "nullable": true,
+            "example": "No - Run normal rules"
+          },
+          "actionNameResolved": {
+            "type": "boolean",
+            "example": true
+          },
+          "routeState": {
+            "$ref": "#/components/schemas/RouteState"
+          },
+          "childCount": {
+            "type": "integer",
+            "example": 32
+          }
+        }
+      },
+      "ExportView": {
+        "type": "string",
+        "description": "Product-safe export target. Rule, route, branch, subtree, diagnostics, scopePacket, and reviewerReport exports include provenance and not-proven caveats.",
+        "enum": [
+          "auto",
+          "rule",
+          "route",
+          "branch",
+          "subtree",
+          "structure",
+          "diagnostics",
+          "scopePacket",
+          "snapshot",
+          "reviewerReport"
+        ]
+      },
+      "SearchOperator": {
+        "type": "string",
+        "description": "Supported evidence search operator names.",
+        "enum": [
+          "function",
+          "fn",
+          "field",
+          "target",
+          "action",
+          "route",
+          "disabled",
+          "scope",
+          "guid",
+          "flatonly",
+          "diagnostic"
+        ]
+      }
+    }
+  }
+}

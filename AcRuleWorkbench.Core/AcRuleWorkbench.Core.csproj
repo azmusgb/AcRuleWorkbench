@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>AcRuleWorkbench.Core</AssemblyName>
+    <RootNamespace>AcRuleWorkbench.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="rribase_net">
+      <HintPath>..\lib\rribase_net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="rrifwd_net">
+      <HintPath>..\lib\rrifwd_net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="rridc_net">
+      <HintPath>..\lib\rridc_net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="rriwf2_net">
+      <HintPath>..\lib\rriwf2_net.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FormWorks.Core">
+      <HintPath>..\lib\FormWorks.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FormWorks.Versioning">
+      <HintPath>..\lib\FormWorks.Versioning.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="System.Drawing" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Viewer\ac-viewer-template.html">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Viewer\ac-viewer-template.css">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+</Project>
