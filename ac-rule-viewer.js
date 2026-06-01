@@ -667,6 +667,87 @@ function renderUdfMasterDetail(){
   $('content').innerHTML=`<section class="tables-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>User Defined Functions (UDF) view.</b> Function-resource candidates and caller-side usage evidence. Field lists, return statuses, and rule bodies are not authoritative unless marked parsed.</div></div><div class="table-browser"><div class="panel"><h3>Functions</h3><div class="table-index-list">${ordered.map(([groupKey,items])=>`<div class="scope-group"><span>${esc(groupKey)}</span><span class="section-count">${fmt(items.length)}</span></div>${items.map(r=>`<button class="table-index-row ${r.key===selected.key?'active':''}" type="button" data-udf-name="${esc(r.key)}"><span class="table-index-main"><b>${esc(r.displayName)}</b><span>${esc(r.type)}</span></span></button>`).join('')}`).join('')}</div></div><div class="panel"><h3>${esc(selected.displayName)}</h3><div class="table-def-grid"><div class="table-def-item"><span class="k">Type</span><span class="v">${esc(selected.type)}</span></div><div class="table-def-item"><span class="k">Source</span><span class="v">${esc(selected.source||'Candidate evidence')}</span></div><div class="table-def-item"><span class="k">Classification</span><span class="v">${esc(selected.classification|| (selected.canonical?'CandidateUdf':(selected.inferred?'RegexOnly':'Unspecified')))}</span></div><div class="table-def-item"><span class="k">Confidence</span><span class="v">${esc(selected.confidence||'Not provided')}</span></div><div class="table-def-item"><span class="k">Caller parameter keys</span><span class="v">${fmt(list(selected.parameterNames).length)}</span></div><div class="table-def-item"><span class="k">Caller rules</span><span class="v">${fmt(selected.rules.length)}</span></div></div><div class="table-columns-head">Caller parameter keys</div>${paramList}<div class="table-columns-head">Direct caller rules</div>${ruleList}<div class="table-columns-head">Scopes</div>${scopeList}</div></div></section>`;
 }
 
+// UDF structural caller projection. This overrides the compatibility UDF renderer
+// above so function details include the actual parsed caller hierarchy.
+function buildUdfDefinitions(){
+  function fnEq(left,right){return text(left).trim().toLowerCase()===text(right).trim().toLowerCase();}
+  function configuredRulesFor(fnName){
+    const collected=[],seen=new Set();
+    function pushRule(scopeId,ruleName,fn,parameters,nodeId=''){
+      const key=[text(scopeId),text(ruleName),text(fn),text(nodeId)].join('|').toLowerCase();
+      if(seen.has(key))return;
+      seen.add(key);
+      const node=nodeId?model.nodesById.get(String(nodeId)):null;
+      collected.push({scopeId:text(scopeId),ruleName:text(ruleName||'Unnamed rule'),functionName:text(fn),parameters:parameters||{},nodeId:text(nodeId),structural:!!node});
+    }
+    model.nodes.forEach(n=>{if(fnEq(n.fn,fnName))pushRule(n.scopeId,n.title,n.fn,n.Parameters,n.id);});
+    model.inventory.forEach(r=>{if(fnEq(r.fn,fnName))pushRule(r.scopeId,r.title,r.fn,r.Parameters,r.nodeId);});
+    return collected;
+  }
+  function parameterNamesFromRules(rules){
+    const names=new Set();
+    rules.forEach(r=>Object.keys(r.parameters||{}).forEach(k=>{if(text(k).trim())names.add(text(k).trim());}));
+    return [...names].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+  }
+  const canonicalItems=list(model.fwd?.udfs?.items);
+  if(canonicalItems.length){
+    return canonicalItems.map(u=>{
+      const type=text(u.resourceType),rawName=text(u.name),displayName=/^function$/i.test(type)?rawName:`${type}: ${rawName}`;
+      const matchedRules=configuredRulesFor(rawName||displayName);
+      const derivedParamNames=parameterNamesFromRules(matchedRules);
+      const canonicalParamNames=list(first(u.parameterNames,u.parameters,[])).map(text).filter(Boolean);
+      const parameterNames=[...new Set([...canonicalParamNames,...derivedParamNames])].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+      const canonicalRules=list(first(u.ruleNames,u.usedByRules,u.rules,[])).map(text).filter(Boolean);
+      const configuredRules=matchedRules.map(r=>`${r.ruleName} - ${r.scopeId}`);
+      const rules=[...new Set([...canonicalRules,...configuredRules])].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+      return {key:rawName||displayName,displayName,rawName,type:type||'Function',count:Number(first(u.usedByRuleCount,u.count,0))||0,scopeCount:Number(first(u.scopeCount,0))||0,canonical:!!first(u.canonical,true),inferred:!!u.inferred,classification:text(first(u.classification,'')),confidence:text(first(u.confidence,'')),source:text(first(u.source,u.definitionSource,'')),scopes:list(first(u.scopeIds,u.scopes,u.usedByScopes,[])).map(text).filter(Boolean),rules,parameterNames,structuralCallers:matchedRules.filter(r=>r.nodeId&&model.nodesById.has(String(r.nodeId)))};
+    });
+  }
+  return domainRowsByView('udfs').map(r=>{
+    const fnName=text(r.name),matchedRules=configuredRulesFor(fnName);
+    return {key:fnName,displayName:fnName,rawName:fnName,type:'Function',count:Number(first(r.count,0))||0,scopeCount:0,canonical:false,inferred:true,classification:'RegexOnly',confidence:'',source:'Derived from structural/inventory function evidence',scopes:[],rules:matchedRules.map(x=>`${x.ruleName} - ${x.scopeId}`).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),parameterNames:parameterNamesFromRules(matchedRules),structuralCallers:matchedRules.filter(x=>x.nodeId&&model.nodesById.has(String(x.nodeId)))};
+  });
+}
+
+function udfCallerSubtreeHtml(root,maxDepth=3,maxNodes=80){
+  let rendered=0;
+  function walk(node,depth){
+    if(!node||rendered>=maxNodes)return '';
+    rendered++;
+    const groups=childRouteGroups(node.id),children=childIds(node.id).map(id=>model.nodesById.get(String(id))).filter(Boolean);
+    const childCount=children.length,disabled=node.disabled&&node.disabled!=='none'?` <span class="badge amber">${esc(node.disabled)}</span>`:'';
+    if(depth>=maxDepth||!childCount)return `<div class="mini-row udf-tree-node" style="--depth:${depth}"><button class="mono" type="button" data-udf-node="${esc(node.id)}">${esc(node.title)}</button><span>${esc(node.fn||'no function')}${disabled}${childCount?` - ${fmt(childCount)} child rules`:''}</span></div>`;
+    const grouped=new Set(groups.flatMap(g=>g.childIds.map(String)));
+    const groupedHtml=groups.map(g=>`<div class="mini-row udf-tree-branch" style="--depth:${depth+1}"><span class="route-chip ${g.resolved?'resolved':'unresolved'}">${esc(g.label)}</span><span>${fmt(g.childIds.length)} child ${g.childIds.length===1?'rule':'rules'}</span></div>${g.childIds.map(id=>walk(model.nodesById.get(String(id)),depth+2)).join('')}`).join('');
+    const ungroupedHtml=children.filter(c=>!grouped.has(String(c.id))).map(c=>walk(c,depth+1)).join('');
+    return `<div class="mini-row udf-tree-node" style="--depth:${depth}"><button class="mono" type="button" data-udf-node="${esc(node.id)}">${esc(node.title)}</button><span>${esc(node.fn||'no function')}${disabled}${childCount?` - ${fmt(childCount)} child rules`:''}</span></div>${groupedHtml}${ungroupedHtml}`;
+  }
+  const more=rendered>=maxNodes?`<div class="caption mt-8">Showing first ${fmt(maxNodes)} structural descendants for this caller.</div>`:'';
+  return `<div class="mini-list udf-tree">${walk(root,0)}${more}</div>`;
+}
+
+function renderUdfStructuralCallers(callers){
+  const structural=list(callers).filter(c=>c.nodeId&&model.nodesById.has(String(c.nodeId)));
+  if(!structural.length)return '<div class="muted">No structural caller nodes were correlated for this function.</div>';
+  const byScope=new Map();
+  structural.forEach(c=>{if(!byScope.has(c.scopeId))byScope.set(c.scopeId,[]);byScope.get(c.scopeId).push(c);});
+  return [...byScope.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'})).map(([scopeId,items])=>`<details class="inspector-section" open><summary>${esc(scopeId)} <span class="section-count">${fmt(items.length)}</span></summary><div class="inspector-section-body">${items.slice(0,40).map(c=>{const node=model.nodesById.get(String(c.nodeId));return `<div class="panel my-8 p-10"><div class="split-row"><span><b>${esc(node.title)}</b><div class="caption">${esc(node.fn||'no function')} - node ${esc(node.id)}</div></span><button class="btn primary" type="button" data-udf-node="${esc(node.id)}">Open in structure</button></div><div class="mt-8">${routePathHtml(node)}</div><div class="caption mt-8">Actual structural rule subtree below this UDF caller:</div>${udfCallerSubtreeHtml(node)}</div>`;}).join('')}${items.length>40?`<div class="caption mt-8">Showing first 40 structural callers in this scope.</div>`:''}</div></details>`).join('');
+}
+
+function renderUdfMasterDetail(){
+  const rows=buildUdfDefinitions().sort((a,b)=>a.displayName.localeCompare(b.displayName,undefined,{sensitivity:'base'}));
+  if(!rows.length){$('content').innerHTML=`<div class="notice"><div class="notice-icon">i</div><div><b>User Defined Functions (UDF) view.</b> No function-resource candidates or usage evidence were found.</div></div>${emptyHtml('No user defined functions found','No matching user defined function evidence in current scope.')}`;return;}
+  const selected=rows.find(r=>r.key===state.selectedUdfName)||rows[0];state.selectedUdfName=selected.key;
+  const groups=new Map();
+  rows.forEach(r=>{const rhs=r.displayName.includes(': ')?r.displayName.split(': ').slice(1).join(': '):r.displayName;const idx=rhs.indexOf('_');const groupKey=idx>0?`${rhs.slice(0,idx)}_`:'Other';if(!groups.has(groupKey))groups.set(groupKey,[]);groups.get(groupKey).push(r);});
+  const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
+  const paramList=list(selected.parameterNames).length?`<div class="mini-list">${list(selected.parameterNames).slice(0,120).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No parameters extracted for this function in current evidence.</div>';
+  const ruleList=selected.rules.length?`<div class="mini-list">${selected.rules.slice(0,120).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No configured rules mapped for this function in current evidence.</div>';
+  const scopeList=selected.scopes.length?`<div class="mini-list">${selected.scopes.slice(0,80).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No explicit scope list in canonical payload.</div>';
+  const structuralCallers=renderUdfStructuralCallers(selected.structuralCallers);
+  $('content').innerHTML=`<section class="tables-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>User Defined Functions (UDF) view.</b> Function-resource candidates, caller-side usage evidence, and correlated structural caller trees. Internal UDF bodies are still marked unparsed unless a private tree is explicitly available.</div></div><div class="table-browser"><div class="panel"><h3>Functions</h3><div class="table-index-list">${ordered.map(([groupKey,items])=>`<div class="scope-group"><span>${esc(groupKey)}</span><span class="section-count">${fmt(items.length)}</span></div>${items.map(r=>`<button class="table-index-row ${r.key===selected.key?'active':''}" type="button" data-udf-name="${esc(r.key)}"><span class="table-index-main"><b>${esc(r.displayName)}</b><span>${esc(r.type)}</span></span></button>`).join('')}`).join('')}</div></div><div class="panel"><h3>${esc(selected.displayName)}</h3><div class="table-def-grid"><div class="table-def-item"><span class="k">Type</span><span class="v">${esc(selected.type)}</span></div><div class="table-def-item"><span class="k">Source</span><span class="v">${esc(selected.source||'Candidate evidence')}</span></div><div class="table-def-item"><span class="k">Classification</span><span class="v">${esc(selected.classification|| (selected.canonical?'CandidateUdf':(selected.inferred?'RegexOnly':'Unspecified')))}</span></div><div class="table-def-item"><span class="k">Confidence</span><span class="v">${esc(selected.confidence||'Not provided')}</span></div><div class="table-def-item"><span class="k">Caller parameter keys</span><span class="v">${fmt(list(selected.parameterNames).length)}</span></div><div class="table-def-item"><span class="k">Caller rules</span><span class="v">${fmt(selected.rules.length)}</span></div><div class="table-def-item"><span class="k">Structural caller trees</span><span class="v">${fmt(list(selected.structuralCallers).length)}</span></div></div><div class="table-columns-head">Structural caller trees</div>${structuralCallers}<div class="table-columns-head">Caller parameter keys</div>${paramList}<div class="table-columns-head">Direct caller rules</div>${ruleList}<div class="table-columns-head">Scopes</div>${scopeList}</div></div></section>`;
+}
+
 function renderDomainCatalog(title,rows,caption){
   const isUdfView=state.workspaceView==='udfs';
   const sortedRows=list(rows).slice().sort((a,b)=>text(a.name).localeCompare(text(b.name),undefined,{sensitivity:'base'}));
@@ -1156,4 +1237,3 @@ async function init(){
 
 init();
 })();
-
