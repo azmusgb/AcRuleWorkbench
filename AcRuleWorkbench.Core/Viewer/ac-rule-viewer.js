@@ -306,6 +306,8 @@ function readState(){
     workspaceView:saved.workspaceView||'structure',
     fieldResolutionFilter:saved.fieldResolutionFilter||'unresolved',
     focusNodeId:'',theme:readStorage(themeStorageKey)||'dark',density:saved.density==='high'?'high':'standard',modal:'',
+    selectedResourceKey:saved.selectedResourceKey||'',
+    selectedDriverKey:saved.selectedDriverKey||'',
     selectedTableName:saved.selectedTableName||'',
     selectedUdfName:saved.selectedUdfName||'',
     udfFilter:['all','with-callers','canonical','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:'with-callers',
@@ -380,7 +382,8 @@ function syncOnboardingChecklist(){
   const checklist=optionalElement('onboardingChecklist');
   const toggleBtn=optionalElement('toggleChecklistBtn');
   if(!checklist||!toggleBtn)return;
-  const dismissed=readStorage(checklistDismissedKey)==='true';
+  const loadedWithScope=bootState.phase==='ready'&&!!currentScope();
+  const dismissed=readStorage(checklistDismissedKey)==='true'||loadedWithScope;
   const collapsed=readStorage(checklistCollapsedKey)==='true';
   checklist.classList.toggle('is-hidden',dismissed);
   checklist.classList.toggle('is-collapsed',collapsed);
@@ -483,20 +486,27 @@ function selectedDiag(){return state.selectedType==='diag'?model.diags.find(x=>x
 function renderMainHead(){
   const s=currentScope();
   const isDocOrPage=/^(document|page)$/i.test(text(s.kind));
-  $('scopeTitle').textContent=s.name;
+  const globalViews=new Set(['resources','tables','drivers','udfs']);
+  const isGlobalView=globalViews.has(state.workspaceView);
+  const globalTitles={resources:'Global Resources',tables:'Global Tables',drivers:'Global Input Drivers',udfs:'Global UDFs'};
+  const kicker=document.querySelector('.scope-kicker');
+  if(kicker)kicker.textContent=isGlobalView?'Global catalog':'Current scope';
+  $('scopeTitle').textContent=isGlobalView?globalTitles[state.workspaceView]:s.name;
   const hydration=canonicalHydrationSummary();
   const captions={
     structure:isDocOrPage?'Structure map':'Structural hierarchy and route map',
     inspect:'Selected object evidence, route, diagnostics, and raw extraction details',
     'field-resolution':'Scope-level unresolved/resolved field matching against canonical field metadata',
-    resources:'Canonical resource inventory',
-    tables:'Canonical tables first; inferred candidates are separate evidence',
-    drivers:'Process-private config findings separated from process identities',
-    udfs:'Function/UDF caller trees and usage',
+    resources:'Global resource definitions catalog',
+    tables:'Global table definitions catalog',
+    drivers:'Global input/output driver definitions catalog',
+    udfs:'Global UDF/function definitions catalog',
     audit:'Diagnostics, provenance, unresolved routes, ambiguous correlation, and extraction audit'
   };
   $('scopeCaption').innerHTML=`<span class="scope-caption-note">${esc(captions[state.workspaceView]||captions.structure)}</span>`;
-  $('crumbs').innerHTML=(state.workspaceView==='structure'&&isDocOrPage)
+  $('crumbs').innerHTML=isGlobalView
+    ? `<span class="head-chip kind">Global definitions</span>`
+    : (state.workspaceView==='structure'&&isDocOrPage)
     ? `<span class="head-chip kind">${esc(s.kind)}</span><span class="head-chip ${hydration.level==='warn'?'warn':''}">${esc(hydration.label)}</span>${state.focusNodeId?'<span class="head-chip focus">Focused subtree</span>':''}`
     : `<span class="head-chip kind">${esc(s.kind)}</span><span class="head-chip">Structure-first view</span><span class="head-chip ${hydration.level==='warn'?'warn':''}">${esc(hydration.label)}</span>${state.focusNodeId?'<span class="head-chip focus">Focused subtree</span>':''}`;
   $('tabs').innerHTML='';
@@ -505,9 +515,9 @@ function renderMainHead(){
 function renderContent(){
   if(state.workspaceView==='inspect')return renderInspectionWorkspace();
   if(state.workspaceView==='field-resolution')return renderFieldResolutionTriage();
-  if(state.workspaceView==='resources')return renderDomainCatalog('Resources',domainRowsByView('resources'),'Resource usage inferred from reference/source evidence.');
+  if(state.workspaceView==='resources')return renderGlobalResourceDefinitions();
   if(state.workspaceView==='tables')return renderGlobalTablesMasterDetail();
-  if(state.workspaceView==='drivers')return renderDomainCatalog('Input/Output Drivers',domainRowsByView('drivers'),'Driver/process references inferred from source/target metadata.');
+  if(state.workspaceView==='drivers')return renderGlobalDriverDefinitions();
   if(state.workspaceView==='udfs')return renderUdfMasterDetail();
   if(state.workspaceView==='audit')return renderAuditWorkspace();
   return renderStructure();
@@ -598,9 +608,170 @@ function domainRowsByView(view){
   return topCounts(udfFns).map(x=>({name:x.name,count:x.count}));
 }
 
+function usageRowsForDefinition(matches){
+  const rows=[];
+  const seen=new Set();
+  list(model.rels).forEach(r=>{
+    if(!matches(r))return;
+    const node=r.nodeId?model.nodesById.get(String(r.nodeId)):null;
+    const key=[r.id,node?.id||'',r.scopeId,r.kind,r.targetType,r.target].join('|');
+    if(seen.has(key))return;
+    seen.add(key);
+    rows.push({kind:'Reference',rel:r,node,scopeId:text(r.scopeId||node?.scopeId||'Unscoped'),ruleName:text(r.RuleName||r.SourceRuleName||node?.title||r.target||'Reference'),functionName:text(r.fn||r.FunctionName||node?.fn||''),target:text(r.target||''),targetType:text(r.targetType||''),relationshipKind:text(r.kind||''),confidence:text(r.confidence||'')});
+  });
+  return rows.sort((a,b)=>a.scopeId.localeCompare(b.scopeId,undefined,{sensitivity:'base'})||a.ruleName.localeCompare(b.ruleName,undefined,{sensitivity:'base'}));
+}
+
+function resourceNameFromItem(item){
+  if(typeof item==='string')return item;
+  return text(first(item?.name,item?.Name,item?.value,item?.Value,''));
+}
+
+function buildGlobalResourceDefinitions(){
+  const canonicalBuckets=list(model.fwd?.resources?.buckets);
+  if(canonicalBuckets.length){
+    const resourceNameSet=new Set();
+    canonicalBuckets.forEach(bucket=>list(bucket.names).forEach(item=>{
+      const name=resourceNameFromItem(item).toLowerCase();
+      if(name)resourceNameSet.add(name);
+    }));
+    const usageByTarget=new Map();
+    usageRowsForDefinition(r=>resourceNameSet.has(text(r.target).toLowerCase())).forEach(row=>{
+      const key=text(row.target).toLowerCase();
+      if(!key)return;
+      if(!usageByTarget.has(key))usageByTarget.set(key,[]);
+      usageByTarget.get(key).push(row);
+    });
+    return canonicalBuckets.flatMap(bucket=>{
+      const type=text(bucket.type||'Resource');
+      return list(bucket.names).map(item=>{
+        const name=resourceNameFromItem(item);
+        const usage=usageByTarget.get(name.toLowerCase())||[];
+        const usedBy=list(first(item?.usedBy,item?.usedByRules,[])).map(text).filter(Boolean);
+        return {key:`${type}|${name}`,name,type,source:'Canonical FWD resource',canonical:true,count:Number(first(item?.usedByRuleCount,item?.count,usage.length,0))||0,details:first(item?.details,item?.Details,null),usedBy,usage};
+      }).filter(r=>r.name);
+    }).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  }
+  const grouped=new Map();
+  usageRowsForDefinition(r=>{
+    const t=lower(r.targetType),k=lower(r.kind),target=lower(r.target);
+    if(t==='field'||t==='rule')return false;
+    return /source|option|parameter|attribute|reject/.test(t)||/source|option|parameter|attribute|reject/.test(k)||/resource|fileref|inventory/.test(target);
+  }).forEach(row=>{
+    const type=row.targetType||row.relationshipKind||'Resource';
+    const name=row.target||'(empty)';
+    const key=`${type}|${name}`;
+    if(!grouped.has(key))grouped.set(key,{key,name,type,source:'Relationship evidence',canonical:false,count:0,details:null,usedBy:[],usage:[]});
+    const current=grouped.get(key);
+    current.count+=1;
+    current.usage.push(row);
+  });
+  return [...grouped.values()].sort((a,b)=>(b.count-a.count)||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+
+function buildGlobalDriverDefinitions(){
+  const canonicalItems=list(model.fwd?.processDrivers?.items);
+  if(canonicalItems.length){
+    return canonicalItems.map(item=>{
+      const name=text(item.processName||item.name||'Process driver');
+      const findings=list(item.findings).map((f,i)=>({kind:'Finding',scopeId:text(f.path||f.Path||name),ruleName:text(f.name||f.Name||`Finding ${i+1}`),functionName:'',target:text(first(f.valuePreview,f.dataPreview,'')),targetType:text(item.classification||'DriverLikePrivateNode'),relationshipKind:text(f.source||item.source||''),confidence:text(f.confidence||'Medium'),node:null}));
+      const usage=usageRowsForDefinition(r=>/driver|twain|scan|ocr|fip|store|output|input/i.test(`${r.targetType} ${r.kind} ${r.target}`)&&lower(`${r.target} ${r.kind} ${r.targetType}`).includes(name.toLowerCase()));
+      return {key:name,name,type:text(item.classification||'Process driver'),source:text(item.source||'Canonical process config'),canonical:true,parsed:!!item.parsedDriverConfig,count:Number(first(item.findingCount,findings.length,usage.length,0))||0,details:item,usage:[...findings,...usage]};
+    }).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  }
+  const grouped=new Map();
+  usageRowsForDefinition(r=>/driver|twain|scan|ocr|fip|store|output|input/i.test(`${r.targetType} ${r.kind} ${r.target}`)).forEach(row=>{
+    const name=row.target||`${row.relationshipKind} -> ${row.targetType}`||'Driver evidence';
+    const key=name;
+    if(!grouped.has(key))grouped.set(key,{key,name,type:'Driver evidence',source:'Relationship evidence',canonical:false,parsed:false,count:0,details:null,usage:[]});
+    const current=grouped.get(key);
+    current.count+=1;
+    current.usage.push(row);
+  });
+  return [...grouped.values()].sort((a,b)=>(b.count-a.count)||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+
+function parameterSnapshotHtml(node){
+  const entries=Object.entries(node?.Parameters||{}).slice(0,10);
+  if(!entries.length)return '<div class="muted">No parameters extracted for this rule.</div>';
+  return `<div class="kv global-param-snapshot">${entries.map(([k,v])=>kv(k,esc(list(v).join(', ')))).join('')}</div>`;
+}
+
+function usageHierarchyHtml(usages,emptyLabel='No usage evidence was mapped for this definition.'){
+  const rows=list(usages);
+  if(!rows.length)return `<div class="muted">${esc(emptyLabel)}</div>`;
+  const byScope=new Map();
+  rows.forEach(row=>{
+    const key=text(row.scopeId||'Unscoped');
+    if(!byScope.has(key))byScope.set(key,[]);
+    byScope.get(key).push(row);
+  });
+  return [...byScope.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'})).map(([scopeId,items])=>`
+    <details class="global-usage-scope" open>
+      <summary><span>${esc(scopeId)}</span><span class="section-count">${fmt(items.length)} references</span></summary>
+      <div class="global-usage-body">
+        ${items.slice(0,60).map(row=>{
+          const node=row.node;
+          const preview=row.target?`<div class="definition-preview">${esc(row.target).slice(0,420)}</div>`:'';
+          return `<div class="global-usage-card">
+            <div class="global-usage-head">
+              <div><b>${esc(node?.title||row.ruleName)}</b><span>${esc(row.functionName||row.relationshipKind||row.targetType||'Evidence')}</span></div>
+              ${node?`<button class="btn ghost" type="button" data-node="${esc(node.id)}">Open in tree</button>`:`<span class="badge amber">Evidence only</span>`}
+            </div>
+            <div class="table-def-grid compact">
+              <div class="table-def-item"><span class="k">Kind</span><span class="v">${esc(row.relationshipKind||row.kind)}</span></div>
+              <div class="table-def-item"><span class="k">Target type</span><span class="v">${esc(row.targetType)}</span></div>
+              <div class="table-def-item"><span class="k">Confidence</span><span class="v">${esc(row.confidence||'Not provided')}</span></div>
+            </div>
+            ${node?`<div class="table-columns-head">Hierarchy route</div>${routePathHtml(node)}<div class="table-columns-head">Rule parameters</div>${parameterSnapshotHtml(node)}`:preview}
+          </div>`;
+        }).join('')}
+        ${items.length>60?`<div class="caption">Showing first 60 references in this scope out of ${fmt(items.length)}.</div>`:''}
+      </div>
+    </details>`).join('');
+}
+
+function renderGlobalDefinitionWorkbench(kind,rows,selectedKey,stateKey,copy){
+  if(!rows.length){
+    $('content').innerHTML=`<section class="tables-workbench global-def-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>${esc(copy.title)}.</b> ${esc(copy.emptyNotice)}</div></div>${emptyHtml(copy.emptyTitle,copy.emptyBody)}</section>`;
+    return;
+  }
+  const selected=rows.find(r=>r.key===selectedKey)||rows[0];
+  state[stateKey]=selected.key;
+  const groups=new Map();
+  rows.forEach(row=>{
+    const groupKey=row.type||'Other';
+    if(!groups.has(groupKey))groups.set(groupKey,[]);
+    groups.get(groupKey).push(row);
+  });
+  const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
+  const canonicalCount=rows.filter(r=>r.canonical).length;
+  const withUsage=rows.filter(r=>list(r.usage).length>0).length;
+  const usage=usageHierarchyHtml(selected.usage);
+  const detailRows=selected.details&&typeof selected.details==='object'?Object.entries(selected.details).filter(([k,v])=>!['findings','names','usedBy','details'].includes(k)&&v!==null&&v!==undefined&&typeof v!=='object').slice(0,12):[];
+  const detailHtml=detailRows.length?`<div class="table-columns-head">Definition properties</div><div class="kv global-param-snapshot">${detailRows.map(([k,v])=>kv(k,esc(v))).join('')}</div>`:'';
+  $('content').innerHTML=`<section class="tables-workbench global-def-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>${esc(copy.title)}.</b> ${esc(copy.notice)}</div></div><div class="metric-grid table-metric-grid"><div class="metric good"><b>${fmt(rows.length)}</b><span>Total definitions</span></div><div class="metric ${canonicalCount?'good':''}"><b>${fmt(canonicalCount)}</b><span>Canonical</span></div><div class="metric ${withUsage===rows.length?'good':'warn'}"><b>${fmt(withUsage)}</b><span>With usage evidence</span></div></div><div class="table-browser global-def-browser"><div class="panel"><h3>${esc(copy.listTitle)}</h3><div class="table-index-list">${ordered.map(([groupKey,items])=>`<div class="scope-group"><span>${esc(groupKey)}</span><span class="section-count">${fmt(items.length)}</span></div>${items.slice(0,600).map(row=>`<button class="table-index-row ${row.key===selected.key?'active':''}" type="button" data-${kind}-key="${esc(row.key)}"><span class="table-index-main"><b>${esc(row.name)}</b><span>${esc(row.source)}  -  ${fmt(list(row.usage).length||row.count)} refs</span></span><span class="table-index-side"><span class="badge ${row.canonical?'green':'amber'}">${row.canonical?'Canonical':'Inferred'}</span></span></button>`).join('')}`).join('')}</div></div><div class="panel udf-detail"><div class="udf-detail-head"><div><h3>${esc(selected.name)}</h3><div class="caption">${esc(copy.detailCaption)}</div></div><div class="tree-detail-badges"><span class="badge ${selected.canonical?'green':'amber'}">${selected.canonical?'Canonical':'Inferred'}</span><span class="badge blue">${fmt(list(selected.usage).length)} usage rows</span></div></div><div class="table-def-grid"><div class="table-def-item"><span class="k">Type</span><span class="v">${esc(selected.type)}</span></div><div class="table-def-item"><span class="k">Source</span><span class="v">${esc(selected.source)}</span></div><div class="table-def-item"><span class="k">Usage footprint</span><span class="v">${fmt(list(selected.usage).length)} references</span></div><div class="table-def-item"><span class="k">Definition key</span><span class="v">${esc(selected.key)}</span></div></div>${detailHtml}<div class="table-columns-head">Usage hierarchy / evidence</div>${usage}</div></div></section>`;
+}
+
+function renderGlobalResourceDefinitions(){
+  renderGlobalDefinitionWorkbench('resource',buildGlobalResourceDefinitions(),state.selectedResourceKey,'selectedResourceKey',{title:'Global resources catalog',notice:'Resources are global definitions. Usage hierarchy below shows where the selected definition appears in rule evidence when the snapshot can map it.',emptyNotice:'No resource definitions were discovered in this snapshot.',emptyTitle:'No resources found',emptyBody:'No canonical resources or relationship-derived resources were discovered.',listTitle:'Resources',detailCaption:'Global resource definition with structural usage context.'});
+}
+
+function renderGlobalDriverDefinitions(){
+  renderGlobalDefinitionWorkbench('driver',buildGlobalDriverDefinitions(),state.selectedDriverKey,'selectedDriverKey',{title:'Global input drivers catalog',notice:'Drivers are global process/resource definitions. Findings and structural references are shown as usage evidence, separate from page and document objects.',emptyNotice:'No driver definitions were discovered in this snapshot.',emptyTitle:'No drivers found',emptyBody:'No process driver definitions or driver-like evidence were discovered.',listTitle:'Drivers',detailCaption:'Global driver definition with findings and structural usage context.'});
+}
+
 // Build global table definitions and inferred column names from relationship co-occurrence evidence.
 function buildGlobalTableDefinitions(){
   const canonicalTables=list(model.fwd?.tables?.items);
+  const knownTableNames=new Set(canonicalTables.map(t=>text(t.name).toLowerCase()).filter(Boolean));
+  const usageByTarget=new Map();
+  usageRowsForDefinition(r=>knownTableNames.has(text(r.target).toLowerCase())||/table|indexed|lookup|db|database/i.test(`${r.targetType} ${r.kind} ${r.target}`)).forEach(row=>{
+    const key=text(row.target).toLowerCase();
+    if(!key)return;
+    if(!usageByTarget.has(key))usageByTarget.set(key,[]);
+    usageByTarget.get(key).push(row);
+  });
   if(canonicalTables.length){
     return canonicalTables.map(t=>({
       name:text(t.name),
@@ -614,7 +785,8 @@ function buildGlobalTableDefinitions(){
       // Keep a compatibility merged view so existing list/detail UI remains stable.
       columns:[...new Map([...list(first(t.parsedColumns,[])),...list(first(t.usageDerivedFields,t.columns,[]))].map(c=>[text(c.name).toLowerCase(),{name:text(c.name),hits:Number(first(c.hits,0))||0,confidence:text(first(c.confidence,'medium'))}])).values()],
       hasParsedSchema:list(first(t.parsedColumns,[])).length>0,
-      diagnostics:list(first(t.diagnostics,[])).map(text).filter(Boolean)
+      diagnostics:list(first(t.diagnostics,[])).map(text).filter(Boolean),
+      usage:usageByTarget.get(text(t.name).toLowerCase())||[]
     }));
   }
 
@@ -688,7 +860,8 @@ function buildGlobalTableDefinitions(){
       usageDerivedFields:[...t.columns.values()].sort((a,b)=>(b.hits-a.hits)||a.name.localeCompare(b.name)).slice(0,24),
       columns:[...t.columns.values()].sort((a,b)=>(b.hits-a.hits)||a.name.localeCompare(b.name)).slice(0,24),
       hasParsedSchema:false,
-      diagnostics:['TableSchemaNotParsed']
+      diagnostics:['TableSchemaNotParsed'],
+      usage:usageByTarget.get(t.name.toLowerCase())||[]
     }))
     .sort((a,b)=>(b.hits-a.hits)||a.name.localeCompare(b.name));
 }
@@ -714,7 +887,8 @@ function renderGlobalTablesMasterDetail(){
   }
   const selected=tables.find(t=>t.name===state.selectedTableName)||tables[0];
   state.selectedTableName=selected.name;
-  $('content').innerHTML=`<section class="tables-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>Global tables catalog.</b> Tables are first-class shared resources referenced by rule logic. ${isCanonical?'Canonical table names come from FWD resources; parsed schema columns and usage-derived fields are separate evidence tiers.':'Field references are currently usage-derived evidence because canonical payload is unavailable.'}</div></div><div class="metric-grid table-metric-grid"><div class="metric good"><b>${fmt(tables.length)}</b><span>Total tables</span></div><div class="metric ${canonicalCount?'good':''}"><b>${fmt(canonicalCount)}</b><span>Canonical definitions</span></div><div class="metric ${inferredCount?'warn':''}"><b>${fmt(inferredCount)}</b><span>Inferred definitions</span></div><div class="metric ${withColumns===tables.length?'good':'warn'}"><b>${fmt(withColumns)}</b><span>With usage fields</span></div></div><div class="table-browser"><div class="panel"><h3>Tables</h3><div class="table-index-list">${tables.slice(0,500).map(t=>`<button class="table-index-row ${t.name===selected.name?'active':''}" type="button" data-table-name="${esc(t.name)}"><span class="table-index-main"><b>${esc(t.name)}</b><span>${fmt(t.ruleCount)} rules  -  ${fmt(t.scopeCount)} scopes</span></span><span class="table-index-side"><span class="badge ${t.canonical?'green':'amber'}">${t.canonical?'Canonical':'Inferred'}</span><span class="badge blue">${fmt(t.usageDerivedFields.length)} refs</span></span></button>`).join('')}</div></div><div class="panel"><h3>${esc(selected.name)}</h3><div class="table-def-grid"><div class="table-def-item"><span class="k">Definition Source</span><span class="v">${selected.inferred?'Evidence-derived':'Canonical payload'}</span></div><div class="table-def-item"><span class="k">Usage Footprint</span><span class="v">${fmt(selected.ruleCount)} rules / ${fmt(selected.scopeCount)} scopes</span></div><div class="table-def-item"><span class="k">Reference Hits</span><span class="v">${fmt(selected.hits)}</span></div></div><div class="table-columns-head">Usage-derived field evidence ${selected.inferred?'(inferred)':'(canonical)'}</div>${selected.usageDerivedFields.length?`<div class="table-columns-grid">${selected.usageDerivedFields.map(c=>`<div class="table-column-row"><div class="table-col-name">${esc(c.name)}</div><div class="table-col-meta"><span class="badge blue">${fmt(c.hits)} uses</span><span class="mono">${esc(c.confidence)} confidence</span></div></div>`).join('')}</div>`:'<div class="muted">No parsed table schema extracted for this table in current snapshot.</div>'}</div></div></section>`;
+  const usageHierarchy=usageHierarchyHtml(selected.usage,'No rule usage was mapped for this table.');
+  $('content').innerHTML=`<section class="tables-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>Global tables catalog.</b> Tables are first-class shared resources referenced by rule logic. ${isCanonical?'Canonical table names come from FWD resources; parsed schema columns, usage-derived fields, and caller hierarchy are separate evidence tiers.':'Field references are currently usage-derived evidence because canonical payload is unavailable.'}</div></div><div class="metric-grid table-metric-grid"><div class="metric good"><b>${fmt(tables.length)}</b><span>Total tables</span></div><div class="metric ${canonicalCount?'good':''}"><b>${fmt(canonicalCount)}</b><span>Canonical definitions</span></div><div class="metric ${inferredCount?'warn':''}"><b>${fmt(inferredCount)}</b><span>Inferred definitions</span></div><div class="metric ${withColumns===tables.length?'good':'warn'}"><b>${fmt(withColumns)}</b><span>With usage fields</span></div></div><div class="table-browser"><div class="panel"><h3>Tables</h3><div class="table-index-list">${tables.slice(0,500).map(t=>`<button class="table-index-row ${t.name===selected.name?'active':''}" type="button" data-table-name="${esc(t.name)}"><span class="table-index-main"><b>${esc(t.name)}</b><span>${fmt(t.ruleCount)} rules  -  ${fmt(t.scopeCount)} scopes</span></span><span class="table-index-side"><span class="badge ${t.canonical?'green':'amber'}">${t.canonical?'Canonical':'Inferred'}</span><span class="badge blue">${fmt(list(t.usage).length)} refs</span></span></button>`).join('')}</div></div><div class="panel udf-detail"><div class="udf-detail-head"><div><h3>${esc(selected.name)}</h3><div class="caption">Global table definition with field evidence and structural usage context.</div></div><div class="tree-detail-badges"><span class="badge ${selected.canonical?'green':'amber'}">${selected.canonical?'Canonical':'Inferred'}</span><span class="badge blue">${fmt(list(selected.usage).length)} usage rows</span></div></div><div class="table-def-grid"><div class="table-def-item"><span class="k">Definition Source</span><span class="v">${selected.inferred?'Evidence-derived':'Canonical payload'}</span></div><div class="table-def-item"><span class="k">Usage Footprint</span><span class="v">${fmt(selected.ruleCount)} rules / ${fmt(selected.scopeCount)} scopes</span></div><div class="table-def-item"><span class="k">Reference Hits</span><span class="v">${fmt(selected.hits)}</span></div></div><div class="table-columns-head">Usage-derived field evidence ${selected.inferred?'(inferred)':'(canonical)'}</div>${selected.usageDerivedFields.length?`<div class="table-columns-grid">${selected.usageDerivedFields.map(c=>`<div class="table-column-row"><div class="table-col-name">${esc(c.name)}</div><div class="table-col-meta"><span class="badge blue">${fmt(c.hits)} uses</span><span class="mono">${esc(c.confidence)} confidence</span></div></div>`).join('')}</div>`:'<div class="muted">No parsed table schema extracted for this table in current snapshot.</div>'}<div class="table-columns-head">Usage hierarchy / evidence</div>${usageHierarchy}</div></div></section>`;
 }
 
 // Build UDF rows with optional canonical details for list/detail rendering.
@@ -805,6 +979,76 @@ function passesUdfFilter(row){
   if(state.udfFilter==='relationship-only')return !row.canonical&&list(row.rules).length>0;
   return true;
 }
+function udfCallerNode(caller){
+  return caller?.nodeId?model.nodesById.get(String(caller.nodeId)):null;
+}
+function udfParameterMatrixHtml(callers){
+  const byName=new Map();
+  list(callers).forEach(caller=>{
+    Object.entries(caller.parameters||{}).forEach(([name,rawValue])=>{
+      const key=text(name).trim();
+      if(!key)return;
+      if(!byName.has(key))byName.set(key,{name:key,values:new Map(),callers:new Set()});
+      const row=byName.get(key);
+      row.callers.add(text(caller.nodeId||caller.ruleName));
+      list(rawValue).forEach(v=>{
+        const value=text(v);
+        if(!row.values.has(value))row.values.set(value,0);
+        row.values.set(value,row.values.get(value)+1);
+      });
+    });
+  });
+  const rows=[...byName.values()].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  if(!rows.length)return '<div class="muted">No caller parameters were extracted for this function.</div>';
+  return `<div class="udf-param-grid">${rows.map(row=>{
+    const values=[...row.values.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
+    const examples=values.slice(0,5).map(([value,count])=>`<span class="udf-value-chip" title="${esc(value)}">${esc(value||'(blank)')} <b>${fmt(count)}</b></span>`).join('');
+    return `<div class="udf-param-row"><div><b>${esc(row.name)}</b><span>${fmt(row.callers.size)} caller ${row.callers.size===1?'rule':'rules'}</span></div><div class="udf-param-values">${examples||'<span class="muted">No values</span>'}</div></div>`;
+  }).join('')}</div>`;
+}
+function callerTreePreviewHtml(node){
+  const groups=childRouteGroups(node.id);
+  if(!groups.length)return '<div class="muted">No child branches under this caller.</div>';
+  return `<div class="udf-branch-grid">${groups.slice(0,10).map(group=>{
+    const childButtons=group.childIds.slice(0,8).map(id=>{
+      const child=model.nodesById.get(String(id));
+      return child?`<button class="udf-child-node" type="button" data-node="${esc(child.id)}"><b>${esc(child.title)}</b><span>${esc(child.fn||'No function mapped')}</span></button>`:'';
+    }).join('');
+    return `<div class="udf-branch-card"><div class="split-row"><b>${esc(group.label||'Unresolved route')}</b><span class="badge ${group.resolved?'green':'amber'}">${fmt(group.childIds.length)} children</span></div>${childButtons?`<div class="mini-list mt-8">${childButtons}</div>`:''}</div>`;
+  }).join('')}</div>${groups.length>10?`<div class="caption mt-8">Showing first 10 branch groups out of ${fmt(groups.length)}.</div>`:''}`;
+}
+function udfCallerHierarchyHtml(callers){
+  const structural=list(callers).map(caller=>({caller,node:udfCallerNode(caller)})).filter(x=>x.node);
+  if(!structural.length)return '<div class="muted">No structural caller nodes were mapped for this function.</div>';
+  const byScope=new Map();
+  structural.forEach(item=>{
+    const key=item.node.scopeId;
+    if(!byScope.has(key))byScope.set(key,[]);
+    byScope.get(key).push(item);
+  });
+  return [...byScope.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'})).map(([scopeId,items])=>`
+    <details class="udf-scope-tree" open>
+      <summary><span>${esc(scopeId)}</span><span class="section-count">${fmt(items.length)} callers</span></summary>
+      <div class="udf-scope-tree-body">
+        ${items.slice(0,40).map(({caller,node})=>{
+          const parameterKeys=Object.keys(caller.parameters||{});
+          const parameterHtml=parameterKeys.length?`<div class="kv udf-caller-params">${parameterKeys.slice(0,12).map(k=>kv(k,esc(list(caller.parameters[k]).join(', ')))).join('')}</div>`:'<div class="muted">No caller parameters extracted.</div>';
+          return `<details class="udf-caller-card" open>
+            <summary><span><b>${esc(node.title)}</b><span>${esc(node.fn||'No function mapped')}</span></span><button class="btn ghost" type="button" data-node="${esc(node.id)}">Open in tree</button></summary>
+            <div class="udf-caller-body">
+              <div class="table-columns-head">Hierarchy route</div>
+              ${routePathHtml(node)}
+              <div class="table-columns-head">Caller parameters</div>
+              ${parameterHtml}
+              <div class="table-columns-head">Child rule hierarchy</div>
+              ${callerTreePreviewHtml(node)}
+            </div>
+          </details>`;
+        }).join('')}
+        ${items.length>40?`<div class="caption">Showing first 40 callers in this scope out of ${fmt(items.length)}.</div>`:''}
+      </div>
+    </details>`).join('');
+}
 function renderUdfMasterDetail(){
   const allRows=buildUdfDefinitions().sort((a,b)=>a.displayName.localeCompare(b.displayName,undefined,{sensitivity:'base'}));
   const rows=allRows.filter(passesUdfFilter);
@@ -823,11 +1067,11 @@ function renderUdfMasterDetail(){
     groups.get(groupKey).push(r);
   });
   const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
-  const paramList=list(selected.parameterNames).length?`<div class="mini-list">${list(selected.parameterNames).slice(0,120).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No parameters extracted for this function in current evidence.</div>';
   const callerRows=list(selected.callerRules);
-  const ruleList=callerRows.length?`<div class="mini-list">${callerRows.slice(0,120).map(r=>r.nodeId?`<button class="mini-row quick-link" type="button" data-node="${esc(r.nodeId)}" title="Open this caller rule in the structure tree"><span><b>${esc(r.ruleName)}</b><span class="data-sub">${esc(r.scopeId)}</span></span><span class="mono">${esc(r.functionName)}</span></button>`:`<div class="mini-row"><span><b>${esc(r.ruleName)}</b><span class="data-sub">${esc(r.scopeId)}</span></span><span class="mono">${esc(r.functionName)}</span></div>`).join('')}</div>`:(selected.rules.length?`<div class="mini-list">${selected.rules.slice(0,120).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No configured rules mapped for this function in current evidence.</div>');
+  const parameterMatrix=udfParameterMatrixHtml(callerRows);
+  const callerHierarchy=udfCallerHierarchyHtml(callerRows);
   const scopeList=selected.scopes.length?`<div class="mini-list">${selected.scopes.slice(0,80).map(s=>`<div class="mini-row"><span class="mono">${esc(s)}</span></div>`).join('')}</div>`:'<div class="muted">No explicit scope list in canonical payload.</div>';
-  $('content').innerHTML=`<section class="tables-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>User Defined Functions (UDF) view.</b> UDFs are global resources; scope evidence shows where they are called. Field lists, return statuses, and rule bodies are not authoritative unless marked parsed.</div></div><div class="segmented mb-10">${['with-callers','canonical','unparsed','relationship-only','all'].map(f=>`<button class="${state.udfFilter===f?'active':''}" type="button" data-udf-filter="${f}">${esc(udfFilterLabel(f))}</button>`).join('')}</div><div class="table-browser"><div class="panel"><h3>Functions</h3><div class="table-index-list">${ordered.map(([groupKey,items])=>`<div class="scope-group"><span>${esc(groupKey)}</span><span class="section-count">${fmt(items.length)}</span></div>${items.map(r=>`<button class="table-index-row ${r.key===selected.key?'active':''}" type="button" data-udf-name="${esc(r.key)}"><span class="table-index-main"><b>${esc(r.displayName)}</b><span>${esc(r.type)}</span></span></button>`).join('')}`).join('')}</div></div><div class="panel"><h3>${esc(selected.displayName)}</h3><div class="table-def-grid"><div class="table-def-item"><span class="k">Type</span><span class="v">${esc(selected.type)}</span></div><div class="table-def-item"><span class="k">Source</span><span class="v">${esc(selected.source||'Candidate evidence')}</span></div><div class="table-def-item"><span class="k">Classification</span><span class="v">${esc(selected.classification|| (selected.canonical?'CandidateUdf':(selected.inferred?'RegexOnly':'Unspecified')))}</span></div><div class="table-def-item"><span class="k">Confidence</span><span class="v">${esc(selected.confidence||'Not provided')}</span></div><div class="table-def-item"><span class="k">Caller parameter keys</span><span class="v">${fmt(list(selected.parameterNames).length)}</span></div><div class="table-def-item"><span class="k">Caller rules</span><span class="v">${fmt(selected.rules.length)}</span></div></div><div class="table-columns-head">Caller parameter keys</div>${paramList}<div class="table-columns-head">Direct caller rules</div>${ruleList}<div class="table-columns-head">Scopes</div>${scopeList}</div></div></section>`;
+  $('content').innerHTML=`<section class="tables-workbench udf-workbench"><div class="notice"><div class="notice-icon">i</div><div><b>User Defined Functions (UDF) catalog.</b> UDFs are global definitions. Caller hierarchy below shows where the selected function is used in the rule tree.</div></div><div class="segmented mb-10">${['with-callers','canonical','unparsed','relationship-only','all'].map(f=>`<button class="${state.udfFilter===f?'active':''}" type="button" data-udf-filter="${f}">${esc(udfFilterLabel(f))}</button>`).join('')}</div><div class="table-browser udf-browser"><div class="panel udf-function-list"><h3>Functions</h3><div class="table-index-list">${ordered.map(([groupKey,items])=>`<div class="scope-group"><span>${esc(groupKey)}</span><span class="section-count">${fmt(items.length)}</span></div>${items.map(r=>`<button class="table-index-row ${r.key===selected.key?'active':''}" type="button" data-udf-name="${esc(r.key)}"><span class="table-index-main"><b>${esc(r.displayName)}</b><span>${esc(r.type)}  -  ${fmt(list(r.callerRules).length)} callers</span></span></button>`).join('')}`).join('')}</div></div><div class="panel udf-detail"><div class="udf-detail-head"><div><h3>${esc(selected.displayName)}</h3><div class="caption">Global function definition with structural caller context.</div></div><div class="tree-detail-badges"><span class="badge ${selected.canonical?'green':'amber'}">${selected.canonical?'Canonical':'Inferred'}</span><span class="badge blue">${fmt(callerRows.length)} callers</span></div></div><div class="table-def-grid"><div class="table-def-item"><span class="k">Type</span><span class="v">${esc(selected.type)}</span></div><div class="table-def-item"><span class="k">Source</span><span class="v">${esc(selected.source||'Candidate evidence')}</span></div><div class="table-def-item"><span class="k">Classification</span><span class="v">${esc(selected.classification|| (selected.canonical?'CandidateUdf':(selected.inferred?'RegexOnly':'Unspecified')))}</span></div><div class="table-def-item"><span class="k">Confidence</span><span class="v">${esc(selected.confidence||'Not provided')}</span></div><div class="table-def-item"><span class="k">Parameter keys</span><span class="v">${fmt(list(selected.parameterNames).length)}</span></div><div class="table-def-item"><span class="k">Caller rules</span><span class="v">${fmt(callerRows.length)}</span></div></div><div class="table-columns-head">Parameters used by callers</div>${parameterMatrix}<div class="table-columns-head">Caller rule tree / hierarchy</div>${callerHierarchy}<div class="table-columns-head">Canonical scopes</div>${scopeList}</div></div></section>`;
 }
 
 function renderDomainCatalog(title,rows,caption){
@@ -1061,8 +1305,8 @@ function closeModalRender(){state.modal='';renderModal();renderAll();}
 function snapshotId(){return text(first(treeData.SnapshotId,treeData.snapshotId,rulesData.SnapshotId,rulesData.snapshotId,treeData.GeneratedAtUtc,rulesData.GeneratedAtUtc,'embedded-snapshot')).replace(/[^a-z0-9_.:-]+/gi,'-');}
 function snapshotStoreKey(){return `ac-rule-workbench-v25:${snapshotId()}`;}
 function noteRecentScope(scopeId){const id=text(scopeId);if(!id)return;state.recentScopes=[id,...state.recentScopes.filter(x=>x!==id)].slice(0,6);}
-function saveState(){try{localStorage.setItem(snapshotStoreKey(),JSON.stringify({scopeId:state.scopeId,theme:state.theme,density:state.density,treeFilter:state.treeFilter,scopeKindFilter:state.scopeKindFilter,workspaceView:state.workspaceView,fieldResolutionFilter:state.fieldResolutionFilter,selectedTableName:state.selectedTableName,selectedUdfName:state.selectedUdfName,udfFilter:state.udfFilter,consoleView:state.consoleView,inspectorOpen:document.body.classList.contains('inspector-open'),recentScopes:state.recentScopes}));localStorage.setItem(themeStorageKey,state.theme);}catch{}}
-function restoreSnapshotState(){const saved=safeJson(localStorage.getItem(snapshotStoreKey())||'{}',{});const theme=localStorage.getItem(themeStorageKey)||state.theme||'dark';state.theme=theme;document.documentElement.dataset.theme=theme;state.density=saved.density==='high'?'high':state.density;applyDensityClass(state.density);if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;if(saved.treeFilter)state.treeFilter=saved.treeFilter;if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;state.workspaceView=['structure','inspect','field-resolution','resources','tables','drivers','udfs','audit'].includes(saved.workspaceView)?saved.workspaceView:'structure';state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';state.selectedTableName=text(saved.selectedTableName||'');state.selectedUdfName=text(saved.selectedUdfName||'');state.udfFilter=['all','with-callers','canonical','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;state.consoleView=['activity','warnings','errors','exports','raw'].includes(saved.consoleView)?saved.consoleView:state.consoleView;state.recentScopes=Array.isArray(saved.recentScopes)?saved.recentScopes:[];if(saved.inspectorOpen)document.body.classList.add('inspector-open');}
+function saveState(){try{localStorage.setItem(snapshotStoreKey(),JSON.stringify({scopeId:state.scopeId,theme:state.theme,density:state.density,treeFilter:state.treeFilter,scopeKindFilter:state.scopeKindFilter,workspaceView:state.workspaceView,fieldResolutionFilter:state.fieldResolutionFilter,selectedResourceKey:state.selectedResourceKey,selectedDriverKey:state.selectedDriverKey,selectedTableName:state.selectedTableName,selectedUdfName:state.selectedUdfName,udfFilter:state.udfFilter,consoleView:state.consoleView,inspectorOpen:document.body.classList.contains('inspector-open'),recentScopes:state.recentScopes}));localStorage.setItem(themeStorageKey,state.theme);}catch{}}
+function restoreSnapshotState(){const saved=safeJson(localStorage.getItem(snapshotStoreKey())||'{}',{});const theme=localStorage.getItem(themeStorageKey)||state.theme||'dark';state.theme=theme;document.documentElement.dataset.theme=theme;state.density=saved.density==='high'?'high':state.density;applyDensityClass(state.density);if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;if(saved.treeFilter)state.treeFilter=saved.treeFilter;if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;state.workspaceView=['structure','inspect','field-resolution','resources','tables','drivers','udfs','audit'].includes(saved.workspaceView)?saved.workspaceView:'structure';state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';state.selectedResourceKey=text(saved.selectedResourceKey||'');state.selectedDriverKey=text(saved.selectedDriverKey||'');state.selectedTableName=text(saved.selectedTableName||'');state.selectedUdfName=text(saved.selectedUdfName||'');state.udfFilter=['all','with-callers','canonical','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;state.consoleView=['activity','warnings','errors','exports','raw'].includes(saved.consoleView)?saved.consoleView:state.consoleView;state.recentScopes=Array.isArray(saved.recentScopes)?saved.recentScopes:[];if(saved.inspectorOpen)document.body.classList.add('inspector-open');}
 function branchIdFor(parentId,g){return `${state.scopeId}|${String(parentId)}|action:${text(first(g?.actionListIndex,g?.key,g?.label,'route')).replace(/\s+/g,'_')}`;}
 function branchVmFromKey(key,scopeId=state.scopeId){for(const n of model.nodes){if(n.scopeId!==scopeId)continue;for(const g of childRouteGroups(n.id)){const k=branchKey(n.id,g);if(k===key){const childNodes=g.childIds.map(id=>model.nodesById.get(String(id))).filter(Boolean);return {kind:'ActionBranch',key:k,branchId:branchIdFor(n.id,g),scopeId,parent:n,group:g,childNodes,childIds:g.childIds,childCount:g.childIds.length,routeState:g.routeState||'Unresolved',resolved:!!g.resolved,label:g.label||'Unresolved route',actionListIndex:g.actionListIndex};}}}return null;}
 function selectedBranch(){return state.selectedType==='branch'?branchVmFromKey(state.selectedId):null;}
@@ -1168,7 +1412,6 @@ function renderObjectTreeBlock(){
   const toTotal=rows=>rows.reduce((sum,row)=>sum+Number(first(row.count,0)),0);
   const scopeCountBy=matcher=>model.scopes.filter(s=>matcher(`${s.kind} ${s.name} ${s.scopeId}`)).length;
   const canonicalCounts=model.fwd?.overview?.counts||null;
-  const tableDefs=buildGlobalTableDefinitions();
   const resources=domainRowsByView('resources');
   const tables=domainRowsByView('tables');
   const drivers=domainRowsByView('drivers');
@@ -1180,7 +1423,7 @@ function renderObjectTreeBlock(){
     processes:first(canonicalCounts?.processes,scopeCountBy(v=>/process|\bac\b|\bdv\b|\bfip\b|\bocr\b|render|store|webkey|\bkfi\b|\bke\b/i.test(v))),
     structure:scopedRuleNodes().length,
     resources:first(canonicalCounts?.resourceTypes,toTotal(resources)),
-    tables:first(model.fwd?.tables?.count,canonicalCounts?.tables,tableDefs.length),
+    tables:first(model.fwd?.tables?.count,canonicalCounts?.tables,toTotal(tables)),
     drivers:toTotal(drivers),
     udfs:toTotal(udfs),
     unresolvedFields:getScopeFieldResolutionIndex(state.scopeId).summary.unresolved
@@ -1204,7 +1447,13 @@ function renderObjectTreeBlock(){
     row('nav-batches','Batches',counts.batches,'Batch configuration scopes',nav.batches,true),
     row('nav-processes','Processes',counts.processes,'Process-node configuration scopes',nav.processes,true)
   ];
-  return `<div class="scope-group"><span>Objects</span></div><div class="global-view-list" role="group" aria-label="Scope object presets">${section('Scope Presets',objectRows,true)}</div>`;
+  const definitionRows=[
+    row('view-resources','Resources',counts.resources,'Global resource definitions',state.workspaceView==='resources'),
+    row('view-tables','Tables',counts.tables,'Global table definitions',state.workspaceView==='tables'),
+    row('view-drivers','Input drivers',counts.drivers,'Global input/output driver definitions',state.workspaceView==='drivers'),
+    row('view-udfs','UDFs',counts.udfs,'Global UDF/function definitions',state.workspaceView==='udfs')
+  ];
+  return `<div class="scope-group"><span>Global</span></div><div class="global-view-list" role="group" aria-label="Global definition catalogs">${section('Definitions',definitionRows,true)}</div><div class="scope-group"><span>Objects</span></div><div class="global-view-list" role="group" aria-label="Scope object presets">${section('Scope Presets',objectRows,false)}</div>`;
 }
 function applyEditorNavPreset(target){
   state.workspaceView='structure';
@@ -1260,6 +1509,7 @@ function renderScopes(){
     const pages=rows.filter(s=>/page/i.test(text(s.kind)));
     const other=rows.filter(s=>!/document|doc|page/i.test(text(s.kind)));
     const parts=[];
+    parts.push(renderObjectTreeBlock());
     parts.push('<div class="scope-group"><span>Scopes</span></div>');
     parts.push(scopeSectionHtml('Documents',docs,true));
     parts.push(scopeSectionHtml('Pages',pages,true));
@@ -1268,14 +1518,9 @@ function renderScopes(){
   }
 }
 function jumpToSearchResult(r){if(!r)return;closeSearchPopover();if(r.kind==='Scope')return selectScope(r.scopeId);if(r.kind==='ActionBranch'){selectScope(r.scopeId);selectBranch(r.branchKey);state.collapsedBranches.delete(r.branchKey);renderAll();return;}if(r.nodeId){selectScope(r.scopeId);selectNode(r.nodeId);return;}if(r.scopeId)selectScope(r.scopeId);}
-// Keep scope-local views intentionally narrow for Document/Page scopes.
-// Resource-definition catalogs are global concerns and are not shown as direct Doc/Page tabs.
+// Global definition catalogs remain available from every selected scope.
 function normalizeWorkspaceViewForScope(){
-  const scope=currentScope();
-  if(!scope)return;
-  const isDocOrPage=/^(document|page)$/i.test(text(scope.kind));
-  if(isDocOrPage&&['resources','tables','drivers','udfs'].includes(state.workspaceView))
-    state.workspaceView='structure';
+  if(!currentScope())return;
 }
 function renderAll(){return withUiGuard('render',()=>{saveState();normalizeWorkspaceViewForScope();renderTop();renderScopes();renderMainHead();renderContent();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
 function renderShellStatePanels(){
@@ -1353,7 +1598,7 @@ function renderTop(){
   const total=fmt(totalRules);
   const activeView=(state.workspaceView||'structure').toUpperCase();
   const hydration=canonicalHydrationSummary();
-  $('sourceSubtitle').textContent=`Snapshot ${esc(snapshotId())} - ${total} structural rules - ${esc(activeView)} view`;
+  $('sourceSubtitle').textContent=`${esc(activeView)} view`;
   const warnDot=hydration.level==='warn';
   const statusText=hydration.level==='warn'
     ? `Snapshot partial - ${fmt(totalWarnings)} warnings`
@@ -1374,24 +1619,19 @@ function renderViewbar(){
   const hasRule=!!selectedNode();
   const hasFilter=!!text(state.query).trim();
   const struct=state.workspaceView==='structure';
-  const trustLine=(struct&&isDocOrPage)
-    ? 'Read-only structure inspection'
-    : 'Read-only static inspection - structure/inventory evidence - not runtime execution proof';
+  const isGlobalView=['resources','tables','drivers','udfs'].includes(state.workspaceView);
   const viewButtons=[
     `<button class="btn ${struct?'primary':''}" type="button" data-action="view-structure" title="Inspect rule hierarchy, branch routes, and disabled inheritance">Structure</button>`,
     `<button class="btn ${state.workspaceView==='inspect'?'primary':''}" type="button" data-action="view-inspect" title="Open the selected object evidence and inspection page" ${hasEvidenceSelection()?'':'disabled'}>Inspect</button>`,
     `<button class="btn ${state.workspaceView==='field-resolution'?'primary':''}" type="button" data-action="view-field-resolution" title="Review unresolved field references and canonical matches">Fields</button>`
   ];
-  if(!isDocOrPage){
-    viewButtons.push(`<button class="btn ${state.workspaceView==='resources'?'primary':''}" type="button" data-action="view-resources" title="Canonical resource inventory by type">Resources</button>`);
-    viewButtons.push(`<button class="btn ${state.workspaceView==='tables'?'primary':''}" type="button" data-action="view-tables" title="Global table definitions, usage, and correlated references">Tables</button>`);
-    viewButtons.push(`<button class="btn ${state.workspaceView==='drivers'?'primary':''}" type="button" data-action="view-drivers" title="Input/output process driver findings">Drivers</button>`);
-    viewButtons.push(`<button class="btn ${state.workspaceView==='udfs'?'primary':''}" type="button" data-action="view-udfs" title="UDF/function candidates, callers, and relationship evidence">UDFs</button>`);
-  }
   const treeCommands=isDocOrPage
     ? `<div class="cmd-main" role="group" aria-label="Tree commands"><button class="btn primary" type="button" data-action="expand-selected-subtree" title="Expand the selected rule and all of its descendants" ${hasRule?'':'disabled'}>Expand selected</button><button class="btn" type="button" data-action="expand-all" title="Expand all visible structural rules and branches">Expand all</button><button class="btn" type="button" data-action="collapse-all" title="Collapse to top-level roots and branch headers">Collapse all</button>${state.focusNodeId?'<button class="btn" type="button" data-action="clear-focus" title="Return from focused subtree to full scope">Clear focus</button>':''}</div><div class="cmd-hint">Select a rule to expand or inspect details.</div>`
     : `<div class="cmd-main" role="group" aria-label="Tree commands"><button class="btn primary" type="button" data-action="expand-selected-subtree" title="Expand the selected rule and all descendants" ${hasRule?'':'disabled'}>Expand selected</button><button class="btn" type="button" data-action="expand-selected-depth" title="Expand one level below the selected rule" ${hasRule?'':'disabled'}>Expand +1</button><button class="btn" type="button" data-action="collapse-siblings" title="Collapse sibling branches near the selected rule" ${hasRule?'':'disabled'}>Collapse peers</button><button class="btn" type="button" data-action="expand-all" title="Expand all visible structural rules and branches">Expand all</button><button class="btn" type="button" data-action="collapse-all" title="Collapse to top-level roots and branch headers">Collapse all</button>${state.focusNodeId?'<button class="btn" type="button" data-action="clear-focus" title="Return from focused subtree to full scope">Clear focus</button>':''}</div><div class="cmd-hint">Select a rule row, then use Expand selected. Shortcuts: Alt+A Alt+D Alt+P.</div>`;
-  const html=`<div class="viewbar-shell"><div class="viewbar-left">${activeSliceHtml()}<div class="trust-line">${esc(trustLine)}</div><div class="cmd-main" role="group" aria-label="Workbench views">${viewButtons.join('')}</div>${renderContextActionMenu('Scope')}<div class="field tree-filter"><label class="sr-only" for="viewSearch">Filter structure</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="Filter by rule, action, function, target, or disabled state"><button class="filter-clear" type="button" data-action="clear-tree-search" title="Clear current local filter" aria-label="Clear tree filter" ${hasFilter?'':'disabled'}>Clear</button></div>${struct?treeCommands:'<div class="cmd-hint">Use this view to narrow the current scope; select a row to inspect details.</div>'}</div></div>`;
+  const secondaryHint=isGlobalView
+    ? '<div class="cmd-hint">Global definitions are independent of the selected document or page.</div>'
+    : '<div class="cmd-hint">Use this view to narrow the current scope; select a row to inspect details.</div>';
+  const html=`<div class="viewbar-shell quiet-viewbar"><div class="viewbar-left"><div class="cmd-main" role="group" aria-label="Workbench views">${viewButtons.join('')}</div>${isGlobalView?'':renderContextActionMenu('Scope')}<div class="field tree-filter"><label class="sr-only" for="viewSearch">Filter structure</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="Filter by rule, action, function, target, or disabled state"><button class="filter-clear" type="button" data-action="clear-tree-search" title="Clear current local filter" aria-label="Clear tree filter" ${hasFilter?'':'disabled'}>Clear</button></div>${struct?treeCommands:secondaryHint}</div></div>`;
   $('viewbar').innerHTML=html;
   syncViewSearchMeta();
 }
@@ -1464,10 +1704,10 @@ function viewSearchMeta(){
   if(state.workspaceView==='structure')return {label:'Filter structure',placeholder:'Filter structure by rule, action, function, target, or disabled state'};
   if(state.workspaceView==='inspect')return {label:'Filter inspection context',placeholder:'Search within current evidence context via global search'};
   if(state.workspaceView==='field-resolution')return {label:'Filter field resolution',placeholder:'Filter field references by field name, rule, function, or parameter'};
-  if(state.workspaceView==='resources')return {label:'Filter resources',placeholder:'Filter resource inventory evidence'};
-  if(state.workspaceView==='tables')return {label:'Filter tables',placeholder:'Filter tables by name, column, scope, or usage'};
-  if(state.workspaceView==='drivers')return {label:'Filter drivers',placeholder:'Filter drivers and process findings'};
-  if(state.workspaceView==='udfs')return {label:'Filter UDFs',placeholder:'Filter UDF/function candidates and usage evidence'};
+  if(state.workspaceView==='resources')return {label:'Filter resources',placeholder:'Filter global resource definitions'};
+  if(state.workspaceView==='tables')return {label:'Filter tables',placeholder:'Filter global table definitions by name or column'};
+  if(state.workspaceView==='drivers')return {label:'Filter drivers',placeholder:'Filter global input/output driver definitions'};
+  if(state.workspaceView==='udfs')return {label:'Filter UDFs',placeholder:'Filter global UDF/function definitions'};
   if(state.workspaceView==='audit')return {label:'Filter audit',placeholder:'Filter diagnostics, references, unresolved routes, or ambiguous correlation'};
   return {label:'Filter viewer',placeholder:'Filter current view'};
 }
@@ -1535,6 +1775,7 @@ function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.tar
 }
 function wireTableSelection(){document.addEventListener('click',e=>{const tableName=e.target.closest('[data-table-name]')?.dataset.tableName;if(!tableName)return;state.selectedTableName=tableName;renderContent();saveState();});}
 function wireUdfSelection(){document.addEventListener('click',e=>{const udfName=e.target.closest('[data-udf-name]')?.dataset.udfName;if(!udfName)return;e.preventDefault();state.selectedUdfName=udfName;state.workspaceView='udfs';renderAll();saveState();});}
+function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const resourceKey=e.target.closest('[data-resource-key]')?.dataset.resourceKey;if(resourceKey){e.preventDefault();state.selectedResourceKey=resourceKey;state.workspaceView='resources';renderAll();saveState();return;}const driverKey=e.target.closest('[data-driver-key]')?.dataset.driverKey;if(driverKey){e.preventDefault();state.selectedDriverKey=driverKey;state.workspaceView='drivers';renderAll();saveState();}});}
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.branch-row[data-branch]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.branch&&state.selectedId===r.dataset.branch));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.branch)selectBranch(row.dataset.branch);row.focus();}
 function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const branch=active?.closest?.('[data-branch]')?.dataset.branch;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(branch)selectBranch(branch);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(branch){state.collapsedBranches.has(branch)?state.collapsedBranches.delete(branch):state.collapsedBranches.add(branch);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseBranchesForNode(node));}renderContent();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(branch)state.collapsedBranches.delete(branch);else if(node){state.expanded.add(node);collapseBranchesForNode(node);}renderContent();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(branch)state.collapsedBranches.add(branch);else if(node)state.expanded.delete(node);renderContent();renderInspector();return;}}
@@ -1551,7 +1792,7 @@ async function init(){
     return;
   }
 
-  return withUiGuard('boot',()=>{if(!model.scopes.length){renderNoData();return;}restoreSnapshotState();if(!model.scopes.some(s=>s.scopeId===state.scopeId))state.scopeId=model.scopes[0].scopeId;seedExpanded(state.scopeId);wire();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();renderAll();});
+  return withUiGuard('boot',()=>{if(!model.scopes.length){renderNoData();return;}restoreSnapshotState();if(!model.scopes.some(s=>s.scopeId===state.scopeId))state.scopeId=model.scopes[0].scopeId;seedExpanded(state.scopeId);wire();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();renderAll();});
 }
 
 init();
