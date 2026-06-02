@@ -71,3 +71,14 @@ This environment does not include a .NET Framework build toolchain, MSBuild, Pow
 - Centralized text/HTML/JSON response writing through `ApiResponseWriter.WriteText`, with safe response close handling for disconnects and shutdown races.
 - Serialized snapshot cache builds to reduce native-wrapper concurrency risk and expose the last snapshot build failure through readiness/status output.
 - Removed generated-attribution comments from source, viewer, script, and documentation files.
+
+## Recommendation application package - 2026-06-01
+
+- Added structural route metadata (`StructuralPath`, `DisplayPath`, `Route`) to tree nodes.
+- Added explicit sequence-only disabled state so flat order fallback is audit evidence, not structural inheritance.
+- Added high-value AC function catalog and catalog-first parameter classification.
+- Fixed snapshot cache key to include `RequireNativeOk`.
+- Fixed UDF viewer filters and normalized UDF row metadata.
+- Restored selected-rule inspector sections previously hidden behind an early return.
+- Added semantic model tests for disabled states and function-catalog classification.
+- Added clean package script and recommendation/authority-model documentation.

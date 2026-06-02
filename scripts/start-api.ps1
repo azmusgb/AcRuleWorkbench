@@ -1,5 +1,6 @@
+[CmdletBinding()]
 param(
-    [string]$FwdPath = "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd",
+    [string]$FwdPath = "",
     [int]$Port = 8787,
     [string]$HostName = "127.0.0.1",
     [switch]$NoOpen,
@@ -12,11 +13,35 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $root "AcRuleWorkbench\bin\x86\Debug\net48\AcRuleWorkbench.exe"
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+$root = Split-Path -Parent $scriptRoot
+if ([string]::IsNullOrWhiteSpace($FwdPath)) {
+    $FwdPath = Join-Path $root "fwd.cfd"
+}
+$runtimePath = Join-Path $PSScriptRoot "runtime-path.generated.ps1"
+if (Test-Path -LiteralPath $runtimePath) { . $runtimePath }
 
-if (-not (Test-Path $exe)) {
-    throw "Harness executable was not found: $exe. Build first with .\scripts\build-and-doctor.ps1"
+foreach ($runtimeDir in @((Join-Path $root "rri_bin"), (Join-Path $root "lib"))) {
+    if (Test-Path -LiteralPath $runtimeDir) {
+        $env:PATH = "$runtimeDir;$env:PATH"
+    }
+}
+
+$exeCandidates = @(
+    (Join-Path $root "AcRuleWorkbench\bin\x86\Debug\net48\AcRuleWorkbench.exe"),
+    (Join-Path $root "AcRuleWorkbench\bin\Debug\net48\AcRuleWorkbench.exe"),
+    (Join-Path $root "AcRuleWorkbench\bin\x86\Release\net48\AcRuleWorkbench.exe"),
+    (Join-Path $root "AcRuleWorkbench\bin\Release\net48\AcRuleWorkbench.exe")
+)
+$exe = $exeCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+
+if (-not $exe) {
+    throw "Harness executable was not found. Checked: $($exeCandidates -join '; '). Build first with .\scripts\build-and-doctor.ps1"
+}
+
+$resolvedFwdPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FwdPath)
+if (-not (Test-Path -LiteralPath $resolvedFwdPath -PathType Leaf)) {
+    throw "FWD file was not found: $resolvedFwdPath"
 }
 
 $conn = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
@@ -44,7 +69,7 @@ elseif ($conn) {
 
 $args = @(
     "api",
-    "--path", $FwdPath,
+    "--path", $resolvedFwdPath,
     "--host", $HostName,
     "--port", $Port.ToString()
 )

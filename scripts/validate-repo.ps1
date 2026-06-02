@@ -18,7 +18,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$Root = "",
     [switch]$Strict,
     [switch]$FailOnWarnings
 )
@@ -28,6 +28,10 @@ $ErrorActionPreference = "Stop"
 
 $problems = New-Object System.Collections.Generic.List[string]
 $warnings = New-Object System.Collections.Generic.List[string]
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($Root)) {
+    $Root = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
 
 function Add-Problem([string]$Message) {
     $problems.Add($Message) | Out-Null

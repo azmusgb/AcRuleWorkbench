@@ -10,7 +10,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$Root = "",
     [switch]$SkipNode
 )
 
@@ -18,6 +18,10 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
 $failures = New-Object System.Collections.Generic.List[string]
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($Root)) {
+    $Root = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
 
 function Add-Failure {
     param([string]$Message)
@@ -40,7 +44,11 @@ function Test-ViewerProductionHygiene {
     param([string]$File)
 
     $html = Get-Content -LiteralPath $File -Raw -Encoding UTF8
-    $functionMatches = [regex]::Matches($html, 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(')
+    $viewerDir = Split-Path -Parent $File
+    $scriptFile = Join-Path $viewerDir "ac-rule-viewer.js"
+    $script = if (Test-Path -LiteralPath $scriptFile) { Get-Content -LiteralPath $scriptFile -Raw -Encoding UTF8 } else { $html }
+
+    $functionMatches = [regex]::Matches($script, 'function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(')
     $groups = @{}
     foreach ($match in $functionMatches) {
         $name = $match.Groups[1].Value
@@ -54,7 +62,7 @@ function Test-ViewerProductionHygiene {
     }
 
     $actionMatches = [regex]::Matches($html, 'data-action="([^"]+)"')
-    $handledMatches = [regex]::Matches($html, "a==='([^']+)'")
+    $handledMatches = [regex]::Matches($script, "a==='([^']+)'")
     $actions = New-Object 'System.Collections.Generic.HashSet[string]'
     $handled = New-Object 'System.Collections.Generic.HashSet[string]'
     foreach ($match in $actionMatches) { [void]$actions.Add($match.Groups[1].Value) }
@@ -67,6 +75,10 @@ function Test-ViewerProductionHygiene {
 
     if ($html -match 'data-action="toggle-density"') {
         Add-Failure "Density toggle is still exposed in the production viewer."
+    }
+
+    if ($html -match 'toggle-rca-focus|RCA Focus' -or $script -match 'toggle-rca-focus|rcaFocus|RCA Focus') {
+        Add-Failure "RCA focus UI/state is still exposed in the production viewer."
     }
 }
 
@@ -101,24 +113,31 @@ else {
     Test-ViewerProductionHygiene -File $viewer
 }
 
-if ((Test-Path $viewer) -and -not $SkipNode) {
+if (-not $SkipNode) {
+    $viewerScript = Join-Path $Root "AcRuleWorkbench.Core\Viewer\ac-rule-viewer.js"
     $node = Get-Command node -ErrorAction SilentlyContinue
     if ($node) {
-        $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-rule-workbench-viewer-" + [guid]::NewGuid().ToString("N") + ".js")
-        try {
-            $html = Get-Content -LiteralPath $viewer -Raw -Encoding UTF8
-            $html = $html.Replace("__RULES_JSON__", "{}")
-            $html = $html.Replace("__RELATIONSHIPS_JSON__", "{}")
-            $html = $html.Replace("__TREE_JSON__", "{}")
-            $html = $html.Replace("__FLOW_JSON__", "{}")
-            $matches = [regex]::Matches($html, "<script>(.*?)</script>", [System.Text.RegularExpressions.RegexOptions]::Singleline)
-            $script = ($matches | ForEach-Object { $_.Groups[1].Value }) -join "`n"
-            Set-Content -LiteralPath $temp -Value $script -Encoding UTF8
-            & $node.Source --check $temp
+        if (Test-Path -LiteralPath $viewerScript) {
+            & $node.Source --check $viewerScript
             if ($LASTEXITCODE -ne 0) { Add-Failure "Viewer JavaScript syntax check failed with exit code $LASTEXITCODE." }
         }
-        finally {
-            Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+        elseif (Test-Path $viewer) {
+            $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("ac-rule-workbench-viewer-" + [guid]::NewGuid().ToString("N") + ".js")
+            try {
+                $html = Get-Content -LiteralPath $viewer -Raw -Encoding UTF8
+                $html = $html.Replace("__RULES_JSON__", "{}")
+                $html = $html.Replace("__RELATIONSHIPS_JSON__", "{}")
+                $html = $html.Replace("__TREE_JSON__", "{}")
+                $html = $html.Replace("__FLOW_JSON__", "{}")
+                $matches = [regex]::Matches($html, "<script>(.*?)</script>", [System.Text.RegularExpressions.RegexOptions]::Singleline)
+                $script = ($matches | ForEach-Object { $_.Groups[1].Value }) -join "`n"
+                Set-Content -LiteralPath $temp -Value $script -Encoding UTF8
+                & $node.Source --check $temp
+                if ($LASTEXITCODE -ne 0) { Add-Failure "Viewer JavaScript syntax check failed with exit code $LASTEXITCODE." }
+            }
+            finally {
+                Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue
+            }
         }
     }
     else {

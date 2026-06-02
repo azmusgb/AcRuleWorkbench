@@ -119,6 +119,12 @@ public sealed class AcTreeNode
 
     public string RuleListPath { get; set; } = "Root";
 
+    public string StructuralPath { get; set; } = "Root";
+
+    public string DisplayPath { get; set; } = "Root";
+
+    public List<AcRuleRouteSegment> Route { get; } = new();
+
     public List<string> ActionNames { get; } = new();
 
     public List<string> Sources { get; } = new();
@@ -174,4 +180,19 @@ public sealed class AcTreeDiagnostic
     public string Category { get; set; } = string.Empty;
 
     public string Message { get; set; } = string.Empty;
+}
+
+public sealed class AcRuleRouteSegment
+{
+    public int NodeId { get; set; }
+
+    public string? RuleGuid { get; set; }
+
+    public string? RuleName { get; set; }
+
+    public string? FunctionName { get; set; }
+
+    public int? ActionListIndex { get; set; }
+
+    public string? ActionName { get; set; }
 }

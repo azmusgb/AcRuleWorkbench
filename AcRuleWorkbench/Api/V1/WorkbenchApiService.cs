@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -42,6 +42,7 @@ internal sealed class WorkbenchApiService
             if (tail == "health/ready") return RequireMethod(request, "GET") ?? BuildReadiness(request);
             if (tail == "status") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Status", BuildStatus(request));
             if (tail == "snapshot") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Snapshot", BuildSnapshotResponse(GetSnapshot(request)));
+            if (tail == "snapshot/warmup") return RequireMethod(request, "GET") ?? Warmup(request);
             if (tail == "snapshot/refresh") return Refresh(request);
             if (tail == "scopes") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.ScopeList", BuildScopeList(GetSnapshot(request), request));
             if (tail.StartsWith("scopes/", StringComparison.OrdinalIgnoreCase)) return DispatchScope(tail, request);
@@ -212,6 +213,32 @@ internal sealed class WorkbenchApiService
         {
             refreshed = true,
             snapshot = BuildSnapshotResponse(snapshot)
+        });
+    }
+
+    // Kicks off a background snapshot build and returns immediately (idempotent).
+    // Multiple callers during the same build share the in-progress Task via WorkbenchSnapshotCache.
+    private ApiHttpResult Warmup(HttpListenerRequest request)
+    {
+        string path = GetFwdPath(request);
+        string process = GetProcess(request);
+        bool requireNativeOk = GetBool(request, "requireNativeOk", false);
+
+        bool alreadyBuilt = _cache.Current != null;
+        bool alreadyPending = _cache.IsBuildPending;
+
+        if (!alreadyBuilt)
+            _ = _cache.WarmUpAsync(path, process, requireNativeOk);
+
+        return Ok(request, "AcWorkbench.SnapshotWarmup", new
+        {
+            queued = !alreadyBuilt && !alreadyPending,
+            alreadyBuilding = alreadyPending,
+            alreadyReady = alreadyBuilt,
+            buildStartedAtUtc = _cache.PendingBuildStartedAtUtc,
+            note = alreadyBuilt
+                ? "Snapshot already cached. Call POST /api/v1/snapshot/refresh to force a rebuild."
+                : "Background build started. Poll GET /api/v1/health/ready or GET /api/v1/status to track progress."
         });
     }
 
@@ -439,12 +466,20 @@ internal sealed class WorkbenchApiService
             snapshot = snapshot == null ? (object)new
             {
                 loaded = false,
+                building = _cache.IsBuildPending,
+                buildStartedAtUtc = _cache.PendingBuildStartedAtUtc,
+                buildElapsedMs = _cache.PendingBuildStartedAtUtc.HasValue
+                    ? (long?)(DateTime.UtcNow - _cache.PendingBuildStartedAtUtc.Value).TotalMilliseconds
+                    : null,
                 snapshotId = (string?)null,
                 generatedAtUtc = (DateTime?)null,
                 buildDurationMs = (long?)null
             } : new
             {
                 loaded = true,
+                building = false,
+                buildStartedAtUtc = (DateTime?)null,
+                buildElapsedMs = (long?)null,
                 snapshotId = snapshot.SnapshotId,
                 generatedAtUtc = (DateTime?)snapshot.GeneratedAtUtc,
                 buildDurationMs = (long?)snapshot.BuildDurationMs
@@ -665,6 +700,7 @@ internal sealed class WorkbenchApiService
                 edgeCount = scope.StructuralEdges.Count,
                 directDisabled = scope.DirectDisabledCount,
                 inheritedDisabled = scope.InheritedDisabledCount,
+                ambiguousCorrelation = scope.AmbiguousCorrelationCount,
                 diagnostics = scope.DiagnosticCount
             },
             nodes = scope.StructuralNodes.Select(n =>
@@ -712,6 +748,7 @@ internal sealed class WorkbenchApiService
         int returnedCount = 0;
         int structuralMatchCount = 0;
         int flatOnlyCount = 0;
+        int unacceptedCorrelationCount = 0;
         int pageStart = offset;
         int pageEndExclusive = offset + limit;
         var pagedItems = new List<InventoryRowDto>(limit);
@@ -724,6 +761,7 @@ internal sealed class WorkbenchApiService
 
             if (RuleCorrelation.Eq(item.Classification, "StructuralMatch")) structuralMatchCount++;
             if (RuleCorrelation.Eq(item.Classification, "FlatOnly")) flatOnlyCount++;
+            if (RuleCorrelation.Eq(item.Classification, "UnacceptedCorrelation")) unacceptedCorrelationCount++;
 
             if (returnedCount >= pageStart && returnedCount < pageEndExclusive)
                 pagedItems.Add(item);
@@ -740,9 +778,11 @@ internal sealed class WorkbenchApiService
                 total = scope.FlatInventoryCount,
                 structuralMatch = structuralMatchCount,
                 flatOnly = flatOnlyCount,
+                unacceptedCorrelation = unacceptedCorrelationCount,
+                ambiguousCorrelation = scope.AmbiguousCorrelationCount,
                 duplicateFlat = 0,
-                unresolved = 0,
-                caveat = "Inventory rows are searchable extraction evidence, not structural order proof unless classification is StructuralMatch."
+                unresolved = flatOnlyCount + unacceptedCorrelationCount,
+                caveat = "Inventory rows are searchable extraction evidence. Only accepted exact or unique-GUID correlations link to structural order; name/function and ambiguous matches are audit-only."
             },
             page = new { limit, offset, nextOffset = offset + limit < returnedCount ? (int?)(offset + limit) : null },
             items = pagedItems
@@ -751,15 +791,29 @@ internal sealed class WorkbenchApiService
 
     private InventoryRowDto InventoryRow(WorkbenchSnapshot snapshot, AcRuleSummary rule)
     {
-        string key = RuleCorrelation.FlatKey(rule);
-        bool matched = snapshot.RulesByStructuralKey.TryGetValue(key, out RuleModel? structural);
-        object flatDisabled = new { state = rule.DisabledState, confidence = rule.DisabledConfidence, reason = rule.DisabledReason, authority = "FlatInventory" };
+        string inventoryId = RuleCorrelation.InventoryId(rule);
+        bool matched = snapshot.RulesByFlatInventoryId.TryGetValue(inventoryId, out RuleModel? structural);
+        RuleCorrelationMatch? correlation = structural?.Correlation;
+
+        string classification = matched
+            ? "StructuralMatch"
+            : IsWeakOrAmbiguousStructuralCandidate(snapshot, rule) ? "UnacceptedCorrelation" : "FlatOnly";
+
+        object flatDisabled = new
+        {
+            state = rule.DisabledState,
+            confidence = rule.DisabledConfidence,
+            reason = rule.DisabledReason,
+            authority = "FlatInventoryAudit",
+            caveat = "Flat disabled state is audit evidence only when a structural node exists."
+        };
         object disabled = matched && structural != null
             ? new { state = structural.Node.DisabledState, confidence = structural.Node.DisabledConfidence, reason = structural.Node.DisabledReason, authority = "Structural", flatInventory = flatDisabled }
             : flatDisabled;
+
         return new InventoryRowDto
         {
-            InventoryId = RuleCorrelation.InventoryId(rule),
+            InventoryId = inventoryId,
             ScopeId = RuleCorrelation.ScopeId(rule),
             RuleGuid = rule.RuleGuid,
             RuleId = rule.RuleId,
@@ -767,11 +821,33 @@ internal sealed class WorkbenchApiService
             FunctionName = rule.FunctionName,
             RuleIndex = rule.RuleIndex,
             Disabled = disabled,
-            Classification = matched ? "StructuralMatch" : "FlatOnly",
+            Classification = classification,
             StructuralNodeId = matched ? structural!.NodeId : null,
             RuntimeOrderProof = matched,
-            EvidenceClass = matched ? "FlatInventory+Structural" : "FlatInventory"
+            EvidenceClass = matched ? "FlatInventory+Structural" : "FlatInventory",
+            CorrelationStatus = matched ? correlation?.Status ?? "Accepted" : classification,
+            CorrelationConfidence = matched ? correlation?.Confidence ?? "Strong" : "AuditOnly"
         };
+    }
+
+    private static bool IsWeakOrAmbiguousStructuralCandidate(WorkbenchSnapshot snapshot, AcRuleSummary rule)
+    {
+        string scopeId = RuleCorrelation.ScopeId(rule);
+        string scopedGuid = RuleCorrelation.ScopedGuidKey(rule);
+        if (!string.IsNullOrWhiteSpace(scopedGuid))
+        {
+            int guidHits = snapshot.Tree.Nodes.Count(n => n.IsRuleNode && RuleCorrelation.Eq(RuleCorrelation.ScopedGuidKey(n), scopedGuid));
+            if (guidHits > 1) return true;
+        }
+
+        string nameFn = RuleCorrelation.ScopedNameFunctionKey(rule);
+        if (!string.IsNullOrWhiteSpace(nameFn))
+        {
+            int nameFnHits = snapshot.Tree.Nodes.Count(n => n.IsRuleNode && RuleCorrelation.Eq(RuleCorrelation.ScopedNameFunctionKey(n), nameFn));
+            if (nameFnHits > 0) return true;
+        }
+
+        return false;
     }
 
     private object BuildScopeReferences(ScopeModel scope, HttpListenerRequest request)
@@ -2264,9 +2340,11 @@ internal sealed class WorkbenchApiService
                 structuralNode = true,
                 flatInventoryMatch = rule.FlatRule != null,
                 flatInventoryId = rule.FlatRule == null ? null : RuleCorrelation.InventoryId(rule.FlatRule),
+                correlation = rule.Correlation,
+                candidateCount = rule.FlatRuleCandidates.Count,
                 runtimeOrderProof = true,
                 disabledAuthority = "Structural",
-                flatInventoryDisabled = rule.FlatRule == null ? null : new { state = rule.FlatRule.DisabledState, confidence = rule.FlatRule.DisabledConfidence, reason = rule.FlatRule.DisabledReason, authority = "FlatInventory", caveat = "Audit evidence only; does not override structural disabled state." }
+                flatInventoryDisabled = rule.FlatRule == null ? null : new { state = rule.FlatRule.DisabledState, confidence = rule.FlatRule.DisabledConfidence, reason = rule.FlatRule.DisabledReason, authority = "FlatInventoryAudit", caveat = "Audit evidence only; does not override structural disabled state." }
             },
             evidence = new
             {
@@ -2303,6 +2381,7 @@ internal sealed class WorkbenchApiService
                 parameterName = r.ParameterName,
                 parameterValue = r.ParameterValue,
                 referencedField = r.ReferencedField,
+                referenceKind = r.ReferenceKind,
                 fieldExists = r.FieldExists,
                 confidence = r.Confidence,
                 source = r.Source,
@@ -2398,7 +2477,7 @@ internal sealed class WorkbenchApiService
                 kind = "Scope",
                 s.ScopeId,
                 title = s.Name,
-                subtitle = s.Kind + " · " + s.StructuralRuleCount + " structural rules",
+                subtitle = s.Kind + " Â· " + s.StructuralRuleCount + " structural rules",
                 badges = BadgesForScope(s),
                 evidenceClass = "ScopeSummary",
                 isRuntimeDependency = false,
@@ -2416,7 +2495,7 @@ internal sealed class WorkbenchApiService
                     x.s.ScopeId,
                     nodeId = RuleCorrelation.NodeId(x.n),
                     title = x.n.RuleName ?? x.n.FunctionName ?? RuleCorrelation.NodeId(x.n),
-                    subtitle = (x.n.FunctionName ?? "(missing function)") + " · " + x.s.Name,
+                    subtitle = (x.n.FunctionName ?? "(missing function)") + " Â· " + x.s.Name,
                     badges = BadgesForNode(x.n),
                     evidenceClass = "Structural",
                     isRuntimeDependency = false,
@@ -2434,7 +2513,7 @@ internal sealed class WorkbenchApiService
                     x.s.ScopeId,
                     inventoryId = RuleCorrelation.InventoryId(x.r),
                     title = x.r.RuleName ?? x.r.FunctionName ?? RuleCorrelation.InventoryId(x.r),
-                    subtitle = (x.r.FunctionName ?? "(missing function)") + " · " + x.s.Name,
+                    subtitle = (x.r.FunctionName ?? "(missing function)") + " Â· " + x.s.Name,
                     badges = new[] { snapshot.RulesByStructuralKey.ContainsKey(RuleCorrelation.FlatKey(x.r)) ? "Structural match" : "Flat only" },
                     evidenceClass = "FlatInventory",
                     isRuntimeDependency = false,
@@ -2451,7 +2530,7 @@ internal sealed class WorkbenchApiService
                     kind = "Reference",
                     x.s.ScopeId,
                     title = x.r.Kind + " " + x.r.Target,
-                    subtitle = (x.r.FunctionName ?? "(unknown function)") + " · " + x.r.TargetType,
+                    subtitle = (x.r.FunctionName ?? "(unknown function)") + " Â· " + x.r.TargetType,
                     badges = new[] { x.r.Confidence, IsRuntimeDependency(x.r) ? "Runtime dependency" : "Static mention" },
                     evidenceClass = x.r.Confidence,
                     isRuntimeDependency = IsRuntimeDependency(x.r),
@@ -2550,6 +2629,7 @@ internal sealed class WorkbenchApiService
             structuralRules = scope.StructuralRuleCount,
             flatInventoryRows = scope.FlatInventoryCount,
             flatOnlyRows = scope.FlatOnlyCount,
+            ambiguousCorrelation = scope.AmbiguousCorrelationCount,
             directDisabled = scope.DirectDisabledCount,
             inheritedDisabled = scope.InheritedDisabledCount,
             references = scope.ReferenceCount,
@@ -2559,7 +2639,7 @@ internal sealed class WorkbenchApiService
 
     private static object HealthFor(ScopeModel scope)
     {
-        string status = scope.DiagnosticCount > 0 || scope.FlatOnlyCount > Math.Max(25, scope.StructuralRuleCount / 4) ? "Warning" : "Ok";
+        string status = scope.DiagnosticCount > 0 || scope.AmbiguousCorrelationCount > 0 || scope.FlatOnlyCount > Math.Max(25, scope.StructuralRuleCount / 4) ? "Warning" : "Ok";
         return new
         {
             status,
@@ -2744,8 +2824,8 @@ internal sealed class WorkbenchApiService
             string? display = incoming == null
                 ? name
                 : string.IsNullOrWhiteSpace(actionName)
-                    ? "Action " + incoming.ActionListIndex.ToString() + " → " + name
-                    : actionName + " → " + name;
+                    ? "Action " + incoming.ActionListIndex.ToString() + " â†’ " + name
+                    : actionName + " â†’ " + name;
 
             path.Add(new RoutePathSegment
             {
@@ -2890,6 +2970,10 @@ internal sealed class WorkbenchApiService
         public bool RuntimeOrderProof { get; set; }
         [JsonProperty("evidenceClass")]
         public string EvidenceClass { get; set; } = string.Empty;
+        [JsonProperty("correlationStatus")]
+        public string CorrelationStatus { get; set; } = string.Empty;
+        [JsonProperty("correlationConfidence")]
+        public string CorrelationConfidence { get; set; } = string.Empty;
     }
 
     private sealed class TableVm

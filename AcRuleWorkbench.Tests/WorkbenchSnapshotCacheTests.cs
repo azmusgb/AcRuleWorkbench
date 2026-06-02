@@ -56,6 +56,22 @@ public sealed class WorkbenchSnapshotCacheTests
         Assert.AreEqual("FIP", fipSnapshot.Rules.ProcessName);
     }
 
+
+    [TestMethod]
+    public void GetOrBuild_DifferentRequireNativeOk_RebuildsSnapshot()
+    {
+        var client = new CountingClient(delayMilliseconds: 1);
+        var cache = new WorkbenchSnapshotCache(client);
+
+        WorkbenchSnapshot nonStrict = cache.GetOrBuild("C:\\fwd.cfd", "AC", requireNativeOk: false);
+        WorkbenchSnapshot strict = cache.GetOrBuild("C:\\fwd.cfd", "AC", requireNativeOk: true);
+
+        Assert.IsFalse(ReferenceEquals(nonStrict, strict));
+        Assert.IsFalse(nonStrict.RequireNativeOk);
+        Assert.IsTrue(strict.RequireNativeOk);
+        Assert.IsTrue(client.InspectCalls >= 2);
+    }
+
     private sealed class CountingClient : IFormWorksExtractionClient
     {
         private int _buildCounter;

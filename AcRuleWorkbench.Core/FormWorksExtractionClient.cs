@@ -1053,7 +1053,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             UnresolvedSkipTargetCount = flow.Edges.Count(e => e.EdgeKind == AcRuleFlowEdgeKind.UnresolvedSkipTarget),
             DisabledDirectCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledDirect),
             DisabledInheritedCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited),
-            PossiblyDisabledInheritedCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited)
+            PossiblyDisabledInheritedCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited),
+            PossibleDisabledSequenceOnlyCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly)
         };
 
         report.Warnings.AddRange(rules.Warnings);
@@ -1088,7 +1089,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         AddDiagnostic(report, "Warning", "Parser", "Rules are missing RuleID, which limits SkipID/ActionMap resolution.", report.MissingRuleIdCount, rules.Rules.Where(r => string.IsNullOrWhiteSpace(r.RuleId)).Select(FormatRuleExample));
         AddDiagnostic(report, "Warning", "Parser", "Rules have action names but no decoded ActionMap target.", report.RulesWithActionNamesCount - report.RulesWithActionMapCount, rules.Rules.Where(r => r.ActionNames.Count > 0 && string.IsNullOrWhiteSpace(r.ActionMapRaw)).Select(FormatRuleExample));
         AddDiagnostic(report, "Info", "Disabled", "Rules are directly disabled by source marker.", report.DisabledDirectCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.DisabledDirect).Select(FormatRuleExample));
-        AddDiagnostic(report, "Info", "Disabled", "Rules are possibly disabled by sequence fallback only.", report.PossiblyDisabledInheritedCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited).Select(FormatRuleExample));
+        AddDiagnostic(report, "Info", "Disabled", "Rules have possible disabled evidence from flat sequence fallback only. This is audit-only evidence, not structural inheritance.", report.PossibleDisabledSequenceOnlyCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly).Select(FormatRuleExample));
+        AddDiagnostic(report, "Info", "Disabled", "Rules are disabled by parsed flow evidence from disabled ancestors.", report.PossiblyDisabledInheritedCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited).Select(FormatRuleExample));
 
         return report;
     }
@@ -1481,6 +1483,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? Environment.CurrentDirectory);
         File.WriteAllText(outputPath, BuildAcViewerHtml(rules, relationships, flow, tree), Encoding.UTF8);
 
+        // Prepare viewer report early so we can attach non-fatal warnings from
+        // sidecar JSON generation failures.
         var report = new AcViewerReport
         {
             FwdPath = rules.FwdPath,
@@ -1490,6 +1494,33 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             RelationshipCount = relationships.RelationshipCount,
             FlowEdgeCount = flow.EdgeCount
         };
+
+        // Also write evidence sidecar JSON files so the static viewer can load large
+        // payloads when the external HTML template does not embed them inline.
+        try
+        {
+            string outDir = Path.GetDirectoryName(outputPath) ?? Environment.CurrentDirectory;
+            var serializerSettings = new JsonSerializerSettings
+            {
+                Formatting = Formatting.Indented,
+                StringEscapeHandling = StringEscapeHandling.EscapeHtml
+            };
+
+            string rulesJson = JsonConvert.SerializeObject(rules, serializerSettings);
+            string relJson = JsonConvert.SerializeObject(relationships, serializerSettings);
+            string flowJson = JsonConvert.SerializeObject(flow, serializerSettings);
+            string treeJson = JsonConvert.SerializeObject(tree, serializerSettings);
+
+            File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.rules.json"), rulesJson, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.rel.json"), relJson, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.flow.json"), flowJson, Encoding.UTF8);
+            File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.tree.json"), treeJson, Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal: record as a warning on the report so the caller can see it.
+            report.Warnings.Add("Could not write viewer sidecar JSON files: " + ex.Message);
+        }
         report.Warnings.AddRange(rules.Warnings);
         report.Warnings.AddRange(relationships.Warnings);
         report.Warnings.AddRange(tree.Warnings);
@@ -1861,7 +1892,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         }
 
         if (rule.DisabledState == AcDisabledStates.DisabledInherited ||
-            rule.DisabledState == AcDisabledStates.PossiblyDisabledInherited)
+            rule.DisabledState == AcDisabledStates.PossiblyDisabledInherited ||
+            rule.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly)
         {
             yield return new AcRuleRelationship
             {
@@ -1872,11 +1904,15 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
                 RuleGuid = rule.RuleGuid,
                 RuleName = rule.RuleName,
                 FunctionName = rule.FunctionName,
-                Kind = rule.DisabledState == AcDisabledStates.DisabledInherited ? "DisabledInheritedFrom" : "PossiblyDisabledInheritedFrom",
+                Kind = rule.DisabledState == AcDisabledStates.DisabledInherited
+                    ? "DisabledInheritedFrom"
+                    : rule.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly
+                        ? "PossibleDisabledSequenceOnlyFrom"
+                        : "PossiblyDisabledInheritedFrom",
                 TargetType = "Rule",
                 Target = rule.DisabledAncestorRuleName ?? (rule.DisabledAncestorRuleIndex.HasValue ? "#" + rule.DisabledAncestorRuleIndex.Value : "Unknown ancestor"),
                 ParameterName = "DisabledAncestorRuleIndex",
-                ParameterRole = "DisabledInheritance",
+                ParameterRole = rule.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly ? "DisabledSequenceFallback" : "DisabledInheritance",
                 Confidence = rule.DisabledConfidence,
                 RelationshipReason = "Disabled inheritance",
                 Evidence = rule.DisabledReason
@@ -1908,6 +1944,18 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
                 TargetType = "RejectMessage",
                 Kind = "EmitsRejectMessage",
                 ParameterRole = "RejectMessage"
+            };
+        }
+
+        AcFunctionCatalog.Classification? catalog = AcFunctionCatalog.TryClassify(f, p);
+        if (catalog != null)
+        {
+            return new ParameterClassification
+            {
+                TargetType = catalog.TargetType,
+                Kind = catalog.RelationshipKind,
+                ParameterRole = catalog.ParameterRole,
+                IsOptionParameter = catalog.IsOptionParameter
             };
         }
 
@@ -2225,7 +2273,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
     private static void MarkInheritedDisabled(AcRuleSummary rule, AcRuleSummary ancestor, AcRuleFlowEdge edge, bool hardInherited)
     {
-        rule.DisabledState = hardInherited ? AcDisabledStates.DisabledInherited : AcDisabledStates.PossiblyDisabledInherited;
+        rule.DisabledState = hardInherited ? AcDisabledStates.DisabledInherited : AcDisabledStates.PossibleDisabledSequenceOnly;
         rule.DisabledConfidence = hardInherited ? "High" : "Low";
         rule.DisabledReason = hardInherited
             ? "Rule is reached through a parsed flow edge from a directly disabled rule."
@@ -2240,9 +2288,9 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
     private static void MarkPossiblyInheritedBySequence(AcRuleSummary rule, AcRuleSummary ancestor)
     {
-        rule.DisabledState = AcDisabledStates.PossiblyDisabledInherited;
+        rule.DisabledState = AcDisabledStates.PossibleDisabledSequenceOnly;
         rule.DisabledConfidence = "Low";
-        rule.DisabledReason = "Rule follows a directly disabled rule in the same AC scope, but no decoded action/sub-list edge proves inheritance.";
+        rule.DisabledReason = "Rule follows a directly disabled rule in the same AC scope, but no decoded structural/action-list edge proves inheritance. This is audit-only sequence evidence.";
         rule.DisabledAncestorRuleIndex = ancestor.RuleIndex;
         rule.DisabledAncestorRuleGuid = ancestor.RuleGuid;
         rule.DisabledAncestorRuleName = ancestor.RuleName;
@@ -2261,7 +2309,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             {
                 List<AcRuleSummary> affected = scopeGroup
                     .Where(r => r.DisabledAncestorRuleIndex == direct.RuleIndex &&
-                                (r.DisabledState == AcDisabledStates.DisabledInherited || r.DisabledState == AcDisabledStates.PossiblyDisabledInherited))
+                                (r.DisabledState == AcDisabledStates.DisabledInherited || r.DisabledState == AcDisabledStates.PossiblyDisabledInherited || r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly))
                     .OrderBy(r => r.RuleIndex)
                     .ToList();
 
@@ -2278,7 +2326,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
                     AncestorRuleName = direct.RuleName,
                     AncestorFunctionName = direct.FunctionName ?? string.Empty,
                     AffectedRuleCount = affected.Count,
-                    Confidence = affected.Any(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited) ? "Low/Medium" : "Medium",
+                    Confidence = affected.Any(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited || r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly) ? "Low/Medium" : "Medium",
                     BoundaryMethod = "SameScopeFollowingRules",
                     Reason = "Directly disabled rule appears to gate subsequent same-scope rules. This is a heuristic disabled-inheritance marker."
                 };
@@ -2307,6 +2355,11 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             string.Equals(state, "possibly", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(state, AcDisabledStates.PossiblyDisabledInherited, StringComparison.OrdinalIgnoreCase))
             return AcDisabledStates.PossiblyDisabledInherited;
+
+        if (string.Equals(state, "sequence", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, "sequence-only", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(state, AcDisabledStates.PossibleDisabledSequenceOnly, StringComparison.OrdinalIgnoreCase))
+            return AcDisabledStates.PossibleDisabledSequenceOnly;
 
         if (string.Equals(state, "enabled", StringComparison.OrdinalIgnoreCase))
             return AcDisabledStates.Enabled;
@@ -2364,10 +2417,20 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
         foreach (string candidate in candidates)
         {
-            if (File.Exists(candidate))
-                return File.ReadAllText(candidate, Encoding.UTF8);
+            if (!File.Exists(candidate))
+                continue;
+
+            string content = File.ReadAllText(candidate, Encoding.UTF8);
+            // If the external template contains the JSON placeholders return it so
+            // the export embeds the snapshot inline. Otherwise ignore the external
+            // template to avoid producing an HTML viewer that requires external
+            // sidecar files which are brittle when opened via file:// URLs.
+            if (content.Contains("__RULES_JSON__") || content.Contains("__RELATIONSHIPS_JSON__") || content.Contains("__TREE_JSON__") || content.Contains("__FLOW_JSON__"))
+                return content;
         }
 
+        // No suitable external template found; use the embedded template which
+        // includes JSON placeholders that will be replaced with the snapshot.
         return AcViewerHtmlTemplate();
     }
 

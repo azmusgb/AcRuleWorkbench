@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Finds DCM managed/native DLLs under C:\rri and prepares this harness.
+  Finds FormWorks/DCM managed and native DLLs and prepares this harness.
 
 .DESCRIPTION
   - Copies compile-time managed .NET DLLs into .\lib.
@@ -15,8 +15,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$HarnessRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
-    [string]$RriRoot = "C:\rri",
+    [string]$HarnessRoot = "",
+    [string]$RriRoot = "",
     [string]$DcmBinRoot = "C:\rri\ddce\bin",
     [switch]$CopyNative,
     [switch]$PreferNewest
@@ -24,6 +24,14 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($HarnessRoot)) {
+    $HarnessRoot = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
+if ([string]::IsNullOrWhiteSpace($RriRoot)) {
+    $RriRoot = Join-Path $HarnessRoot "rri_bin"
+}
 
 function Write-Section([string]$Text) {
     Write-Host ""
@@ -33,16 +41,20 @@ function Write-Section([string]$Text) {
 
 function Find-OneDll {
     param(
-        [Parameter(Mandatory=$true)][string]$Root,
+        [Parameter(Mandatory=$true)][string[]]$Root,
         [Parameter(Mandatory=$true)][string]$Name,
         [switch]$Newest
     )
 
-    if (-not (Test-Path $Root)) {
-        return $null
+    $items = @()
+    foreach ($candidateRoot in $Root) {
+        if (-not (Test-Path -LiteralPath $candidateRoot)) {
+            continue
+        }
+
+        $items += @(Get-ChildItem -Path $candidateRoot -Recurse -Filter $Name -File -ErrorAction SilentlyContinue)
     }
 
-    $items = Get-ChildItem -Path $Root -Recurse -Filter $Name -File -ErrorAction SilentlyContinue
     if (-not $items) { return $null }
 
     if ($Newest) {
@@ -74,12 +86,15 @@ $nativeDlls = @(
 
 $libDir = Join-Path $HarnessRoot "lib"
 $nativeDir = Join-Path $HarnessRoot "native"
+$repoRriBin = Join-Path $HarnessRoot "rri_bin"
 New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+$managedSearchRoots = @($repoRriBin, $libDir, $RriRoot, $DcmBinRoot) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+$nativeSearchRoots = @($repoRriBin, $DcmBinRoot, $RriRoot) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 
 Write-Section "Copying managed .NET DLLs to lib"
 $missingManaged = New-Object System.Collections.Generic.List[string]
 foreach ($dll in $managedDlls) {
-    $found = Find-OneDll -Root $RriRoot -Name $dll -Newest:$PreferNewest
+    $found = Find-OneDll -Root $managedSearchRoots -Name $dll -Newest:$PreferNewest
     if (-not $found) {
         $missingManaged.Add($dll)
         Write-Host "MISSING: $dll" -ForegroundColor Red
@@ -98,10 +113,7 @@ $nativeDirs = New-Object System.Collections.Generic.HashSet[string]([System.Stri
 $missingNative = New-Object System.Collections.Generic.List[string]
 
 foreach ($dll in $nativeDlls) {
-    $found = Find-OneDll -Root $DcmBinRoot -Name $dll -Newest:$PreferNewest
-    if (-not $found) {
-        $found = Find-OneDll -Root $RriRoot -Name $dll -Newest:$PreferNewest
-    }
+    $found = Find-OneDll -Root $nativeSearchRoots -Name $dll -Newest:$PreferNewest
 
     if (-not $found) {
         $missingNative.Add($dll)
@@ -118,8 +130,7 @@ if ($CopyNative) {
     Write-Section "Copying native DLLs to native folder"
     New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
     foreach ($dll in $nativeDlls) {
-        $found = Find-OneDll -Root $DcmBinRoot -Name $dll -Newest:$PreferNewest
-        if (-not $found) { $found = Find-OneDll -Root $RriRoot -Name $dll -Newest:$PreferNewest }
+        $found = Find-OneDll -Root $nativeSearchRoots -Name $dll -Newest:$PreferNewest
         if ($found) {
             Copy-Item -Path $found.FullName -Destination (Join-Path $nativeDir $dll) -Force
             Write-Host "Copied $dll to $nativeDir" -ForegroundColor Green
@@ -128,7 +139,9 @@ if ($CopyNative) {
     [void]$nativeDirs.Add($nativeDir)
 }
 
-$runtimePathScript = Join-Path $PSScriptRoot "runtime-path.generated.ps1"
+$runtimePathScript = Join-Path $scriptRoot "runtime-path.generated.ps1"
+[void]$nativeDirs.Add($repoRriBin)
+[void]$nativeDirs.Add($libDir)
 $escapedDirs = $nativeDirs | ForEach-Object { $_.Replace("'", "''") }
 $pathLines = $escapedDirs | ForEach-Object { "    '$_'" }
 if (-not $pathLines) { $pathLines = @() }

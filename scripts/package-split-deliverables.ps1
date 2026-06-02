@@ -1,0 +1,119 @@
+﻿[CmdletBinding()]
+param(
+    [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
+    [string]$OutputDir = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path 'packages')
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Test-SourceExcludedPath {
+    param([string]$RelativePath)
+
+    $normalized = $RelativePath -replace '\\', '/'
+
+    if ($normalized -match '(^|/)\.git(/|$)') { return $true }
+    if ($normalized -match '(^|/)\.vs(/|$)') { return $true }
+    if ($normalized -match '(^|/)bin(/|$)') { return $true }
+    if ($normalized -match '(^|/)obj(/|$)') { return $true }
+    if ($normalized -match '(^|/)TestResults(/|$)') { return $true }
+    if ($normalized -match '\.log$') { return $true }
+    if ($normalized -match '(^|/)fwd\.cfd$') { return $true }
+    if ($normalized -match '(^|/)ac-rule-viewer\..*\.json$') { return $true }
+    if ($normalized -match '(^|/)runtime-path\.generated\.ps1$') { return $true }
+
+    return $false
+}
+
+# Copy files matching a filter into a stage root while preserving relative paths.
+function Copy-MatchingFiles {
+    param(
+        [string]$RootPath,
+        [string]$StagePath,
+        [scriptblock]$IncludeFile
+    )
+
+    Get-ChildItem -Path $RootPath -Recurse -Force | ForEach-Object {
+        if ($_.PSIsContainer) { return }
+
+        $relative = [System.IO.Path]::GetRelativePath($RootPath, $_.FullName)
+        if (-not (& $IncludeFile $relative)) { return }
+
+        $dest = Join-Path $StagePath $relative
+        $destDir = Split-Path -Parent $dest
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
+
+        Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+    }
+}
+
+function New-ZipFromStage {
+    param(
+        [string]$PackageName,
+        [string]$StageRoot,
+        [string]$OutputRoot
+    )
+
+    $zipPath = Join-Path $OutputRoot ($PackageName + '.zip')
+    if (Test-Path $zipPath) {
+        Remove-Item $zipPath -Force
+    }
+
+    Compress-Archive -Path (Join-Path $StageRoot '*') -DestinationPath $zipPath -Force
+    return $zipPath
+}
+
+$rootPath = (Resolve-Path $Root).Path
+$outputRoot = [System.IO.Path]::GetFullPath($OutputDir)
+$tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('AcRuleWorkbenchSplit_' + [Guid]::NewGuid().ToString('N'))
+$sourceStage = Join-Path $tempRoot 'source-package'
+$runtimeStage = Join-Path $tempRoot 'runtime-package'
+$evidenceStage = Join-Path $tempRoot 'evidence-package'
+
+try {
+    New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $sourceStage -Force | Out-Null
+    New-Item -ItemType Directory -Path $runtimeStage -Force | Out-Null
+    New-Item -ItemType Directory -Path $evidenceStage -Force | Out-Null
+
+    Copy-MatchingFiles -RootPath $rootPath -StagePath $sourceStage -IncludeFile {
+        param($relative)
+        return -not (Test-SourceExcludedPath -RelativePath $relative)
+    }
+
+    Copy-MatchingFiles -RootPath $rootPath -StagePath $runtimeStage -IncludeFile {
+        param($relative)
+        $n = $relative -replace '\\', '/'
+        if ($n -match '(^|/)AcRuleWorkbench/bin/.*/AcRuleWorkbench\.exe$') { return $true }
+        if ($n -match '(^|/)AcRuleWorkbench/bin/.*/.*\.(dll|config|json)$') { return $true }
+        if ($n -match '(^|/)lib(/|$)') { return $true }
+        if ($n -match '(^|/)rri_bin(/|$)') { return $true }
+        if ($n -match '(^|/)scripts/start-.*\.ps1$') { return $true }
+        if ($n -match '(^|/)appsettings\.sample\.json$') { return $true }
+        return $false
+    }
+
+    Copy-MatchingFiles -RootPath $rootPath -StagePath $evidenceStage -IncludeFile {
+        param($relative)
+        $n = $relative -replace '\\', '/'
+        if ($n -match '(^|/)ac-rule-viewer\.(html|css|js)$') { return $true }
+        if ($n -match '(^|/)ac-rule-viewer\.(rules|tree|rel|flow)\.json$') { return $true }
+        if ($n -match '(^|/)SOURCE_MANIFEST\.csv$') { return $true }
+        return $false
+    }
+
+    $sourceZip = New-ZipFromStage -PackageName 'source-package' -StageRoot $sourceStage -OutputRoot $outputRoot
+    $runtimeZip = New-ZipFromStage -PackageName 'runtime-package' -StageRoot $runtimeStage -OutputRoot $outputRoot
+    $evidenceZip = New-ZipFromStage -PackageName 'evidence-package' -StageRoot $evidenceStage -OutputRoot $outputRoot
+
+    Write-Host ('Created split deliverables:')
+    Write-Host ('  ' + $sourceZip)
+    Write-Host ('  ' + $runtimeZip)
+    Write-Host ('  ' + $evidenceZip)
+}
+finally {
+    if (Test-Path $tempRoot) {
+        Remove-Item $tempRoot -Recurse -Force
+    }
+}

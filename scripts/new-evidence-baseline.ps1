@@ -471,7 +471,7 @@ Harness executable: $exe
 
 Purpose
 -------
-This folder is a review-ready evidence package generated from a FormWorks/DCM FWD configuration. It is intended for RCA, audit review, vendor escalation, and regression comparison.
+This folder is a review-ready evidence package generated from a FormWorks/DCM FWD configuration. It is intended for audit review, vendor escalation, and regression comparison.
 
 Contents
 --------
@@ -485,7 +485,7 @@ Contents
 - ac-diagnostics.json - parser/extraction/reconciliation diagnostics.
 - ac-disabled.json - direct/inherited disabled analysis.
 - ac-flow.json - experimental / low-confidence flow projection when not skipped. It is not native runtime execution proof.
-- ac-rule-viewer.html - offline interactive evidence viewer.
+- ac-rule-viewer.html - offline interactive rule viewer.
 - ac-viewer-export.json - viewer generation report.
 - COMMAND_LOG.json - commands used to create the package.
 - validation.json - JSON validation status for generated data files.
@@ -570,10 +570,9 @@ API contract
 UI acceptance
 -------------
 [ ] ac-rule-viewer.html opens locally.
-[ ] The selected-rule inspector shows trust, route path, child routing, Copy route path, and Copy evidence.
+[ ] The selected-rule inspector focuses on summary, route path, child routing, parameters, and field resolution.
 [ ] Action branches are selectable and inspectable.
-[ ] Density mode works without changing evidence semantics.
-[ ] RCA Focus is treated as visual triage only, not runtime proof.
+[ ] Diagnostics and route coverage are reviewed from the Audit workspace only when needed.
 "@
 $reviewerChecklist | Out-File -Encoding UTF8 (Join-Path $OutDir "REVIEWER_CHECKLIST.txt")
 

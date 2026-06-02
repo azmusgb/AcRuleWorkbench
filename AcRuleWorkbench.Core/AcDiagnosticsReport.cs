@@ -49,6 +49,8 @@ public sealed class AcDiagnosticsReport
 
     public int PossiblyDisabledInheritedCount { get; set; }
 
+    public int PossibleDisabledSequenceOnlyCount { get; set; }
+
     public List<AcRuleCount> RulesByScope { get; } = new();
 
     public List<AcRuleCount> RulesByFunction { get; } = new();

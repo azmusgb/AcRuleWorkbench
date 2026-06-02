@@ -78,9 +78,9 @@ internal sealed class AcStructuralTreeParser
         if (!root.IsRuleNode)
         {
             root.RuleName = string.IsNullOrWhiteSpace(root.RuleName) ? "Root rule list" : root.RuleName;
-            root.RuleListPath = "Root";
         }
 
+        ApplyRouteInfo(root, parentNode: null, actionListIndex: -1);
         LoadList(ups, scope, hierarchyLevel: 0, parentNodeId: rootNodeId, actionListIndex: -1);
     }
 
@@ -102,11 +102,11 @@ internal sealed class AcStructuralTreeParser
         {
             int nodeId = ++_nodeCounter;
             AcTreeNode node = ReadAttrNode(ups, scope, hierarchyLevel, parentNodeId, actionListIndex, nodeId);
-            node.RuleListPath = BuildRuleListPath(node, scope);
+            AcTreeNode? parentNode = parentNodeId > 0 ? _report.Nodes.FirstOrDefault(n => n.NodeId == parentNodeId) : null;
+            ApplyRouteInfo(node, parentNode, actionListIndex);
 
             if (parentNodeId > 0)
             {
-                AcTreeNode? parentNode = _report.Nodes.FirstOrDefault(n => n.NodeId == parentNodeId);
                 string? actionName = ResolveActionName(parentNode, actionListIndex);
                 bool actionNameResolved = !string.IsNullOrWhiteSpace(actionName);
 
@@ -329,7 +329,19 @@ internal sealed class AcStructuralTreeParser
         }
 
         bool suppressNegativeOne = key.IndexOf("OMRIndex", StringComparison.OrdinalIgnoreCase) >= 0;
-        AddSplitValues(values, value, suppressNegativeOne);
+        if (IsListLikeParameterKey(key))
+            AddSplitValues(values, value, suppressNegativeOne);
+        else
+            AddDistinct(values, value);
+    }
+
+    private static bool IsListLikeParameterKey(string key)
+    {
+        return key.StartsWith("_ParamList", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("ParamList", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("PageNums", StringComparison.OrdinalIgnoreCase)
+            || key.EndsWith("List", StringComparison.OrdinalIgnoreCase)
+            || key.EndsWith("Fields", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AddSplitValues(List<string> target, string value)
@@ -354,21 +366,78 @@ internal sealed class AcStructuralTreeParser
             yield break;
 
         string listText = StripOuterBraces(value.Trim());
-        string[] parts = listText.Split(new[] { ',', ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 0)
+        foreach (string item in TokenizeFormWorksList(listText))
         {
-            string normalized = NormalizeScalarValue(listText);
+            string normalized = NormalizeScalarValue(item);
             if (!string.IsNullOrWhiteSpace(normalized))
                 yield return normalized;
+        }
+    }
+
+    private static IEnumerable<string> TokenizeFormWorksList(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
             yield break;
+
+        var current = new System.Text.StringBuilder();
+        int braceDepth = 0;
+        bool inQuote = false;
+        bool escaped = false;
+
+        foreach (char ch in value)
+        {
+            if (escaped)
+            {
+                current.Append(ch);
+                escaped = false;
+                continue;
+            }
+
+            if (ch == '\\')
+            {
+                current.Append(ch);
+                escaped = true;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inQuote = !inQuote;
+                current.Append(ch);
+                continue;
+            }
+
+            if (!inQuote)
+            {
+                if (ch == '{')
+                {
+                    braceDepth++;
+                    current.Append(ch);
+                    continue;
+                }
+
+                if (ch == '}')
+                {
+                    if (braceDepth > 0) braceDepth--;
+                    current.Append(ch);
+                    continue;
+                }
+
+                if (braceDepth == 0 && (ch == ',' || ch == ';' || ch == '|' || ch == '\r' || ch == '\n' || ch == '\t'))
+                {
+                    string token = current.ToString().Trim();
+                    if (token.Length > 0) yield return token;
+                    current.Clear();
+                    continue;
+                }
+            }
+
+            current.Append(ch);
         }
 
-        foreach (string part in parts)
-        {
-            string normalized = NormalizeScalarValue(part);
-            if (!string.IsNullOrWhiteSpace(normalized))
-                yield return normalized;
-        }
+        string finalToken = current.ToString().Trim();
+        if (finalToken.Length > 0)
+            yield return finalToken;
     }
 
     private static void AddDistinct(List<string> target, string value)
@@ -474,12 +543,58 @@ internal sealed class AcStructuralTreeParser
             || normalized.Contains("connstr");
     }
 
-    private static string BuildRuleListPath(AcTreeNode node, AcTreeScopeReport scope)
+    private static void ApplyRouteInfo(AcTreeNode node, AcTreeNode? parentNode, int actionListIndex)
     {
-        if (node.ParentNodeId < 0 || node.ActionListIndex < 0)
+        node.Route.Clear();
+
+        if (parentNode != null)
+        {
+            foreach (AcRuleRouteSegment segment in parentNode.Route)
+                node.Route.Add(segment);
+        }
+
+        string? actionName = ResolveActionName(parentNode, actionListIndex);
+        node.Route.Add(new AcRuleRouteSegment
+        {
+            NodeId = node.NodeId,
+            RuleGuid = node.RuleGuid,
+            RuleName = node.RuleName,
+            FunctionName = node.FunctionName,
+            ActionListIndex = actionListIndex >= 0 ? actionListIndex : null,
+            ActionName = actionName
+        });
+
+        node.RuleListPath = BuildMachineRoutePath(node);
+        node.StructuralPath = node.RuleListPath;
+        node.DisplayPath = BuildDisplayRoutePath(node);
+    }
+
+    private static string BuildMachineRoutePath(AcTreeNode node)
+    {
+        if (node.ParentNodeId < 0 || node.Route.Count <= 1)
             return "Root";
 
-        return $"Parent:{node.ParentNodeId}/Action:{node.ActionListIndex}";
+        return string.Join("/", node.Route.Select(r =>
+        {
+            string action = r.ActionListIndex.HasValue ? "Action:" + r.ActionListIndex.Value : "Root";
+            return $"Node:{r.NodeId}:{action}";
+        }));
+    }
+
+    private static string BuildDisplayRoutePath(AcTreeNode node)
+    {
+        if (node.Route.Count == 0)
+            return "Root";
+
+        return string.Join(" > ", node.Route.Select(r =>
+        {
+            string name = string.IsNullOrWhiteSpace(r.RuleName) ? (r.FunctionName ?? ("Node " + r.NodeId)) : r.RuleName!;
+            if (!r.ActionListIndex.HasValue)
+                return name;
+
+            string action = string.IsNullOrWhiteSpace(r.ActionName) ? ("Action " + r.ActionListIndex.Value) : r.ActionName!;
+            return action + " / " + name;
+        }));
     }
 
     private void GuardDepth(int hierarchyLevel, string scopePath)

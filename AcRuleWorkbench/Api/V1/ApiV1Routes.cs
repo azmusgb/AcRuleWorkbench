@@ -19,6 +19,7 @@ internal static class ApiV1Routes
         new ApiRouteDescriptor("GET", "/api/v1/health/ready", "Readiness check for FWD path and snapshot availability."),
         new ApiRouteDescriptor("GET", "/api/v1/status", "Combined server/source/snapshot status."),
         new ApiRouteDescriptor("GET", "/api/v1/snapshot", "Current normalized snapshot summary."),
+        new ApiRouteDescriptor("GET", "/api/v1/snapshot/warmup", "Trigger a background snapshot build and return immediately; idempotent."),
         new ApiRouteDescriptor("POST", "/api/v1/snapshot/refresh", "Rebuild cached snapshot when refresh is enabled."),
         new ApiRouteDescriptor("GET", "/api/v1/scopes", "List rule scopes."),
         new ApiRouteDescriptor("GET", "/api/v1/scopes/{scopeId}", "Deep scope summary. Use include=structure,inventory,references,diagnostics for expanded sections."),

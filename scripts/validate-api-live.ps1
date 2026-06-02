@@ -1,9 +1,10 @@
-# 
+[CmdletBinding()]
 param(
-    [string]$BaseUrl = "http://127.0.0.1:8788"
+    [string]$BaseUrl = "http://127.0.0.1:8787"
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version 2.0
 
 function Invoke-ApiCheck {
     param(
@@ -84,7 +85,9 @@ $checks = @(
 )
 
 $results = foreach ($check in $checks) {
-    Invoke-ApiCheck -Name $check.Name -Method $check.Method -Url $check.Url -ExpectedStatus $check.Expected -Body ($check.Body ?? "")
+    $body = ""
+    if ($check.ContainsKey("Body")) { $body = [string]$check.Body }
+    Invoke-ApiCheck -Name $check.Name -Method $check.Method -Url $check.Url -ExpectedStatus $check.Expected -Body $body
 }
 
 Write-Host "API v1 live validation results" -ForegroundColor Cyan

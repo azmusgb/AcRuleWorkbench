@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -115,6 +115,23 @@ internal sealed class WorkbenchApiServer
         Console.WriteLine("Path override : " + (_options.AllowPathQuery ? "enabled" : "disabled"));
         Console.WriteLine("Default FWD   : " + (_options.DefaultFwdPath ?? "(not set; pass --path)"));
         Console.WriteLine("Press Ctrl+C to stop.");
+
+        // Pre-build the snapshot in the background so the first viewer request hits the cache.
+        // This eliminates the 60â€“120 s cold-start stall on /scopes and /snapshot when a default
+        // FWD path is configured.
+        if (!string.IsNullOrWhiteSpace(_options.DefaultFwdPath) && !_options.DisableSnapshotCache)
+        {
+            string warmFwdPath = _options.DefaultFwdPath!;
+            Console.WriteLine("Snapshot      : pre-building in background (open /api/v1/health/ready to check progress)...");
+            _snapshotCache.WarmUpAsync(warmFwdPath, "AC", false)
+                .ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        Console.WriteLine("Snapshot warm-up failed: " + (t.Exception?.GetBaseException().Message ?? "unknown error"));
+                    else
+                        Console.WriteLine("Snapshot warm-up complete.");
+                }, TaskScheduler.Default);
+        }
 
         if (_options.OpenBrowser)
             TryOpenBrowser(prefix);

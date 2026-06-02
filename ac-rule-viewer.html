@@ -1,57 +1,172 @@
 ﻿<!doctype html>
-<html lang="en" data-theme="light" data-ui-build="v37-quiet-tree-no-function-info">
+<html lang="en" data-theme="dark" data-ui-build="v49-evidence-workbench">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>AC Rule Workbench</title>
-<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css">
-
+<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=evidence-workbench-v49">
 </head>
 <body class="density-standard">
 <a class="skip-link" href="#mainContent">Skip to content</a>
+
 <div class="app">
   <header class="topbar" role="banner">
     <div class="brand">
-      <div class="brand-title"><div class="logo" aria-hidden="true">AC</div><div><h1>AC Rule Workbench</h1><div class="brand-sub" id="sourceSubtitle">Loading embedded evidence snapshot...</div></div></div>
+      <div class="logo" aria-hidden="true">AC</div>
+      <div class="brand-copy">
+        <h1>AC Rule Workbench</h1>
+        <div class="brand-sub" id="sourceSubtitle">Loading snapshot...</div>
+        <div class="brand-meta" aria-label="Workbench mode indicators">
+          <span class="brand-badge">Evidence-first</span>
+          <span class="brand-badge subtle">Read-only</span>
+        </div>
+      </div>
     </div>
-    <div class="global-search"><label class="sr-only" for="globalSearch">Search all evidence</label><input id="globalSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="searchPopover" autocomplete="off" placeholder="Search rules, functions, fields, routes, diagnostics..."><span class="kbd">/</span><div id="searchPopover" class="search-popover" role="listbox" aria-label="Search results"></div></div>
-    <div class="top-actions">
-      <button class="btn focus-mode-btn" type="button" data-action="toggle-rca-focus" title="Dim unrelated content and emphasize RCA hotspots" aria-pressed="false">RCA Focus</button>
-      <span class="pill" id="qualityPill"><span class="dot warn"></span> Loading</span>
-      <button class="btn" type="button" data-action="export-view" title="Open advanced export builder" aria-label="Open export builder">Export</button><button class="btn" type="button" data-action="open-report-builder" title="Generate reviewer report" aria-label="Generate reviewer report">Report</button>
-      <button class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
-      <button class="btn icon-btn" type="button" data-action="open-help" title="Help" aria-label="Help">?</button>
+
+    <div class="global-search">
+      <label class="sr-only" for="globalSearch">Search rules, functions, UDFs, GUIDs, attributes, routes, and metadata</label>
+      <input id="globalSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="searchPopover" autocomplete="off" placeholder="Search rules, functions, UDFs, GUIDs, attributes...">
+      <span class="kbd">Ctrl K</span>
+      <div id="searchPopover" class="search-popover" role="listbox" aria-label="Search results"></div>
+    </div>
+
+    <div class="top-actions" aria-label="Global actions">
+      <span class="pill" id="qualityPill"><span class="dot warn"></span> Snapshot loading</span>
+      <span class="top-divider" aria-hidden="true"></span>
+      <button class="btn" type="button" disabled title="Static viewer packages load generated evidence sidecars. Use the workbench server or generator to import new FWD/WR sources.">Load</button>
+      <button class="btn" type="button" data-action="show-diagnostics" title="Open diagnostics for the current scope">Validate</button>
+      <button class="btn primary" type="button" data-action="export-view" title="Open export builder">Export</button>
+      <button class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 3a9 9 0 1 0 0 18V3z" fill="currentColor"></path>
+        </svg>
+      </button>
+      <button class="btn icon-btn" type="button" data-action="open-help" title="Open help" aria-label="Open help">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm.2 16.5a1.2 1.2 0 1 1 1.2-1.2 1.2 1.2 0 0 1-1.2 1.2zm1.8-7.7-.7.5a2.3 2.3 0 0 0-1.1 2v.4h-2v-.5a4.1 4.1 0 0 1 1.8-3.4l1-.7a1.6 1.6 0 0 0 .7-1.3A1.7 1.7 0 0 0 12 6.1a1.8 1.8 0 0 0-1.8 1.7H8.1A3.8 3.8 0 0 1 12 4.1a3.7 3.7 0 0 1 3.8 3.6 3.5 3.5 0 0 1-1.8 3.1z" fill="currentColor"></path>
+        </svg>
+      </button>
+      <button class="btn" type="button" data-action="open-help" title="Settings and help">Settings</button>
       <div id="topActionHint" class="top-action-hint" aria-live="polite"></div>
     </div>
   </header>
+
   <div class="shell">
-    <aside class="pane left" aria-label="Editor object tree">
-      <div class="pane-head"><div class="eyebrow">Editor object tree</div><div class="caption caption-shell-muted">Browse structure model and global resources/configuration.</div><input id="scopeSearch" class="scope-search" type="search" placeholder="Filter object scopes..."><div class="scope-kind-filter" role="toolbar" aria-label="Scope quick filters"><button class="chip-btn active" type="button" data-scope-filter="all">All</button><button class="chip-btn" type="button" data-scope-filter="page">Page</button><button class="chip-btn" type="button" data-scope-filter="document">Document</button></div></div>
+    <aside class="pane left" aria-label="Workbench navigator">
+      <div class="pane-head">
+        <div class="pane-title-row">
+          <div>
+            <div class="eyebrow">Navigation and Object Index</div>
+            <h2>Loaded Source</h2>
+          </div>
+        </div>
+        <div class="caption caption-shell-muted">Source state, primary views, and rule/function/UDF evidence indexes.</div>
+        <label class="sr-only" for="scopeSearch">Filter object scopes</label>
+        <input id="scopeSearch" class="scope-search" type="search" placeholder="Filter scopes...">
+        <div class="scope-kind-filter" role="radiogroup" aria-label="Scope quick filters">
+          <button class="chip-btn active" type="button" data-scope-filter="all" aria-pressed="true">All</button>
+          <button class="chip-btn" type="button" data-scope-filter="page" aria-pressed="false">Pages</button>
+          <button class="chip-btn" type="button" data-scope-filter="document" aria-pressed="false">Documents</button>
+        </div>
+        <section id="sourceSummary" class="source-summary" aria-label="Loaded source summary">
+          <div class="source-summary-row"><span>Configuration</span><b id="sourceSummaryConfig">Loading</b></div>
+          <div class="source-summary-row"><span>Rules</span><b id="sourceSummaryRules">Pending</b></div>
+          <div class="source-summary-row"><span>Warnings</span><b id="sourceSummaryWarnings">Pending</b></div>
+        </section>
+        <section id="onboardingChecklist" class="first-run-checklist" aria-label="First 90 seconds checklist">
+          <div class="checklist-head">
+            <div class="checklist-title">First 90 Seconds</div>
+            <div class="checklist-actions">
+              <button id="toggleChecklistBtn" class="btn ghost" type="button" aria-label="Collapse checklist">Collapse</button>
+              <button id="dismissChecklistBtn" class="btn ghost" type="button" aria-label="Dismiss checklist">Dismiss</button>
+            </div>
+          </div>
+          <ol id="onboardingChecklistItems">
+            <li>Pick a scope (Pages or Docs).</li>
+            <li>Open Structure and select one rule.</li>
+            <li>Check Route and Diagnostics.</li>
+            <li>Use Audit before final conclusions.</li>
+          </ol>
+        </section>
+      </div>
       <div id="recentScopes" class="recent-scopes" aria-label="Recently viewed scopes"></div>
       <div id="scopeList" class="scope-list scroll"></div>
     </aside>
+
     <main class="pane main" id="mainContent" tabindex="-1">
       <div class="main-head">
-        <div class="scope-title"><div class="scope-heading-stack"><div class="scope-kicker">Structure view</div><h2 id="scopeTitle">Scope</h2><div id="scopeCaption" class="caption"></div><div id="crumbs" class="crumbs"></div></div><div class="scope-actions"><button class="btn inspector-mobile" type="button" data-action="show-inspector">Inspector</button></div></div>
-        <div id="tabs" class="tabs" aria-hidden="true"></div>
+        <div class="scope-title">
+          <div class="scope-heading-stack">
+            <div class="scope-kicker">Main Work Surface</div>
+            <h2 id="scopeTitle">No scope selected</h2>
+            <div id="scopeCaption" class="caption"></div>
+            <div id="crumbs" class="crumbs"></div>
+          </div>
+          <div class="scope-actions">
+            <button class="btn inspector-mobile" type="button" data-action="show-inspector">Inspector</button>
+          </div>
+        </div>
+        <div id="tabs" class="tabs" role="tablist" aria-label="Scope views"></div>
         <div id="viewbar" class="viewbar"></div>
       </div>
-      <div id="content" class="content scroll" aria-live="polite" aria-busy="false"></div>
+      <div id="content" class="content scroll" aria-busy="false"></div>
+      <div id="contentStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </main>
+
     <aside class="pane right" aria-label="Inspector">
-      <div class="inspector-head"><div class="inspector-title"><div><div class="eyebrow">Inspector</div><h3 id="inspectorTitle">Nothing selected</h3><div id="inspectorCaption" class="caption"></div></div><button class="btn" type="button" data-action="copy-rule-evidence" title="Copy selected rule evidence">Copy evidence</button><button class="btn icon-btn" type="button" data-action="close-inspector" aria-label="Close inspector">×</button></div><div id="inspectorTabs" class="inspector-tabs"></div></div>
+      <div class="inspector-head">
+        <div class="inspector-title">
+          <div class="inspector-title-copy">
+            <div class="eyebrow">Evidence Inspector</div>
+            <h3 id="inspectorTitle">No rule selected</h3>
+            <div id="inspectorCaption" class="caption">Select a rule, function, field, or route item to inspect evidence.</div>
+          </div>
+          <div class="inspector-head-actions">
+            <button id="copyEvidenceBtn" class="btn" type="button" data-action="copy-rule-evidence" title="Copy selected object payload" disabled>Copy</button>
+            <button class="btn icon-btn" type="button" data-action="close-inspector" aria-label="Close inspector">×</button>
+          </div>
+        </div>
+        <div id="inspectorTabs" class="inspector-tabs"></div>
+      </div>
       <div id="inspectorBody" class="inspector-body scroll"></div>
     </aside>
   </div>
+
+  <footer id="diagnosticsConsole" class="diagnostics-console" aria-label="Diagnostics and activity console">
+    <div class="console-head">
+      <div>
+        <div class="eyebrow">Activity Console</div>
+        <strong id="consoleTitle">Diagnostics, exports, and parse activity</strong>
+      </div>
+      <div class="console-tabs" role="tablist" aria-label="Console views">
+        <button class="console-tab active" type="button" data-console-tab="activity">Activity</button>
+        <button class="console-tab" type="button" data-console-tab="warnings">Warnings</button>
+        <button class="console-tab" type="button" data-console-tab="errors">Errors</button>
+        <button class="console-tab" type="button" data-console-tab="exports">Exports</button>
+        <button class="console-tab" type="button" data-console-tab="raw">Raw Log</button>
+      </div>
+    </div>
+    <div id="consoleBody" class="console-body" role="log" aria-live="polite">
+      <span class="console-line"><span class="badge blue">Ready</span><span>Load or refresh evidence to populate runtime activity.</span></span>
+    </div>
+  </footer>
 </div>
+
 <div id="modalBackdrop" class="modal-backdrop" data-action="close-modal"></div>
-<section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1"><div class="modal-head"><div><h2 id="helpTitle">Workbench help</h2><div id="helpCaption" class="caption">Evidence-first rule inspection. No runtime execution is simulated.</div></div><button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">×</button></div><div id="helpBody" class="modal-body"></div></section>
+<section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1">
+  <div class="modal-head">
+    <div>
+      <h2 id="helpTitle">Workbench help</h2>
+      <div id="helpCaption" class="caption">Static rule inspection. Runtime execution is not simulated.</div>
+    </div>
+    <button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">×</button>
+  </div>
+  <div id="helpBody" class="modal-body"></div>
+</section>
+
 <div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-
-<script defer src="ac-rule-viewer.js"></script>
+<script defer src="ac-rule-viewer.js?v=evidence-workbench-v49"></script>
 </body>
 </html>
-
-

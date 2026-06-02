@@ -44,6 +44,42 @@ internal static class RuleCorrelation
         return MakeKey(ScopeId(node), node.RuleGuid, node.RuleId, node.RuleName, node.FunctionName, node.RuleIndexWithinScope);
     }
 
+    public static string ScopedGuidKey(AcRuleSummary rule)
+    {
+        return ScopedGuidKey(ScopeId(rule), rule.RuleGuid);
+    }
+
+    public static string ScopedGuidKey(AcTreeNode node)
+    {
+        return ScopedGuidKey(ScopeId(node), node.RuleGuid);
+    }
+
+    public static string ScopedNameFunctionKey(AcRuleSummary rule)
+    {
+        return ScopedNameFunctionKey(ScopeId(rule), rule.RuleName, rule.FunctionName);
+    }
+
+    public static string ScopedNameFunctionKey(AcTreeNode node)
+    {
+        return ScopedNameFunctionKey(ScopeId(node), node.RuleName, node.FunctionName);
+    }
+
+    public static string ScopedGuidKey(string scopeId, string? guid)
+    {
+        if (string.IsNullOrWhiteSpace(guid))
+            return string.Empty;
+
+        return (NormalizeScopeId(scopeId) + "|guid:" + guid.Trim()).ToLowerInvariant();
+    }
+
+    public static string ScopedNameFunctionKey(string scopeId, string? ruleName, string? functionName)
+    {
+        if (string.IsNullOrWhiteSpace(ruleName) || string.IsNullOrWhiteSpace(functionName))
+            return string.Empty;
+
+        return (NormalizeScopeId(scopeId) + "|name:" + ruleName.Trim() + "|fn:" + functionName.Trim()).ToLowerInvariant();
+    }
+
     public static bool Eq(string? left, string? right)
     {
         return string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -75,13 +111,14 @@ internal static class RuleCorrelation
 
     private static string MakeKey(string scopeId, string? guid, string? ruleId, string? ruleName, string? functionName, int index)
     {
-        if (!string.IsNullOrWhiteSpace(guid))
-            return (scopeId + "|guid:" + guid).ToLowerInvariant();
-
-        if (!string.IsNullOrWhiteSpace(ruleId))
-            return (scopeId + "|id:" + ruleId).ToLowerInvariant();
-
-        return (scopeId + "|idx:" + index + "|name:" + (ruleName ?? string.Empty) + "|fn:" + (functionName ?? string.Empty)).ToLowerInvariant();
+        // Exact correlation must include position and identity details.
+        // A scoped GUID alone is not unique in some extracted rule inventories, so it is only a fallback key.
+        return (NormalizeScopeId(scopeId)
+            + "|idx:" + index
+            + "|guid:" + (guid ?? string.Empty).Trim()
+            + "|id:" + (ruleId ?? string.Empty).Trim()
+            + "|name:" + (ruleName ?? string.Empty).Trim()
+            + "|fn:" + (functionName ?? string.Empty).Trim()).ToLowerInvariant();
     }
 
     private static string PluralizeScopeType(string type)

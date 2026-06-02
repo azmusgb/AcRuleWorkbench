@@ -4,6 +4,10 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>AcRuleWorkbench.Core</AssemblyName>
     <RootNamespace>AcRuleWorkbench.Core</RootNamespace>
+    <!-- Support both x86 and x64 RIDs during CI/restore to avoid missing assets
+         when the solution is probed for multiple runtimes. The product itself
+         is built as x86 at the app project level. -->
+    <RuntimeIdentifiers>win-x86;win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

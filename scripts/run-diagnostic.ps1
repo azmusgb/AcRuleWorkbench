@@ -8,22 +8,24 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$FwdPath = "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd",
+    [string]$FwdPath = "",
     [int]$Port = 8787,
-    [string]$Viewer = ".\ac-rule-viewer.html",
     [switch]$KillExisting,
-    [switch]$SkipGenerate
+    [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-& (Join-Path $PSScriptRoot "start-workbench.ps1") `
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($FwdPath)) {
+    $FwdPath = Join-Path (Split-Path -Parent $scriptRoot) "fwd.cfd"
+}
+
+& (Join-Path $PSScriptRoot "start-api.ps1") `
     -FwdPath $FwdPath `
     -Port $Port `
-    -Viewer $Viewer `
     -KillExisting:$KillExisting `
-    -SkipGenerate:$SkipGenerate `
+    -NoOpen:$NoOpen `
     -EnableDebugApi `
-    -AllowPathQuery `
-    -OpenHarness
+    -AllowPathQuery

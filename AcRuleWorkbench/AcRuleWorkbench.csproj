@@ -5,6 +5,11 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>AcRuleWorkbench</AssemblyName>
     <RootNamespace>AcRuleWorkbench</RootNamespace>
+    <!-- This product is a 32-bit native-dependent app. Force x86 platform so
+         native DLLs and runtime identifiers align with the packaged binaries. -->
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <PlatformTarget>x86</PlatformTarget>
+    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
 
   <ItemGroup>

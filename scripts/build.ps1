@@ -8,6 +8,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
+foreach ($runtimeDir in @((Join-Path $root "rri_bin"), (Join-Path $root "lib"))) {
+    if (Test-Path -LiteralPath $runtimeDir) {
+        $env:PATH = "$runtimeDir;$env:PATH"
+    }
+}
 Push-Location $root
 try {
     $msbuild = Get-Command msbuild.exe -ErrorAction SilentlyContinue

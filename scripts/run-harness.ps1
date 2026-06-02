@@ -6,7 +6,7 @@
   .\scripts\run-harness.ps1 doctor
 
 .EXAMPLE
-  .\scripts\run-harness.ps1 ac-rules --path C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd --json
+  .\scripts\run-harness.ps1 ac-rules --path .\fwd.cfd --json
 #>
 [CmdletBinding()]
 param(
@@ -25,6 +25,12 @@ if (Test-Path $runtimePath) {
     . $runtimePath
 } else {
     Write-Warning "runtime-path.generated.ps1 not found. Run .\scripts\setup-dcm-deps.ps1 first, or ensure native DLLs are already on PATH."
+}
+
+foreach ($runtimeDir in @((Join-Path $HarnessRoot "rri_bin"), (Join-Path $HarnessRoot "lib"))) {
+    if (Test-Path -LiteralPath $runtimeDir) {
+        $env:PATH = "$runtimeDir;$env:PATH"
+    }
 }
 
 $exeCandidates = @(

@@ -22,8 +22,10 @@ The FormWorks/DCM runtime is x86. The project defaults to x86 to avoid accidenta
 
 ## Run local production viewer
 
+On Windows hosts with restrictive execution policy, use the `.cmd` wrappers in `scripts` so startup works without local policy changes.
+
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-workbench.cmd `
   -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd `
   -Port 8787 `
   -KillExisting
@@ -42,7 +44,7 @@ http://127.0.0.1:8787/api/v1/openapi.json
 Use this only when inspecting raw extraction behavior or using the API harness:
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-workbench.cmd `
   -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd `
   -Port 8787 `
   -EnableDebugApi `

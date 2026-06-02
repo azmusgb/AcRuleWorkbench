@@ -37,7 +37,7 @@ public sealed class AcDisabledReport
         RuleCount = Rules.Count;
         DirectDisabledCount = Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledDirect);
         InheritedDisabledCount = Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited);
-        PossiblyInheritedDisabledCount = Rules.Count(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited);
+        PossiblyInheritedDisabledCount = Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited || r.DisabledState == AcDisabledStates.PossiblyDisabledInherited || r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly);
         EnabledCount = Rules.Count(r => string.IsNullOrWhiteSpace(r.DisabledState) || r.DisabledState == AcDisabledStates.Enabled);
 
         RulesByDisabledState.Clear();
@@ -66,7 +66,7 @@ public sealed class AcDisabledReport
                 RuleCount = g.Count(),
                 DirectDisabledCount = g.Count(r => r.DisabledState == AcDisabledStates.DisabledDirect),
                 InheritedDisabledCount = g.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited),
-                PossiblyInheritedDisabledCount = g.Count(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited),
+                PossiblyInheritedDisabledCount = g.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited || r.DisabledState == AcDisabledStates.PossiblyDisabledInherited || r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly),
                 EnabledCount = g.Count(r => string.IsNullOrWhiteSpace(r.DisabledState) || r.DisabledState == AcDisabledStates.Enabled)
             }));
     }
@@ -106,4 +106,5 @@ public static class AcDisabledStates
     public const string DisabledDirect = "DisabledDirect";
     public const string DisabledInherited = "DisabledInherited";
     public const string PossiblyDisabledInherited = "PossiblyDisabledInherited";
+    public const string PossibleDisabledSequenceOnly = "PossibleDisabledSequenceOnly";
 }
