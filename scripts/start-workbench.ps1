@@ -147,6 +147,30 @@ function Test-RuntimeFolder {
     Write-Ok "$Label validated: $Directory"
 }
 
+function Resolve-FwdFilePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if ($Path -match "^:\\") {
+        throw "Invalid FwdPath '$Path'. You probably meant C:\dev\AcRuleWorkbench\fwd.cfd"
+    }
+
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    if (-not (Test-Path -LiteralPath $resolved)) {
+        throw "FWD file not found: $resolved"
+    }
+
+    $item = Get-Item -LiteralPath $resolved -ErrorAction Stop
+    if ($item.PSIsContainer) {
+        throw "FwdPath must be a .cfd file, not a directory: $resolved"
+    }
+
+    if ($item.Extension -ne ".cfd") {
+        throw "FwdPath must point to a .cfd file: $resolved"
+    }
+
+    return $item.FullName
+}
+
 $repoRoot = Resolve-RepoRoot
 $scriptDir = Join-Path $repoRoot "scripts"
 $managedLibDir = Join-Path $repoRoot "lib"
@@ -176,14 +200,7 @@ Write-Host "Port      : $Port"
 Write-Host "Config    : $Configuration"
 Write-Host "Platform  : $Platform"
 
-if ($FwdPath -match "^:\\") {
-    throw "Invalid FwdPath '$FwdPath'. You probably meant C:\dev\AcRuleWorkbench\fwd.cfd"
-}
-
-$resolvedFwdPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FwdPath)
-if (-not (Test-Path -LiteralPath $resolvedFwdPath)) {
-    throw "FWD file not found: $resolvedFwdPath"
-}
+$resolvedFwdPath = Resolve-FwdFilePath -Path $FwdPath
 
 Test-RuntimeFolder -Directory $managedLibDir -RequiredDlls $expectedManagedDlls -Label "Managed DLL folder"
 Test-RuntimeFolder -Directory $nativeLibDir -RequiredDlls $expectedNativeDlls -Label "Native DLL folder"
@@ -228,6 +245,7 @@ else {
 Write-Section "Runtime PATH"
 
 if (Test-Path -LiteralPath $runtimeHelperPath) {
+    Unblock-File -LiteralPath $runtimeHelperPath -ErrorAction SilentlyContinue
     . $runtimeHelperPath
     Write-Ok "Loaded runtime PATH helper: $runtimeHelperPath"
 }

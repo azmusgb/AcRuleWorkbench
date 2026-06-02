@@ -169,6 +169,17 @@ function Copy-DllsToOutputs {
 
     foreach ($outputDir in $OutputDirs) {
         foreach ($dll in $dlls) {
+            $destination = Join-Path $outputDir.FullName $dll.Name
+
+            if (Test-Path -LiteralPath $destination) {
+                $sourceHash = (Get-FileHash -LiteralPath $dll.FullName -Algorithm SHA256).Hash
+                $destinationHash = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+
+                if ($sourceHash -eq $destinationHash) {
+                    continue
+                }
+            }
+
             Copy-Item -LiteralPath $dll.FullName -Destination $outputDir.FullName -Force -ErrorAction Stop
         }
 
@@ -206,7 +217,28 @@ if (`$pathParts -notcontains `$NativeLibDir) {
 "@
 
     Set-Content -LiteralPath $OutputPath -Value $content -Encoding UTF8 -Force
+    Unblock-File -LiteralPath $OutputPath -ErrorAction SilentlyContinue
     Write-Ok "Generated PATH helper: $OutputPath"
+}
+
+function Resolve-FwdFilePath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    if (-not (Test-Path -LiteralPath $resolved)) {
+        throw "FWD file not found: $resolved"
+    }
+
+    $item = Get-Item -LiteralPath $resolved -ErrorAction Stop
+    if ($item.PSIsContainer) {
+        throw "FwdPath must be a .cfd file, not a directory: $resolved"
+    }
+
+    if ($item.Extension -ne ".cfd") {
+        throw "FwdPath must point to a .cfd file: $resolved"
+    }
+
+    return $item.FullName
 }
 
 $repoRoot = Resolve-RepoRoot
@@ -249,11 +281,7 @@ Write-RuntimePathHelper -NativeDir $nativeLibDir -OutputPath $runtimeHelperPath
 . $runtimeHelperPath
 
 if (-not [string]::IsNullOrWhiteSpace($FwdPath)) {
-    $resolvedFwdPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($FwdPath)
-
-    if (-not (Test-Path -LiteralPath $resolvedFwdPath)) {
-        throw "FWD file not found: $resolvedFwdPath"
-    }
+    $resolvedFwdPath = Resolve-FwdFilePath -Path $FwdPath
 
     Write-Ok "FWD file present: $resolvedFwdPath"
 }

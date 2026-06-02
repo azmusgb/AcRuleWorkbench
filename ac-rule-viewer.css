@@ -1073,3 +1073,58 @@ body:not(.inspector-open) .shell{grid-template-columns:clamp(240px,21vw,var(--le
   .diagnostics-console{grid-template-columns:1fr;padding:var(--space-2) var(--space-3)}
   .console-body{justify-content:flex-start;overflow:auto}
 }
+
+/* v49 inspection split: keep structure scanning clean and move evidence detail into a page workspace. */
+.inspection-page{
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  min-height:100%;
+  gap:var(--space-4,14px);
+}
+.inspection-page-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  padding:14px;
+  border:1px solid var(--border-subtle,var(--line));
+  border-radius:var(--radius-lg,var(--radius));
+  background:var(--bg-panel,var(--panel));
+}
+.inspection-page-head h3{
+  margin:2px 0 0;
+  font-size:18px;
+  line-height:1.2;
+  font-weight:720;
+  overflow-wrap:anywhere;
+}
+.inspection-page-body{
+  min-width:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:10px;
+}
+.inspection-page-body .trust-strip{
+  grid-template-columns:repeat(6,minmax(130px,1fr));
+}
+.inspection-page-body .inspector-section{
+  margin-bottom:0;
+}
+.compact-selection{
+  padding:10px 12px;
+}
+.compact-selection .tree-detail-actions{
+  margin-top:8px;
+}
+.tree-row.selected,.branch-row.selected{
+  background:rgba(124,156,255,.09);
+  border-color:rgba(124,156,255,.24);
+  box-shadow:inset 3px 0 0 rgba(124,156,255,.76);
+}
+.right .trust-strip{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+@media (max-width:1180px){
+  .inspection-page-head{flex-direction:column}
+  .inspection-page-body .trust-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
