@@ -304,23 +304,6 @@ public sealed class ApiContractTests
         Assert.AreEqual("AC", body["data"]?["Name"]?.Value<string>());
         Assert.AreEqual("Fwd.ProcessNames", body["data"]?["Source"]?.Value<string>());
     }
-
-    [TestMethod]
-    public void Dispatch_FwdResourceDependencies_Returns_DependencyEnvelope()
-    {
-        var service = new WorkbenchApiService(new StubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
-        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/resource-dependencies");
-        HttpListenerRequest request = requestHandle.Request;
-
-        var result = service.Dispatch("api/v1/fwd/resource-dependencies", request);
-
-        Assert.AreEqual(200, result.StatusCode);
-        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
-        Assert.IsTrue(body.Value<bool>("ok"));
-        Assert.AreEqual("AcWorkbench.FwdResourceDependencies", body.Value<string>("schema"));
-        Assert.IsNotNull(body["data"]?["count"]);
-    }
-
     [TestMethod]
     public void Dispatch_Snapshot_WithSnapshotModeLive_Rebuilds_ForEachRequest()
     {
@@ -396,9 +379,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcTreeReport BuildAcTree(AcTreeOptions options) => new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcViewerReport ExportAcViewer(AcViewerOptions options) => new AcViewerReport { FwdPath = options.Path ?? string.Empty, OutputPath = "viewer.html" };
     }
@@ -431,9 +412,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -480,9 +459,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -519,9 +496,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -577,9 +552,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -650,9 +623,7 @@ public sealed class ApiContractTests
 
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcTreeReport BuildAcTree(AcTreeOptions options) => new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcViewerReport ExportAcViewer(AcViewerOptions options) => new AcViewerReport { FwdPath = options.Path ?? string.Empty, OutputPath = "viewer.html" };
     }
@@ -698,9 +669,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Text;
 using Newtonsoft.Json;
@@ -19,9 +20,12 @@ internal sealed class ApiResponseWriter
         if (response == null)
             throw new ArgumentNullException(nameof(response));
 
-        Prepare(response, enableCors);
-        response.StatusCode = 204;
-        SafeClose(response);
+        TryWriteResponse(response, () =>
+        {
+            Prepare(response, enableCors);
+            response.StatusCode = 204;
+            SafeClose(response);
+        });
     }
 
     public void WriteApiResult(HttpListenerResponse response, ApiHttpResult result, bool enableCors)
@@ -31,19 +35,22 @@ internal sealed class ApiResponseWriter
         if (result == null)
             throw new ArgumentNullException(nameof(result));
 
-        Prepare(response, enableCors);
-
-        foreach (KeyValuePair<string, string> header in result.Headers)
+        TryWriteResponse(response, () =>
         {
-            if (!string.IsNullOrWhiteSpace(header.Key) && header.Value != null)
-                response.Headers[header.Key] = header.Value;
-        }
+            Prepare(response, enableCors);
 
-        WriteUtf8(
-            response,
-            JsonConvert.SerializeObject(result.Body, Formatting.Indented, JsonSettings),
-            string.IsNullOrWhiteSpace(result.ContentType) ? "application/json; charset=utf-8" : result.ContentType,
-            result.StatusCode);
+            foreach (KeyValuePair<string, string> header in result.Headers)
+            {
+                if (!string.IsNullOrWhiteSpace(header.Key) && header.Value != null)
+                    response.Headers[header.Key] = header.Value;
+            }
+
+            WriteUtf8(
+                response,
+                JsonConvert.SerializeObject(result.Body, Formatting.Indented, JsonSettings),
+                string.IsNullOrWhiteSpace(result.ContentType) ? "application/json; charset=utf-8" : result.ContentType,
+                result.StatusCode);
+        });
     }
 
     public void WriteJson(HttpListenerResponse response, object value, int statusCode, bool enableCors)
@@ -51,8 +58,11 @@ internal sealed class ApiResponseWriter
         if (response == null)
             throw new ArgumentNullException(nameof(response));
 
-        Prepare(response, enableCors);
-        WriteUtf8(response, JsonConvert.SerializeObject(value, Formatting.Indented, JsonSettings), "application/json; charset=utf-8", statusCode);
+        TryWriteResponse(response, () =>
+        {
+            Prepare(response, enableCors);
+            WriteUtf8(response, JsonConvert.SerializeObject(value, Formatting.Indented, JsonSettings), "application/json; charset=utf-8", statusCode);
+        });
     }
 
     public void WriteHtml(HttpListenerResponse response, string html, bool enableCors, int statusCode = 200)
@@ -60,8 +70,11 @@ internal sealed class ApiResponseWriter
         if (response == null)
             throw new ArgumentNullException(nameof(response));
 
-        Prepare(response, enableCors);
-        WriteUtf8(response, html ?? string.Empty, "text/html; charset=utf-8", statusCode);
+        TryWriteResponse(response, () =>
+        {
+            Prepare(response, enableCors);
+            WriteUtf8(response, html ?? string.Empty, "text/html; charset=utf-8", statusCode);
+        });
     }
 
     public void WriteText(HttpListenerResponse response, string text, string contentType, bool enableCors, int statusCode = 200)
@@ -69,12 +82,15 @@ internal sealed class ApiResponseWriter
         if (response == null)
             throw new ArgumentNullException(nameof(response));
 
-        Prepare(response, enableCors);
-        WriteUtf8(
-            response,
-            text ?? string.Empty,
-            string.IsNullOrWhiteSpace(contentType) ? "text/plain; charset=utf-8" : contentType,
-            statusCode);
+        TryWriteResponse(response, () =>
+        {
+            Prepare(response, enableCors);
+            WriteUtf8(
+                response,
+                text ?? string.Empty,
+                string.IsNullOrWhiteSpace(contentType) ? "text/plain; charset=utf-8" : contentType,
+                statusCode);
+        });
     }
 
     private static void Prepare(HttpListenerResponse response, bool enableCors)
@@ -100,6 +116,38 @@ internal sealed class ApiResponseWriter
         {
             SafeClose(response);
         }
+    }
+
+    private static void TryWriteResponse(HttpListenerResponse response, Action write)
+    {
+        try
+        {
+            write();
+        }
+        catch (Exception ex) when (IsClientDisconnectedException(ex))
+        {
+            SafeClose(response);
+        }
+    }
+
+    internal static bool IsClientDisconnectedException(Exception ex)
+    {
+        if (ex == null)
+            return false;
+
+        if (ex is HttpListenerException || ex is ObjectDisposedException || ex is IOException)
+            return true;
+
+        if (ex is InvalidOperationException)
+        {
+            string message = ex.Message ?? string.Empty;
+            if (message.IndexOf("closed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("disposed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                message.IndexOf("not open", StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return ex.InnerException != null && IsClientDisconnectedException(ex.InnerException);
     }
 
     private static void SafeClose(HttpListenerResponse response)

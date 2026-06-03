@@ -200,40 +200,7 @@ internal sealed class LegacyRouteDispatcher
                 RequireNativeOk = _getBool(request, "requireNativeOk", false)
             });
         }
-
-        if (route == "api/ac/flow")
-        {
-            return _client.BuildAcFlow(new AcFlowOptions
-            {
-                Path = _getFwdPath(request),
-                ProcessName = _get(request, "process") ?? "AC",
-                Term = _get(request, "term"),
-                Scope = _get(request, "scope"),
-                FromRuleIndex = _getNullableInt(request, "fromRule"),
-                FromRuleGuid = _get(request, "fromGuid"),
-                IncludeHeuristicSequence = !_getBool(request, "noSequenceEdges", false),
-                RequireNativeOk = _getBool(request, "requireNativeOk", false)
-            });
-        }
-
-        if (route == "api/ac/flow-debug")
-        {
-            return _client.BuildAcFlowDebug(new AcFlowDebugOptions
-            {
-                Path = _getFwdPath(request),
-                ProcessName = _get(request, "process") ?? "AC",
-                Term = _get(request, "term"),
-                Scope = _get(request, "scope"),
-                FromRuleIndex = _getNullableInt(request, "fromRule"),
-                FromRuleGuid = _get(request, "fromGuid"),
-                MaxRules = _getInt(request, "maxRules", 25),
-                MaxRawTokensPerRule = _getInt(request, "maxRawTokens", 80),
-                MaxRawTokensPerScope = _getInt(request, "maxScopeTokens", 400),
-                RequireNativeOk = _getBool(request, "requireNativeOk", false)
-            });
-        }
-
-        if (route == "api/fip")
+if (route == "api/fip")
         {
             return _client.InspectFip(new FipInspectionOptions
             {

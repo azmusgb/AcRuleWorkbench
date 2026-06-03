@@ -23,7 +23,7 @@ function Should-ExcludePath {
 
     if (-not $IncludeRuntimeDlls -and ($normalized -match '(^|/)lib(/|$)' -or $normalized -match '(^|/)rri_bin(/|$)')) { return $true }
     if (-not $IncludeSampleFwd -and $normalized -match '(^|/)fwd\.cfd$') { return $true }
-    if (-not $IncludeGeneratedEvidence -and $normalized -match 'ac-rule-viewer\.(rules|tree|rel|flow)\.json$') { return $true }
+    if (-not $IncludeGeneratedEvidence -and $normalized -match 'ac-rule-viewer\.(rules|tree|rel)\.json$') { return $true }
 
     return $false
 }

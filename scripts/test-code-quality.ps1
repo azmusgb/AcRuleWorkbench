@@ -128,7 +128,6 @@ if (-not $SkipNode) {
                 $html = $html.Replace("__RULES_JSON__", "{}")
                 $html = $html.Replace("__RELATIONSHIPS_JSON__", "{}")
                 $html = $html.Replace("__TREE_JSON__", "{}")
-                $html = $html.Replace("__FLOW_JSON__", "{}")
                 $matches = [regex]::Matches($html, "<script>(.*?)</script>", [System.Text.RegularExpressions.RegexOptions]::Singleline)
                 $script = ($matches | ForEach-Object { $_.Groups[1].Value }) -join "`n"
                 Set-Content -LiteralPath $temp -Value $script -Encoding UTF8

@@ -51,8 +51,7 @@ const endpoints=[
 {group:'Rules',id:'rule',method:'GET',path:'/api/v1/rules/{nodeId}',title:'Rule detail',desc:'Evidence packet for a structural rule node.'},
 {group:'Rules',id:'subtree',method:'GET',path:'/api/v1/rules/{nodeId}/subtree',title:'Rule subtree',desc:'Selected rule and descendants.'},
 {group:'Search',id:'search',method:'GET',path:'/api/v1/search',title:'Search',desc:'Global evidence-aware search.',params:{q:'provider'}},
-{group:'Diagnostics',id:'diagnosticsGlobal',method:'GET',path:'/api/v1/diagnostics',title:'Global diagnostics',desc:'API and snapshot diagnostics.'},
-{group:'Export',id:'export',method:'POST',path:'/api/v1/export',title:'Export',desc:'Export an analytical slice.',body:{format:'json',scopeId:'AC/Pages/DentalADA',view:'structure',includeEvidence:true}}
+{group:'Diagnostics',id:'diagnosticsGlobal',method:'GET',path:'/api/v1/diagnostics',title:'Global diagnostics',desc:'API and snapshot diagnostics.'}}
 ];
 const snapshotBackedEndpointIds=new Set(['snapshot','refresh','scopes','scope','structure','inventory','references','diagnostics','rule','subtree','search','diagnosticsGlobal','export']);
 const initialSnapshotMode=((new URLSearchParams(location.search).get('snapshotMode')||'default').toLowerCase());

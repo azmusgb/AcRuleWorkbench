@@ -27,7 +27,6 @@ async function run() {
         p('This generated document is a workspace artifact for the v37 viewer design package.'),
         p('Primary assets:'),
         p('- ac-rule-viewer.css'),
-        p('- ac-rule-viewer-live.css'),
         p('- docs/design/ac-rule-workbench-v37-preview.html'),
         p('- docs/design/ac-rule-workbench-v37.css'),
         p('Run this script with Node after installing docx: npm install docx')

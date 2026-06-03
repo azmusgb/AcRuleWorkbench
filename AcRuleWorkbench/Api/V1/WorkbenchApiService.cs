@@ -17,6 +17,8 @@ internal sealed class WorkbenchApiService
     private readonly IFormWorksExtractionClient _client;
     private readonly WorkbenchSnapshotCache _cache;
     private readonly WorkbenchApiServerOptions _options;
+    private readonly object _processPrivateSummaryCacheGate = new object();
+    private readonly Dictionary<string, ProcessPrivateSummaryCacheEntry> _processPrivateSummaryCache = new Dictionary<string, ProcessPrivateSummaryCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
     public WorkbenchApiService(IFormWorksExtractionClient client, WorkbenchApiServerOptions options, WorkbenchSnapshotCache? cache = null)
     {
@@ -50,7 +52,6 @@ internal sealed class WorkbenchApiService
             if (tail == "fwd" || tail.StartsWith("fwd/", StringComparison.OrdinalIgnoreCase)) return DispatchFwd(tail, request);
             if (tail == "diagnostics") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Diagnostics", BuildGlobalDiagnostics(GetSnapshot(request)));
             if (tail == "search") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Search", BuildSearch(GetSnapshot(request), request));
-            if (tail == "export") return Export(request);
 
             return Fail(request, "RouteNotFound", "API route was not found.", 404, "/api/v1/" + tail);
         }
@@ -277,7 +278,7 @@ internal sealed class WorkbenchApiService
         return new
         {
             name = "AC Rule Workbench API v1",
-            purpose = "Stable product API for scope, rule, evidence, relationship, search, diagnostics, and export workflows.",
+            purpose = "Stable product API for scope, rule, evidence, relationship, search, and diagnostics workflows.",
             basePath = "/api/v1",
             compatibility = "Legacy /api/fwd/* routes remain available but should not be used by new clients.",
             debug = "Raw/debug routes are outside this contract and should live under /api/debug/*.",
@@ -327,9 +328,6 @@ internal sealed class WorkbenchApiService
                 diagnostics = true,
                 evidencePackets = true,
                 globalSearch = true,
-                jsonExport = true,
-                csvExport = false,
-                htmlExport = false,
                 nativeRuntimeSimulation = false,
                 configMutation = false
             },
@@ -501,7 +499,6 @@ internal sealed class WorkbenchApiService
                 references = true,
                 diagnostics = true,
                 search = true,
-                export = true,
                 nativeRuleExecution = false,
                 mutation = false
             },
@@ -555,7 +552,7 @@ internal sealed class WorkbenchApiService
                 references = "References are static evidence-coded relationships. Confidence and runtimeDependency must be read explicitly.",
                 diagnostics = "Diagnostics explain extraction and reconciliation limits. They are part of the product contract, not debug noise.",
                 disabled = "Structural DisabledDirect/DisabledInherited is authoritative. Flat disabled state is lower-confidence inventory evidence.",
-                flow = "Flow projections are experimental / low-confidence and are not native runtime execution proof."
+                flow = "Native runtime execution is not simulated by this inspection API."
             },
             warnings = snapshot.Fwd.Warnings.Concat(snapshot.Rules.Warnings).Concat(snapshot.Tree.Warnings).Concat(snapshot.Relationships.Warnings).ToList()
         };
@@ -669,7 +666,7 @@ internal sealed class WorkbenchApiService
                 flatOnly = "Flat-only rows are not execution-order evidence.",
                 coverage = "Structural coverage failures are blocking review risks. Do not use affected scopes for route/order conclusions until reconciled.",
                 disabled = "Structural disabled state is authoritative. Enabled is the default and is not badged. Direct/inherited disabled states are exceptions.",
-                flow = "ac-flow output is a heuristic projection with no runtime proof. Use it for triage only."
+                flow = "Native runtime execution is not simulated by this inspection API."
             },
             links = ScopeLinks(scope.ScopeId)
         };
@@ -968,9 +965,6 @@ internal sealed class WorkbenchApiService
         if (parts.Length == 2 && parts[1].Equals("resources", StringComparison.OrdinalIgnoreCase))
             return Ok(request, "AcWorkbench.FwdResources", BuildFwdResources(snapshot, request));
 
-        if (parts.Length == 2 && parts[1].Equals("resource-dependencies", StringComparison.OrdinalIgnoreCase))
-            return Ok(request, "AcWorkbench.FwdResourceDependencies", BuildFwdResourceDependencies(snapshot));
-
         if (parts.Length == 2 && parts[1].Equals("tables", StringComparison.OrdinalIgnoreCase))
             return Ok(request, "AcWorkbench.FwdTables", BuildFwdTablesCanonical(snapshot, request));
 
@@ -1139,7 +1133,7 @@ internal sealed class WorkbenchApiService
     private object BuildFwdProcesses(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? q = Get(request, "q");
-        bool includePrivateSummary = GetBool(request, "includePrivateSummary", true);
+        bool includePrivateSummary = GetBool(request, "includePrivateSummary", false);
         var items = snapshot.Fwd.Processes
             .Where(p => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(p, q))
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
@@ -1177,32 +1171,65 @@ internal sealed class WorkbenchApiService
         if (!includePrivateSummary)
             return vm;
 
+        ProcessPrivateSummaryCacheEntry privateSummary = GetCachedProcessPrivateSummary(snapshot, request, processName);
+        vm.HasPrivateNode = privateSummary.HasPrivateNode;
+        vm.PrivateChildCount = privateSummary.PrivateChildCount;
+        vm.Warnings.AddRange(privateSummary.Warnings);
+
+        return vm;
+    }
+
+    private ProcessPrivateSummaryCacheEntry GetCachedProcessPrivateSummary(WorkbenchSnapshot snapshot, HttpListenerRequest request, string processName)
+    {
+        string path = GetFwdPath(request);
+        int maxDepth = Math.Max(0, GetInt(request, "maxDepth", 1));
+        int maxNodes = Math.Max(1, GetInt(request, "maxNodes", 300));
+        bool requireNativeOk = GetBool(request, "requireNativeOk", false);
+        string cacheKey = string.Join("|", snapshot.SnapshotId ?? "no-snapshot", path, processName, maxDepth.ToString(), maxNodes.ToString(), requireNativeOk.ToString());
+
+        lock (_processPrivateSummaryCacheGate)
+        {
+            if (_processPrivateSummaryCache.TryGetValue(cacheKey, out ProcessPrivateSummaryCacheEntry? cached))
+                return cached;
+
+            ProcessPrivateSummaryCacheEntry built = BuildProcessPrivateSummary(path, processName, maxDepth, maxNodes, requireNativeOk);
+            _processPrivateSummaryCache[cacheKey] = built;
+            return built;
+        }
+    }
+
+    private ProcessPrivateSummaryCacheEntry BuildProcessPrivateSummary(string path, string processName, int maxDepth, int maxNodes, bool requireNativeOk)
+    {
         try
         {
             StcTreeReport tree = _client.InspectProcessTree(new StcTraversalOptions
             {
-                Path = GetFwdPath(request),
+                Path = path,
                 ProcessName = processName,
-                MaxDepth = Math.Max(0, GetInt(request, "maxDepth", 1)),
-                MaxNodes = Math.Max(1, GetInt(request, "maxNodes", 300)),
+                MaxDepth = maxDepth,
+                MaxNodes = maxNodes,
                 MaxPreviewBytes = 0,
                 IncludeDataPreview = false,
                 IncludeDotNodes = false,
-                RequireNativeOk = GetBool(request, "requireNativeOk", false)
+                RequireNativeOk = requireNativeOk
             });
 
-            vm.HasPrivateNode = tree.Nodes.Count > 0;
-            vm.PrivateChildCount = tree.Nodes.Count(n => n.Depth == 1);
-            vm.Warnings.AddRange(tree.Warnings);
+            return new ProcessPrivateSummaryCacheEntry
+            {
+                HasPrivateNode = tree.Nodes.Count > 0,
+                PrivateChildCount = tree.Nodes.Count(n => n.Depth == 1),
+                Warnings = tree.Warnings.ToList()
+            };
         }
         catch (Exception ex)
         {
-            vm.HasPrivateNode = false;
-            vm.PrivateChildCount = 0;
-            vm.Warnings.Add("ProcessWithoutPrivateNode: " + ex.Message);
+            return new ProcessPrivateSummaryCacheEntry
+            {
+                HasPrivateNode = false,
+                PrivateChildCount = 0,
+                Warnings = new List<string> { "ProcessWithoutPrivateNode: " + ex.Message }
+            };
         }
-
-        return vm;
     }
 
     private static (string role, string confidence) GuessProcessRole(string processName)
@@ -1372,50 +1399,7 @@ internal sealed class WorkbenchApiService
         return new { count = buckets.Sum(b => b.count), buckets };
     }
 
-    private object BuildFwdResourceDependencies(WorkbenchSnapshot snapshot)
-    {
-        var resources = snapshot.Fwd.Resources
-            .SelectMany(b => b.Names.Select(n => new { type = b.Type, name = n }))
-            .Where(x => !string.IsNullOrWhiteSpace(x.name))
-            .ToList();
 
-        var items = resources
-            .Select(r => new
-            {
-                resourceType = r.type,
-                resourceName = r.name,
-                usedBy = snapshot.Relationships.Relationships
-                    .Where(rel => RuleCorrelation.Eq(rel.Target, r.name) || (RuleCorrelation.Eq(rel.TargetType, r.type) && RuleCorrelation.Contains(rel.Target, r.name)))
-                    .Select(rel => new
-                    {
-                        rel.ScopePath,
-                        rel.ScopeType,
-                        rel.ScopeName,
-                        rel.RuleIndex,
-                        rel.RuleGuid,
-                        rel.RuleName,
-                        rel.FunctionName,
-                        rel.Kind,
-                        rel.TargetType,
-                        rel.Target,
-                        rel.Confidence
-                    })
-                    .ToList()
-            })
-            .Select(x => new
-            {
-                x.resourceType,
-                x.resourceName,
-                usedByRuleCount = x.usedBy.Count,
-                usedBy = x.usedBy
-            })
-            .OrderByDescending(x => x.usedByRuleCount)
-            .ThenBy(x => x.resourceType, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.resourceName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        return new { count = items.Count, items };
-    }
 
     private object BuildFwdPageVariants(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
@@ -1438,7 +1422,6 @@ internal sealed class WorkbenchApiService
         return new { page, count = items.Sum(i => i.variants.Count), items };
     }
 
-    // Extract canonical table resources first, then project usage evidence from relationships.
     private object BuildFwdTablesCanonical(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? q = Get(request, "q");
@@ -1706,6 +1689,127 @@ internal sealed class WorkbenchApiService
         };
     }
 
+    private static List<string> ExtractUdfInterfaceParameterNames(ResourceDetail? details)
+    {
+        var names = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string? candidate)
+        {
+            string value = (candidate ?? string.Empty).Trim().Trim('"', '\'', '{', '}', '[', ']');
+            if (!LooksLikeUdfFieldListName(value))
+                return;
+
+            if (seen.Add(value))
+                names.Add(value);
+        }
+
+        void AddSplit(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            foreach (string part in Regex.Split(value, @"[,;|\r\n\t]+"))
+                Add(part);
+        }
+
+        if (details == null)
+            return names;
+
+        foreach (ResourceAttrEntry attr in details.FullAttributes.Concat(details.PublicAttributes))
+        {
+            string key = attr.Key ?? string.Empty;
+            string value = attr.Value ?? string.Empty;
+
+            if (IsLikelyUdfParameterNameListKey(key))
+                AddSplit(value);
+
+            if (IsLikelyIndexedUdfParameterNameKey(key))
+                Add(value);
+
+            // Some FW resource exports store the interface name as the attribute key and the type/cardinality
+            // as the value. Keep this cautious so normal config attributes such as Source/Path/Version do not
+            // get promoted into field-list parameters.
+            if (IsLikelyUdfFieldListAttribute(key, value))
+                Add(key);
+        }
+
+        if (details.PrivateTree != null)
+            ExtractUdfNamesFromPrivateTree(details.PrivateTree, inFieldListRegion: false, Add, AddSplit);
+
+        return names;
+    }
+
+    private static void ExtractUdfNamesFromPrivateTree(ResourcePrivateNode node, bool inFieldListRegion, Action<string?> add, Action<string?> addSplit)
+    {
+        string name = node.Name ?? string.Empty;
+        bool fieldListRegion = inFieldListRegion || Regex.IsMatch(name, "field\\s*lists?|param(eter)?\\s*lists?|input\\s*fields?", RegexOptions.IgnoreCase);
+
+        if (fieldListRegion && LooksLikeUdfFieldListName(name))
+            add(name);
+
+        if (fieldListRegion && !string.IsNullOrWhiteSpace(node.ValuePreview))
+            addSplit(node.ValuePreview);
+
+        foreach (ResourcePrivateNode child in node.Children)
+            ExtractUdfNamesFromPrivateTree(child, fieldListRegion, add, addSplit);
+    }
+
+    private static bool IsLikelyUdfParameterNameListKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        string k = key.Trim();
+        return Regex.IsMatch(k, "^(FieldListNames?|FieldParameterLists?|ParameterNames?|ParamNames?|InputFieldLists?)$", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(k, "Field\\s*Parameter\\s*Lists?", RegexOptions.IgnoreCase);
+    }
+
+    private static bool IsLikelyIndexedUdfParameterNameKey(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        return Regex.IsMatch(key.Trim(), "^(FieldList|Param|Parameter|InputFieldList)\\d*Name$", RegexOptions.IgnoreCase)
+            || Regex.IsMatch(key.Trim(), "^Name(FieldList|Param|Parameter)\\d*$", RegexOptions.IgnoreCase);
+    }
+
+    private static bool IsLikelyUdfFieldListAttribute(string key, string value)
+    {
+        if (!LooksLikeUdfFieldListName(key))
+            return false;
+
+        string v = (value ?? string.Empty).Trim();
+        if (v.Length == 0)
+            return false;
+
+        return Regex.IsMatch(v, "^(Text|OMR|OMR\\s*Subfield|Field|Fields|Single|Multiple|One|Many|0|1|True|False|Yes|No)$", RegexOptions.IgnoreCase);
+    }
+
+    private static bool LooksLikeUdfFieldListName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string v = value.Trim().Trim('"', '\'', '{', '}', '[', ']');
+        if (v.Length == 0 || v.Length > 64)
+            return false;
+
+        if (Regex.IsMatch(v, "^_?ParamList(OMRIndex)?\\d+$", RegexOptions.IgnoreCase))
+            return false;
+
+        if (Regex.IsMatch(v, "^(Text|OMR|OMR\\s*Subfield|Field|Fields|Single|Multiple|True|False|Yes|No|None|Null|Unknown)$", RegexOptions.IgnoreCase))
+            return false;
+
+        if (Regex.IsMatch(v, "^[+-]?\\d+(\\.\\d+)?$"))
+            return false;
+
+        if (v.IndexOfAny(new[] { '/', '\\', ':', '{', '}', '[', ']' }) >= 0)
+            return false;
+
+        return Regex.IsMatch(v, "^[A-Za-z][A-Za-z0-9_ .-]*$", RegexOptions.CultureInvariant);
+    }
+
     // Function resource candidate inventory: canonical resource names plus usage-side evidence.
     // This is intentionally not a full UDF-definition parser.
     private object BuildFwdUdfsCanonical(WorkbenchSnapshot snapshot, HttpListenerRequest request)
@@ -1746,13 +1850,18 @@ internal sealed class WorkbenchApiService
                 int byTarget = usedByTarget.TryGetValue(x.name, out List<AcRuleRelationship>? refs) ? refs.Count : 0;
                 int byFunction = rulesByFunction.TryGetValue(x.name, out List<AcRuleSummary>? rules) ? rules.Count : 0;
                 List<AcRuleSummary> matchedRules = rulesByFunction.TryGetValue(x.name, out rules) ? rules : new List<AcRuleSummary>();
-                var parameterNames = matchedRules
+                ResourceDetail? rawDetails = FindResourceDetail(detailed, x.type, x.name);
+                var definitionParameterNames = ExtractUdfInterfaceParameterNames(rawDetails);
+                var callerParameterNames = matchedRules
                     .SelectMany(r => r.Parameters.Keys)
                     .Where(k => !string.IsNullOrWhiteSpace(k))
                     .Select(k => k.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                var parameterNames = definitionParameterNames.Count > 0
+                    ? definitionParameterNames
+                    : callerParameterNames.Where(k => !Regex.IsMatch(k, @"^_?ParamList(OMRIndex)?\d+$", RegexOptions.IgnoreCase)).ToList();
                 var ruleNames = matchedRules
                     .Select(r => string.IsNullOrWhiteSpace(r.RuleName) ? $"Rule {r.RuleIndex}" : r.RuleName!.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1765,7 +1874,6 @@ internal sealed class WorkbenchApiService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                     .ToList();
-                ResourceDetail? rawDetails = FindResourceDetail(detailed, x.type, x.name);
                 return new
                 {
                     name = x.name,
@@ -1779,6 +1887,7 @@ internal sealed class WorkbenchApiService
                     hasPrivateTree = rawDetails?.PrivateTree != null,
                     usedByRuleCount = Math.Max(byTarget, byFunction),
                     parameterNames,
+                    callerParameterSlots = callerParameterNames,
                     ruleNames,
                     scopeIds,
                     diagnostics = new List<string>
@@ -1787,7 +1896,7 @@ internal sealed class WorkbenchApiService
                         "UdfBodyNotParsed",
                         rawDetails == null && includeDetails ? "ResourceDetailsUnavailable" : string.Empty,
                         rawDetails?.PrivateTree == null && includePrivate ? "ResourcePrivateTreeUnavailable" : string.Empty,
-                        byTarget > 0 && byFunction == 0 ? "RelationshipOnlyEvidence" : string.Empty
+                        byTarget > 0 && byFunction == 0 ? "RelationshipOnlyMatch" : string.Empty
                     }.Where(v => !string.IsNullOrWhiteSpace(v)).ToList(),
                     rawResourceDetails = rawDetails == null ? null : new
                     {
@@ -1812,12 +1921,12 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            caveat = "Rows are function-resource candidates plus caller-side usage evidence. A row is not a confirmed UDF until its Function resource interface and private rule body are parsed.",
+            caveat = "Rows are function-resource candidates plus caller-side usage. A row is not a confirmed UDF until its Function resource interface and private rule body are parsed.",
             diagnostics = new[] { "UdfDefinitionNotParsed", "UdfBodyNotParsed" }
         };
     }
 
-    // Function/UDF usage detail with explicit separation between definition-like fields and caller evidence.
+    // Function/UDF usage detail with explicit separation between definition fields and caller rules.
     private object BuildFwdUdfDetail(WorkbenchSnapshot snapshot, HttpListenerRequest request, string udfName)
     {
         string[] udfTypes = new[] { "Function", "UDF", "UserDefinedFunction", "User Defined" };
@@ -1913,13 +2022,17 @@ internal sealed class WorkbenchApiService
                 warnings = new[] { "UDF/function was not found in canonical resources, rule callers, or relationship evidence." }
             };
 
-        var parameterNames = directCallers
+        var definitionParameterNames = ExtractUdfInterfaceParameterNames(primaryDetails);
+        var callerParameterNames = directCallers
             .SelectMany(r => r.parameters.Keys)
             .Where(k => !string.IsNullOrWhiteSpace(k))
             .Select(k => k.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var parameterNames = definitionParameterNames.Count > 0
+            ? definitionParameterNames
+            : callerParameterNames.Where(k => !Regex.IsMatch(k, @"^_?ParamList(OMRIndex)?\d+$", RegexOptions.IgnoreCase)).ToList();
 
         var statusResults = directCallers
             .SelectMany(r => snapshot.Rules.Rules
@@ -1962,7 +2075,7 @@ internal sealed class WorkbenchApiService
                 ruleBody = (object?)null,
                 notes = new[]
                 {
-                    "Field lists and status results are inferred from caller-side evidence unless private/function config parsing is available.",
+                    "Field lists come from the UDF interface when available; caller slots are only used as a fallback.",
                     "Internal UDF rule body is not parsed in this endpoint."
                 }
             },
@@ -1970,7 +2083,7 @@ internal sealed class WorkbenchApiService
             {
                 directCallers,
                 iteratorCallers,
-                relationshipEvidence = relationshipCalls
+                relationshipMatches = relationshipCalls
             },
             rawResourceDetails = primaryDetails == null ? null : new
             {
@@ -1991,7 +2104,7 @@ internal sealed class WorkbenchApiService
                     canonicalHits.Any() ? string.Empty : "NonCanonicalRuleUsageOnly",
                     parameterNames.Count == 0 ? "FieldListsNotParsedOrUnavailable" : string.Empty,
                     statusResults.Count == 0 ? "StatusResultsNotParsedOrUnavailable" : string.Empty,
-                    relationshipCalls.Any() && !directCallers.Any() ? "RelationshipOnlyEvidence" : string.Empty,
+                    relationshipCalls.Any() && !directCallers.Any() ? "RelationshipOnlyMatch" : string.Empty,
                     !iteratorCallers.Any() ? string.Empty : "IteratorCallersDetected"
                 }.Where(x => !string.IsNullOrWhiteSpace(x)).ToList()
             },
@@ -2508,87 +2621,6 @@ internal sealed class WorkbenchApiService
         return new { query = q, kind, scopeId, count = totalCount, items };
     }
 
-    private ApiHttpResult Export(HttpListenerRequest request)
-    {
-        if (!string.Equals(request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
-            return Fail(request, "MethodNotAllowed", "Export requires POST.", 405, "Use POST /api/v1/export. The body may be empty for the default JSON summary export.");
-
-        WorkbenchSnapshot snapshot = GetSnapshot(request);
-        ExportRequestDto body = ReadExportRequest(request);
-        string? scopeId = Get(request, "scopeId") ?? body.ScopeId;
-        string? nodeId = Get(request, "nodeId") ?? body.NodeId;
-        string format = (Get(request, "format") ?? body.Format ?? "json").ToLowerInvariant();
-        string view = (Get(request, "view") ?? body.View ?? "snapshot").ToLowerInvariant();
-
-        if (format != "json")
-            return Fail(request, "UnsupportedExportFormat", "Only JSON export is implemented in this v1 contract.", 400, "Requested format: " + format);
-
-        object payload;
-        if (!string.IsNullOrWhiteSpace(nodeId))
-        {
-            if (!snapshot.RulesByNodeId.TryGetValue(nodeId!, out RuleModel? rule))
-                return Fail(request, "RuleNotFound", "Rule was not found.", 404, nodeId);
-
-            payload = view == "subtree" ? BuildRuleSubtree(snapshot, rule, request) : BuildRuleDetail(snapshot, rule);
-        }
-        else if (!string.IsNullOrWhiteSpace(scopeId))
-        {
-            if (!snapshot.ScopesById.TryGetValue(scopeId!, out ScopeModel? scope))
-                return Fail(request, "ScopeNotFound", "Scope was not found.", 404, scopeId);
-
-            if (view == "structure") payload = BuildScopeStructure(scope);
-            else if (view == "inventory") payload = BuildScopeInventory(snapshot, scope, request);
-            else if (view == "references") payload = BuildScopeReferences(scope, request);
-            else if (view == "diagnostics") payload = BuildScopeDiagnostics(snapshot, scope);
-            else payload = BuildScopeDetail(snapshot, scope);
-        }
-        else
-        {
-            payload = view == "diagnostics" ? BuildGlobalDiagnostics(snapshot) : BuildSnapshotResponse(snapshot);
-        }
-
-        return Ok(request, "AcWorkbench.Export", new
-        {
-            format,
-            view,
-            scopeId,
-            nodeId,
-            body.IncludeEvidence,
-            filters = body.Filters,
-            columns = body.Columns,
-            exportedAtUtc = DateTime.UtcNow,
-            provenance = new { snapshot.SnapshotId, snapshot.GeneratedAtUtc, snapshot.FwdPath, apiVersion = ApiV1Routes.ApiVersion },
-            payload
-        });
-    }
-
-    private static ExportRequestDto ReadExportRequest(HttpListenerRequest request)
-    {
-        if (request == null || !request.HasEntityBody)
-            return new ExportRequestDto();
-
-        try
-        {
-            Encoding encoding = request.ContentEncoding ?? Encoding.UTF8;
-            using (var reader = new StreamReader(request.InputStream, encoding))
-            {
-                string text = reader.ReadToEnd();
-                if (string.IsNullOrWhiteSpace(text))
-                    return new ExportRequestDto();
-
-                ExportRequestDto? dto = JsonConvert.DeserializeObject<ExportRequestDto>(text);
-                if (dto == null) return new ExportRequestDto();
-                if (dto.Filters == null) dto.Filters = new Dictionary<string, string>();
-                if (dto.Columns == null) dto.Columns = new List<string>();
-                return dto;
-            }
-        }
-        catch (JsonException ex)
-        {
-            throw new ApiBadRequestException("InvalidJsonBody", "Request body must be valid JSON.", ex.Message);
-        }
-    }
-
     private static object ScopeCounts(ScopeModel scope)
     {
         return new
@@ -2978,6 +3010,13 @@ internal sealed class WorkbenchApiService
         public string Name { get; set; } = string.Empty;
         public int Hits { get; set; }
         public string Confidence { get; set; } = "Medium";
+    }
+
+    private sealed class ProcessPrivateSummaryCacheEntry
+    {
+        public bool HasPrivateNode { get; set; }
+        public int PrivateChildCount { get; set; }
+        public List<string> Warnings { get; set; } = new List<string>();
     }
 
     private sealed class ProcessSummaryVm

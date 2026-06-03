@@ -57,8 +57,6 @@ if (-not [string]::IsNullOrWhiteSpace($ScopeId)) {
 Invoke-ApiCheck -Name 'search' -Path '/api/v1/search?q=provider&limit=10' | Out-Null
 Invoke-ApiCheck -Name 'diagnostics' -Path '/api/v1/diagnostics' | Out-Null
 
-$exportBody = @{ format = 'json'; view = 'snapshot'; includeEvidence = $true }
-Invoke-ApiCheck -Name 'export' -Method 'POST' -Path '/api/v1/export' -Body $exportBody | Out-Null
 
 if (-not [string]::IsNullOrWhiteSpace($NodeId)) {
     Invoke-ApiCheck -Name 'rule' -Path "/api/v1/rules/$NodeId" | Out-Null

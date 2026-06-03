@@ -908,105 +908,9 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         AcRuleReport rules = InspectAcRules(options);
         AcRelationshipReport relationships = BuildRelationshipReport(rules, includeRules: false);
         relationships.RebuildCounts();
-        AcRuleFlowReport flow = BuildFlowReport(rules, includeHeuristicSequence: true);
-
         var index = new AcIndexReport();
         index.Rebuild(rules, relationships);
         return index;
-    }
-
-
-    public AcRuleFlowReport BuildAcFlow(AcFlowOptions options)
-    {
-        if (options == null)
-            throw new ArgumentNullException(nameof(options));
-
-        var ruleOptions = new AcRuleOptions
-        {
-            Path = options.Path,
-            ProcessName = string.IsNullOrWhiteSpace(options.ProcessName) ? "AC" : options.ProcessName,
-            Term = options.Term,
-            Scope = options.Scope,
-            RequireNativeOk = options.RequireNativeOk
-        };
-
-        AcRuleReport rules = InspectAcRules(ruleOptions);
-        AcRuleFlowReport flow = BuildFlowReport(rules, options.IncludeHeuristicSequence);
-
-        if (options.FromRuleIndex.HasValue || !string.IsNullOrWhiteSpace(options.FromRuleGuid))
-            FilterFlowFromRule(flow, options.FromRuleIndex, options.FromRuleGuid);
-
-        flow.RebuildCounts();
-        return flow;
-    }
-
-    public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options)
-    {
-        if (options == null)
-            throw new ArgumentNullException(nameof(options));
-
-        var ruleOptions = new AcRuleOptions
-        {
-            Path = options.Path,
-            ProcessName = string.IsNullOrWhiteSpace(options.ProcessName) ? "AC" : options.ProcessName,
-            Scope = options.Scope,
-            Term = options.Term,
-            IncludeRawTokens = true,
-            MaxRawTokensPerScope = options.MaxRawTokensPerScope <= 0 ? 400 : options.MaxRawTokensPerScope,
-            RequireNativeOk = options.RequireNativeOk
-        };
-
-        AcRuleReport ruleReport = InspectAcRules(ruleOptions);
-        var report = new AcFlowDebugReport
-        {
-            FwdPath = ruleReport.FwdPath,
-            ProcessName = ruleReport.ProcessName
-        };
-        report.Warnings.AddRange(ruleReport.Warnings);
-
-        foreach (AcRuleScopeReport scope in ruleReport.Scopes)
-        {
-            var debugScope = new AcFlowDebugScope
-            {
-                ScopePath = scope.Path,
-                ScopeType = scope.ScopeType,
-                ScopeName = scope.ScopeName,
-                RuleCount = scope.RuleCount,
-                TokenCount = scope.TokenCount
-            };
-            debugScope.RawTokens.AddRange(scope.RawTokens);
-            report.Scopes.Add(debugScope);
-        }
-
-        IEnumerable<AcRuleSummary> selected = ruleReport.Rules;
-
-        if (options.FromRuleIndex.HasValue)
-            selected = selected.Where(r => r.RuleIndex == options.FromRuleIndex.Value);
-
-        if (!string.IsNullOrWhiteSpace(options.FromRuleGuid))
-            selected = selected.Where(r => string.Equals(r.RuleGuid, options.FromRuleGuid.Trim(), StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(options.Term))
-            selected = selected.Where(r => AcRuleContains(r, options.Term.Trim()));
-
-        int maxRules = options.MaxRules <= 0 ? 25 : options.MaxRules;
-        int maxRawTokens = options.MaxRawTokensPerRule <= 0 ? 80 : options.MaxRawTokensPerRule;
-        List<AcRuleSummary> selectedList = selected.Take(maxRules + 1).ToList();
-        if (selectedList.Count > maxRules)
-        {
-            report.Truncated = true;
-            selectedList = selectedList.Take(maxRules).ToList();
-            report.Warnings.Add($"Flow debug output truncated at {maxRules} rules. Increase --max-rules for more.");
-        }
-
-        foreach (AcRuleSummary rule in selectedList)
-            report.Rules.Add(CreateFlowDebugRule(rule, maxRawTokens));
-
-        if (report.Rules.Count == 0)
-            report.Warnings.Add("No rules matched the requested flow-debug filters.");
-
-        report.RebuildCounts();
-        return report;
     }
 
     public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options)
@@ -1027,8 +931,6 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         AcRuleReport rules = InspectAcRules(ruleOptions);
         AcRelationshipReport relationships = BuildRelationshipReport(rules, includeRules: false);
         relationships.RebuildCounts();
-        AcRuleFlowReport flow = BuildFlowReport(rules, includeHeuristicSequence: true);
-        flow.RebuildCounts();
 
         var report = new AcDiagnosticsReport
         {
@@ -1037,11 +939,10 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             ScopeCount = rules.ScopeCount,
             RuleCount = rules.RuleCount,
             RelationshipCount = relationships.RelationshipCount,
-            FlowEdgeCount = flow.EdgeCount,
-            ProvenFlowEdgeCount = flow.ProvenEdgeCount,
-            ParsedFlowEdgeCount = flow.ParsedEdgeCount,
-            HeuristicFlowEdgeCount = flow.HeuristicEdgeCount,
-            UnknownFlowEdgeCount = flow.UnknownEdgeCount,
+            ProvenFlowEdgeCount = 0,
+            ParsedFlowEdgeCount = 0,
+            HeuristicFlowEdgeCount = 0,
+            UnknownFlowEdgeCount = 0,
             MissingRuleGuidCount = rules.Rules.Count(r => string.IsNullOrWhiteSpace(r.RuleGuid)),
             MissingRuleIdCount = rules.Rules.Count(r => string.IsNullOrWhiteSpace(r.RuleId)),
             MissingFunctionCount = rules.Rules.Count(r => string.IsNullOrWhiteSpace(r.FunctionName)),
@@ -1049,8 +950,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             RulesWithActionMapCount = rules.Rules.Count(r => !string.IsNullOrWhiteSpace(r.ActionMapRaw)),
             RulesWithSkipIdCount = rules.Rules.Count(r => r.SkipId.HasValue),
             RulesWithBackupSkipIdCount = rules.Rules.Count(r => r.BackupSkipId.HasValue),
-            UnknownActionTargetCount = flow.Edges.Count(e => e.EdgeKind == AcRuleFlowEdgeKind.UnknownActionTarget),
-            UnresolvedSkipTargetCount = flow.Edges.Count(e => e.EdgeKind == AcRuleFlowEdgeKind.UnresolvedSkipTarget),
+            UnknownActionTargetCount = 0,
+            UnresolvedSkipTargetCount = 0,
             DisabledDirectCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledDirect),
             DisabledInheritedCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.DisabledInherited),
             PossiblyDisabledInheritedCount = rules.Rules.Count(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited),
@@ -1059,12 +960,9 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
         report.Warnings.AddRange(rules.Warnings);
         report.Warnings.AddRange(relationships.Warnings);
-        report.Warnings.AddRange(flow.Warnings);
 
         AddCounts(report.RulesByScope, rules.Rules.GroupBy(r => r.ScopePath));
         AddCounts(report.RulesByFunction, rules.Rules.GroupBy(r => string.IsNullOrWhiteSpace(r.FunctionName) ? "(missing)" : r.FunctionName));
-        AddCounts(report.FlowEdgesByKind, flow.Edges.GroupBy(e => string.IsNullOrWhiteSpace(e.EdgeKind) ? "(missing)" : e.EdgeKind));
-        AddCounts(report.FlowEdgesByConfidence, flow.Edges.GroupBy(e => string.IsNullOrWhiteSpace(e.Confidence) ? "(missing)" : e.Confidence));
 
         foreach (var duplicate in rules.Rules
                      .Where(r => !string.IsNullOrWhiteSpace(r.RuleGuid))
@@ -1084,93 +982,13 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             report.DuplicateRuleGuids.Add(item);
         }
 
-        AddDiagnostic(report, "Info", "Flow", "Action names were parsed but action/sub-list targets are unresolved.", report.UnknownActionTargetCount, flow.Edges.Where(e => e.EdgeKind == AcRuleFlowEdgeKind.UnknownActionTarget).Select(FormatFlowEdgeExample));
-        AddDiagnostic(report, "Info", "Flow", "SequentialNext edges are heuristic sequence evidence, not runtime branch proof.", report.HeuristicFlowEdgeCount, flow.Edges.Where(e => e.EdgeKind == AcRuleFlowEdgeKind.SequentialNext).Select(FormatFlowEdgeExample));
         AddDiagnostic(report, "Warning", "Parser", "Rules are missing RuleID, which limits SkipID/ActionMap resolution.", report.MissingRuleIdCount, rules.Rules.Where(r => string.IsNullOrWhiteSpace(r.RuleId)).Select(FormatRuleExample));
         AddDiagnostic(report, "Warning", "Parser", "Rules have action names but no decoded ActionMap target.", report.RulesWithActionNamesCount - report.RulesWithActionMapCount, rules.Rules.Where(r => r.ActionNames.Count > 0 && string.IsNullOrWhiteSpace(r.ActionMapRaw)).Select(FormatRuleExample));
         AddDiagnostic(report, "Info", "Disabled", "Rules are directly disabled by source marker.", report.DisabledDirectCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.DisabledDirect).Select(FormatRuleExample));
         AddDiagnostic(report, "Info", "Disabled", "Rules have possible disabled evidence from flat sequence fallback only. This is audit-only evidence, not structural inheritance.", report.PossibleDisabledSequenceOnlyCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.PossibleDisabledSequenceOnly).Select(FormatRuleExample));
-        AddDiagnostic(report, "Info", "Disabled", "Rules are disabled by parsed flow evidence from disabled ancestors.", report.PossiblyDisabledInheritedCount, rules.Rules.Where(r => r.DisabledState == AcDisabledStates.PossiblyDisabledInherited).Select(FormatRuleExample));
 
         return report;
     }
-
-    private static AcFlowDebugRule CreateFlowDebugRule(AcRuleSummary rule, int maxRawTokens)
-    {
-        var debug = new AcFlowDebugRule
-        {
-            ScopePath = rule.ScopePath,
-            ScopeType = rule.ScopeType,
-            ScopeName = rule.ScopeName,
-            RuleIndex = rule.RuleIndex,
-            RuleGuid = rule.RuleGuid,
-            RuleId = rule.RuleId,
-            RuleCounter = rule.RuleCounter,
-            RuleName = rule.RuleName,
-            FunctionName = rule.FunctionName,
-            FunctionVersion = rule.FunctionVersion,
-            ActionMapRaw = rule.ActionMapRaw,
-            SkipId = rule.SkipId,
-            BackupSkipId = rule.BackupSkipId,
-            RuleListPath = rule.RuleListPath
-        };
-
-        debug.ActionNames.AddRange(rule.ActionNames);
-        debug.Sources.AddRange(rule.Sources);
-
-        foreach (var pair in rule.Parameters)
-        {
-            if (IsFlowParameterKey(pair.Key))
-                debug.FlowParameters[pair.Key] = pair.Value.ToList();
-        }
-
-        if (maxRawTokens > 0)
-            debug.RawTokens.AddRange(rule.RawTokens.Take(maxRawTokens));
-
-        foreach (string token in rule.RawTokens.Where(IsFlowDebugToken).Take(maxRawTokens <= 0 ? 80 : maxRawTokens))
-            debug.RawFlowTokens.Add(token);
-
-        if (string.IsNullOrWhiteSpace(rule.RuleId))
-            debug.Warnings.Add("_RuleID was not parsed for this rule; skip/action target resolution may be limited.");
-        if (rule.ActionNames.Count > 0 && string.IsNullOrWhiteSpace(rule.ActionMapRaw))
-            debug.Warnings.Add("Action names were parsed, but _ActionMap was not parsed for this rule.");
-        if (rule.RawTokens.Count == 0)
-            debug.Warnings.Add("Raw tokens were not available. Ensure flow debug requests raw-token capture.");
-
-        return debug;
-    }
-
-    private static bool IsFlowParameterKey(string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-            return false;
-
-        return key.Equals("_ActionMap", StringComparison.OrdinalIgnoreCase) ||
-               key.Equals("_SkipID", StringComparison.OrdinalIgnoreCase) ||
-               key.Equals("_BackupSkipID", StringComparison.OrdinalIgnoreCase) ||
-               key.Equals("_RuleID", StringComparison.OrdinalIgnoreCase) ||
-               key.Equals("_RuleCounter", StringComparison.OrdinalIgnoreCase) ||
-               key.Equals("_ActionNames", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsFlowDebugToken(string token)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return false;
-
-        return token.IndexOf("Rule", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               token.IndexOf("Action", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               token.IndexOf("Skip", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               token.IndexOf("Sub", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               token.IndexOf("Status", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               token.Equals("_RuleGUID", StringComparison.OrdinalIgnoreCase) ||
-               token.Equals("_RuleID", StringComparison.OrdinalIgnoreCase) ||
-               token.Equals("_ActionMap", StringComparison.OrdinalIgnoreCase) ||
-               token.Equals("_ActionNames", StringComparison.OrdinalIgnoreCase) ||
-               token.Equals("_SkipID", StringComparison.OrdinalIgnoreCase) ||
-               token.Equals("_BackupSkipID", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void AddCounts<T>(List<AcRuleCount> target, IEnumerable<IGrouping<string, T>> groups)
     {
         target.Clear();
@@ -1464,7 +1282,6 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         AcRuleReport rules = InspectAcRules(ruleOptions);
         AcRelationshipReport relationships = BuildRelationshipReport(rules, includeRules: false);
         relationships.RebuildCounts();
-        AcRuleFlowReport flow = BuildFlowReport(rules, includeHeuristicSequence: true);
         AcTreeReport tree = BuildAcTree(new AcTreeOptions
         {
             Path = options.Path,
@@ -1481,7 +1298,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             : Path.GetFullPath(options.OutputPath);
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? Environment.CurrentDirectory);
-        File.WriteAllText(outputPath, BuildAcViewerHtml(rules, relationships, flow, tree), Encoding.UTF8);
+        File.WriteAllText(outputPath, BuildAcViewerHtml(rules, relationships, tree), Encoding.UTF8);
+        IReadOnlyList<string> staticAssetWarnings = CopyAcViewerStaticAssets(outputPath);
 
         // Prepare viewer report early so we can attach non-fatal warnings from
         // sidecar JSON generation failures.
@@ -1491,8 +1309,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             OutputPath = outputPath,
             ScopeCount = rules.ScopeCount,
             RuleCount = rules.RuleCount,
-            RelationshipCount = relationships.RelationshipCount,
-            FlowEdgeCount = flow.EdgeCount
+            RelationshipCount = relationships.RelationshipCount
         };
 
         // Also write evidence sidecar JSON files so the static viewer can load large
@@ -1508,12 +1325,10 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
             string rulesJson = JsonConvert.SerializeObject(rules, serializerSettings);
             string relJson = JsonConvert.SerializeObject(relationships, serializerSettings);
-            string flowJson = JsonConvert.SerializeObject(flow, serializerSettings);
             string treeJson = JsonConvert.SerializeObject(tree, serializerSettings);
 
             File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.rules.json"), rulesJson, Encoding.UTF8);
             File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.rel.json"), relJson, Encoding.UTF8);
-            File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.flow.json"), flowJson, Encoding.UTF8);
             File.WriteAllText(Path.Combine(outDir, "ac-rule-viewer.tree.json"), treeJson, Encoding.UTF8);
         }
         catch (Exception ex)
@@ -1521,6 +1336,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             // Non-fatal: record as a warning on the report so the caller can see it.
             report.Warnings.Add("Could not write viewer sidecar JSON files: " + ex.Message);
         }
+        report.Warnings.AddRange(staticAssetWarnings);
         report.Warnings.AddRange(rules.Warnings);
         report.Warnings.AddRange(relationships.Warnings);
         report.Warnings.AddRange(tree.Warnings);
@@ -1647,7 +1463,6 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             scope.UnresolvedSkipTargetCount = report.Edges.Count(e => e.ScopePath == scope.ScopePath && e.EdgeKind == AcRuleFlowEdgeKind.UnresolvedSkipTarget);
         }
 
-        report.Warnings.Add("Flow graph distinguishes sequence evidence from branch evidence. SequentialNext edges are heuristic and must not be treated as proof of runtime parent/child hierarchy.");
         report.Warnings.Add("Action names are parsed, but ActionMap/sub-list targets may remain unresolved until the proprietary action-map encoding is decoded.");
         report.RebuildCounts();
         return report;
@@ -2367,7 +2182,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         return state;
     }
 
-    private static string BuildAcViewerHtml(AcRuleReport rules, AcRelationshipReport relationships, AcRuleFlowReport flow, AcTreeReport tree)
+    private static string BuildAcViewerHtml(AcRuleReport rules, AcRelationshipReport relationships, AcTreeReport tree)
     {
         // The viewer embeds the snapshot directly into a self-contained HTML file.
         // EscapeHtml prevents raw FWD/STC text from terminating the script block
@@ -2379,22 +2194,18 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
         string rulesJson = JsonConvert.SerializeObject(rules, Formatting.None, jsonSettings);
         string relJson = JsonConvert.SerializeObject(relationships, Formatting.None, jsonSettings);
-        string flowJson = JsonConvert.SerializeObject(flow, Formatting.None, jsonSettings);
         string treeJson = JsonConvert.SerializeObject(tree, Formatting.None, jsonSettings);
 
         string rulesJsonEscaped = JsonConvert.ToString(rulesJson);
         string relJsonEscaped = JsonConvert.ToString(relJson);
-        string flowJsonEscaped = JsonConvert.ToString(flowJson);
         string treeJsonEscaped = JsonConvert.ToString(treeJson);
 
         return LoadAcViewerHtmlTemplate()
             .Replace("\"__RULES_JSON__\"", rulesJsonEscaped)
             .Replace("\"__RELATIONSHIPS_JSON__\"", relJsonEscaped)
-            .Replace("\"__FLOW_JSON__\"", flowJsonEscaped)
             .Replace("\"__TREE_JSON__\"", treeJsonEscaped)
             .Replace("__RULES_JSON__", rulesJson)
             .Replace("__RELATIONSHIPS_JSON__", relJson)
-            .Replace("__FLOW_JSON__", flowJson)
             .Replace("__TREE_JSON__", treeJson);
     }
 
@@ -2421,17 +2232,93 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
                 continue;
 
             string content = File.ReadAllText(candidate, Encoding.UTF8);
-            // If the external template contains the JSON placeholders return it so
-            // the export embeds the snapshot inline. Otherwise ignore the external
-            // template to avoid producing an HTML viewer that requires external
-            // sidecar files which are brittle when opened via file:// URLs.
-            if (content.Contains("__RULES_JSON__") || content.Contains("__RELATIONSHIPS_JSON__") || content.Contains("__TREE_JSON__") || content.Contains("__FLOW_JSON__"))
+            if (IsUsableExternalAcViewerTemplate(content))
                 return content;
         }
 
         // No suitable external template found; use the embedded template which
         // includes JSON placeholders that will be replaced with the snapshot.
         return AcViewerHtmlTemplate();
+    }
+
+    private static bool IsUsableExternalAcViewerTemplate(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return false;
+
+        // Inline snapshot templates are still supported.
+        if (content.Contains("__RULES_JSON__") ||
+            content.Contains("__RELATIONSHIPS_JSON__") ||
+            content.Contains("__TREE_JSON__"))
+            return true;
+
+        // The current production viewer uses external JS/CSS plus sidecar JSON files.
+        // Treat that shell as valid so the generator does not silently fall back to
+        // the older embedded Base64 viewer. The sidecars are written beside the
+        // output HTML by ExportAcViewer.
+        return content.IndexOf("AC Rule Workbench", StringComparison.OrdinalIgnoreCase) >= 0 &&
+               content.IndexOf("ac-rule-viewer.js", StringComparison.OrdinalIgnoreCase) >= 0 &&
+               content.IndexOf("ac-rule-viewer.css", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static IReadOnlyList<string> CopyAcViewerStaticAssets(string outputPath)
+    {
+        var warnings = new List<string>();
+        string outputDirectory = Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? Environment.CurrentDirectory;
+
+        foreach (string assetName in new[] { "ac-rule-viewer.css", "ac-rule-viewer.js" })
+        {
+            string source = FindAcViewerStaticAsset(assetName);
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                warnings.Add("Could not locate viewer static asset: " + assetName + ". The generated HTML may render without the current UI shell.");
+                continue;
+            }
+
+            string destination = Path.Combine(outputDirectory, assetName);
+            try
+            {
+                if (!AreSamePath(source, destination))
+                    File.Copy(source, destination, overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                warnings.Add("Could not copy viewer static asset " + assetName + ": " + ex.Message);
+            }
+        }
+
+        return warnings;
+    }
+
+    private static string FindAcViewerStaticAsset(string assetName)
+    {
+        string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+        string assemblyDirectory = Path.GetDirectoryName(typeof(FormWorksExtractionClient).Assembly.Location) ?? baseDirectory;
+
+        string[] candidates =
+        {
+            Path.Combine(Environment.CurrentDirectory, "AcRuleWorkbench.Core", "Viewer", assetName),
+            Path.Combine(Environment.CurrentDirectory, "Viewer", assetName),
+            Path.Combine(baseDirectory, "Viewer", assetName),
+            Path.Combine(assemblyDirectory, "Viewer", assetName),
+            Path.Combine(Environment.CurrentDirectory, assetName)
+        };
+
+        return candidates.FirstOrDefault(File.Exists) ?? string.Empty;
+    }
+
+    private static bool AreSamePath(string left, string right)
+    {
+        try
+        {
+            return string.Equals(Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                 Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                 StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string AcViewerHtmlTemplate()

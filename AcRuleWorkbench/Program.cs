@@ -164,7 +164,7 @@ internal static class Program
     {
         public bool CanHandle(string[] args)
         {
-            return Has(args, "ac-rules") || Has(args, "ac-trace") || Has(args, "ac-field") || Has(args, "ac-attr") || Has(args, "ac-rejects") || Has(args, "ac-index") || Has(args, "ac-flow") || Has(args, "ac-flow-debug") || Has(args, "ac-diagnostics") || Has(args, "ac-tree") || Has(args, "ac-disabled") || Has(args, "ac-viewer");
+            return Has(args, "ac-rules") || Has(args, "ac-trace") || Has(args, "ac-field") || Has(args, "ac-attr") || Has(args, "ac-rejects") || Has(args, "ac-index") || Has(args, "ac-diagnostics") || Has(args, "ac-tree") || Has(args, "ac-disabled") || Has(args, "ac-viewer");
         }
 
         public int Execute(CommandContext context)
@@ -280,48 +280,7 @@ internal static class Program
                 Output(report, context.Json, PrintAcIndex);
                 return 0;
             }
-
-            if (Has(context.Args, "ac-flow"))
-            {
-                var options = new AcFlowOptions
-                {
-                    Path = GetValue(context.Args, "--path"),
-                    ProcessName = GetValue(context.Args, "--process") ?? "AC",
-                    Term = GetValue(context.Args, "--term"),
-                    Scope = GetValue(context.Args, "--scope"),
-                    FromRuleIndex = GetNullableInt(context.Args, "--from-rule"),
-                    FromRuleGuid = GetValue(context.Args, "--from-guid"),
-                    IncludeHeuristicSequence = !Has(context.Args, "--no-sequence-edges"),
-                    RequireNativeOk = Has(context.Args, "--require-native-ok")
-                };
-
-                AcRuleFlowReport report = context.Client.BuildAcFlow(options);
-                Output(report, context.Json, PrintAcFlow);
-                return 0;
-            }
-
-            if (Has(context.Args, "ac-flow-debug"))
-            {
-                var options = new AcFlowDebugOptions
-                {
-                    Path = GetValue(context.Args, "--path"),
-                    ProcessName = GetValue(context.Args, "--process") ?? "AC",
-                    Term = GetValue(context.Args, "--term"),
-                    Scope = GetValue(context.Args, "--scope"),
-                    FromRuleIndex = GetNullableInt(context.Args, "--from-rule"),
-                    FromRuleGuid = GetValue(context.Args, "--from-guid"),
-                    MaxRules = GetInt(context.Args, "--max-rules", 25),
-                    MaxRawTokensPerRule = GetInt(context.Args, "--max-raw-tokens", 80),
-                    MaxRawTokensPerScope = GetInt(context.Args, "--max-scope-tokens", 400),
-                    RequireNativeOk = Has(context.Args, "--require-native-ok")
-                };
-
-                AcFlowDebugReport report = context.Client.BuildAcFlowDebug(options);
-                Output(report, context.Json, PrintAcFlowDebug);
-                return 0;
-            }
-
-            if (Has(context.Args, "ac-diagnostics"))
+if (Has(context.Args, "ac-diagnostics"))
             {
                 var options = new AcRuleOptions
                 {
@@ -578,7 +537,6 @@ internal static class Program
         Console.WriteLine("  AcRuleWorkbench.exe stc-process --path C:\\path\\to\\fwd.cfd --process AC [--max-depth 5] [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-rules --path C:\\path\\to\\fwd.cfd [--term COB] [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-trace --path C:\\path\\to\\fwd.cfd [--field DentalADA.COBIndicator] [--json]");
-        Console.WriteLine("  AcRuleWorkbench.exe ac-flow --path C:\\path\\to\\fwd.cfd [--scope DentalADA] [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-tree --path C:\\path\\to\\fwd.cfd [--scope DentalADA] [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-index --path C:\\path\\to\\fwd.cfd [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-field --path C:\\path\\to\\fwd.cfd --field DentalADA.COBIndicator [--json]");
@@ -596,10 +554,8 @@ internal static class Program
         Console.WriteLine("  stc-process                    Traverse private STC tree for AC/FIP/Store/OCR/etc.");
         Console.WriteLine("  ac-rules                       Parse AC rule payloads into structured rule records.");
         Console.WriteLine("  ac-trace                       Classify rule relationships to fields, attrs, rejects, sources.");
-        Console.WriteLine("  ac-flow                        Build explicit sequence/skip/action flow edges with confidence.");
         Console.WriteLine("  ac-tree                        Parse the structural AC rule tree from packed rule-list bytes.");
-        Console.WriteLine("  ac-flow-debug                  Show raw flow tokens around branch/rule-control metadata.");
-        Console.WriteLine("  ac-diagnostics                 Summarize parser trust, unresolved flow, duplicates, disabled states.");
+        Console.WriteLine("  ac-diagnostics                 Summarize parser trust, duplicates, and disabled states.");
         Console.WriteLine("  ac-index                       Build a compact semantic index of fields, attrs, options, rejects.");
         Console.WriteLine("  ac-field                       Trace all rules related to a field.");
         Console.WriteLine("  ac-attr                        Trace all rules related to an attribute.");
@@ -619,7 +575,6 @@ internal static class Program
         Console.WriteLine("  AcRuleWorkbench.exe ac-attr --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --attr RejectLetter --json > ac-rejectletter-attr.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-rejects --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --json > ac-rejects.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-disabled --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --json > ac-disabled.json");
-        Console.WriteLine("  AcRuleWorkbench.exe ac-flow --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --scope DentalADA --json > ac-flow-dentalada.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-tree --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --scope DentalADA --json > ac-tree-dentalada.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-viewer --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --out ac-viewer.html --open");
         Console.WriteLine();
@@ -636,9 +591,6 @@ internal static class Program
         Console.WriteLine("  --field <text>                 AC relationship field filter, e.g. DentalADA.COBIndicator.");
         Console.WriteLine("  --attr <text>                  AC relationship attribute filter, e.g. RejectLetter.");
         Console.WriteLine("  --kind <text>                  AC relationship kind filter, e.g. RejectsField or ReadsAttribute.");
-        Console.WriteLine("  --from-rule <n>                AC flow filter: show edges touching one rule index.");
-        Console.WriteLine("  --from-guid <guid>             AC flow filter: show edges touching one rule GUID.");
-        Console.WriteLine("  --no-sequence-edges            AC flow: omit heuristic SequentialNext edges.");
         Console.WriteLine("  --state <text>                 Disabled state filter: direct, inherited, possible, enabled.");
         Console.WriteLine("  --target <text>                Alternate shorthand for --field/--attr in focused commands.");
         Console.WriteLine("  --out <path>                   Output path for ac-viewer HTML.");
@@ -650,8 +602,6 @@ internal static class Program
         Console.WriteLine("  --include-raw-tokens           Include parser raw token samples per AC scope/rule.");
         Console.WriteLine("  --max-raw-tokens <n>           Raw token cap per AC scope. Default 250.");
         Console.WriteLine("  --max-scopes <n>               Optional AC scope cap. Default 0/no cap.");
-        Console.WriteLine("  --max-rules <n>                AC flow-debug rule cap. Default 25.");
-        Console.WriteLine("  --max-scope-tokens <n>         AC flow-debug raw scope token cap. Default 400.");
         Console.WriteLine("  --include-attributes           AC tree: include masked raw AttrList values on nodes.");
         Console.WriteLine("  --no-mask-sensitive            AC tree/private dumps: do not mask sensitive key values.");
         Console.WriteLine("  --max-hierarchy-depth <n>      AC tree structural parser depth guard. Default 256.");
@@ -960,70 +910,6 @@ internal static class Program
         }
     }
 
-    private static void PrintAcFlow(AcRuleFlowReport report)
-    {
-        Console.WriteLine("AC Rule Flow");
-        Console.WriteLine("============");
-        Console.WriteLine("FWD       : " + report.FwdPath);
-        Console.WriteLine("Process   : " + report.ProcessName);
-        Console.WriteLine("Scopes    : " + report.ScopeCount);
-        Console.WriteLine("Nodes     : " + report.NodeCount);
-        Console.WriteLine("Edges     : " + report.EdgeCount);
-        Console.WriteLine("Parsed    : " + report.ParsedEdgeCount);
-        Console.WriteLine("Heuristic : " + report.HeuristicEdgeCount);
-        Console.WriteLine("Unknown   : " + report.UnknownEdgeCount);
-        Console.WriteLine();
-
-        Console.WriteLine("Scopes");
-        foreach (AcRuleFlowScope scope in report.Scopes.Take(25))
-            Console.WriteLine($"- {scope.ScopeType}:{scope.ScopeName} rules={scope.RuleCount} edges={scope.EdgeCount} unknownActions={scope.UnknownActionTargetCount}");
-
-        Console.WriteLine();
-        Console.WriteLine("Edges");
-        foreach (AcRuleFlowEdge edge in report.Edges.Take(120))
-        {
-            string to = edge.ToRuleIndex.HasValue ? "#" + edge.ToRuleIndex.Value + " " + (edge.ToRuleName ?? string.Empty) : "(unresolved)";
-            Console.WriteLine($"- {edge.EdgeKind} [{edge.Confidence}] #{edge.FromRuleIndex} {edge.FromRuleName ?? string.Empty} -> {to}");
-            if (!string.IsNullOrWhiteSpace(edge.ActionName))
-                Console.WriteLine("  Action: " + edge.ActionName);
-            if (!string.IsNullOrWhiteSpace(edge.Evidence))
-                Console.WriteLine("  Evidence: " + edge.Evidence);
-        }
-
-        if (report.Edges.Count > 120)
-            Console.WriteLine($"... {report.Edges.Count - 120} more edges. Use --json for full output.");
-
-        PrintWarnings(report.Warnings);
-    }
-
-    private static void PrintAcFlowDebug(AcFlowDebugReport report)
-    {
-        Console.WriteLine("AC Flow Debug");
-        Console.WriteLine("=============");
-        Console.WriteLine("FWD       : " + report.FwdPath);
-        Console.WriteLine("Process   : " + report.ProcessName);
-        Console.WriteLine("Scopes    : " + report.ScopeCount);
-        Console.WriteLine("Rules     : " + report.RuleCount);
-        Console.WriteLine("Returned  : " + report.ReturnedRuleCount);
-        Console.WriteLine("Truncated : " + report.Truncated);
-        Console.WriteLine();
-
-        foreach (AcFlowDebugRule rule in report.Rules.Take(50))
-        {
-            Console.WriteLine($"- [{rule.ScopeType}:{rule.ScopeName}] #{rule.RuleIndex} {rule.RuleName ?? "(unnamed)"}");
-            Console.WriteLine($"  GUID: {rule.RuleGuid ?? "(missing)"}; RuleID: {rule.RuleId ?? "(missing)"}; Function: {rule.FunctionName ?? "(missing)"}");
-            Console.WriteLine($"  RuleCounter: {(rule.RuleCounter.HasValue ? rule.RuleCounter.Value.ToString() : "(missing)")}; SkipID: {(rule.SkipId.HasValue ? rule.SkipId.Value.ToString() : "(none)")}; BackupSkipID: {(rule.BackupSkipId.HasValue ? rule.BackupSkipId.Value.ToString() : "(none)")}");
-            if (rule.ActionNames.Count > 0)
-                Console.WriteLine("  Actions: " + string.Join(", ", rule.ActionNames));
-            if (!string.IsNullOrWhiteSpace(rule.ActionMapRaw))
-                Console.WriteLine("  ActionMapRaw: " + rule.ActionMapRaw);
-            foreach (string warning in rule.Warnings)
-                Console.WriteLine("  Warning: " + warning);
-        }
-
-        PrintWarnings(report.Warnings);
-    }
-
     private static void PrintAcDiagnostics(AcDiagnosticsReport report)
     {
         Console.WriteLine("AC Diagnostics");
@@ -1033,8 +919,6 @@ internal static class Program
         Console.WriteLine("Scopes                : " + report.ScopeCount);
         Console.WriteLine("Rules                 : " + report.RuleCount);
         Console.WriteLine("Relationships         : " + report.RelationshipCount);
-        Console.WriteLine("Flow edges            : " + report.FlowEdgeCount);
-        Console.WriteLine("Proven/Parsed/Heur/Unk: " + report.ProvenFlowEdgeCount + "/" + report.ParsedFlowEdgeCount + "/" + report.HeuristicFlowEdgeCount + "/" + report.UnknownFlowEdgeCount);
         Console.WriteLine("Missing RuleID        : " + report.MissingRuleIdCount);
         Console.WriteLine("Missing function      : " + report.MissingFunctionCount);
         Console.WriteLine("Rules with actions    : " + report.RulesWithActionNamesCount);

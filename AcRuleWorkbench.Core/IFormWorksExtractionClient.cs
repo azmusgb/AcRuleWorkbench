@@ -21,12 +21,7 @@ public interface IFormWorksExtractionClient
     AcIndexReport BuildAcIndex(AcRuleOptions options);
 
     AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options);
-
-    AcRuleFlowReport BuildAcFlow(AcFlowOptions options);
-
-    AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options);
-
-    AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options);
+AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options);
 
     AcTreeReport BuildAcTree(AcTreeOptions options);
 

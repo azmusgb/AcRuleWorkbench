@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,7 +20,6 @@ internal sealed class WorkbenchApiServer
 {
     private static readonly HashSet<string> ViewerRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        string.Empty,
         "viewer",
         "viewer/index.html",
         "viewer/ac-rule-viewer.html",
@@ -216,20 +215,52 @@ internal sealed class WorkbenchApiServer
                 ExceptionMessage = ex.InnerException?.Message
             }, 400, _options.EnableCors);
         }
+        catch (Exception ex) when (ApiResponseWriter.IsClientDisconnectedException(ex))
+        {
+            _logger.LogDebug(ex, "API client disconnected before the response could be written.");
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled API request failure");
-            _responseWriter.WriteJson(context.Response, new ApiError
+            try
             {
-                Error = "Unhandled server error.",
-                ExceptionType = ex.GetType().Name,
-                ExceptionMessage = ex.Message
-            }, 500, _options.EnableCors);
+                _responseWriter.WriteJson(context.Response, new ApiError
+                {
+                    Error = "Unhandled server error.",
+                    ExceptionType = ex.GetType().Name,
+                    ExceptionMessage = ex.Message
+                }, 500, _options.EnableCors);
+            }
+            catch (Exception writeEx) when (ApiResponseWriter.IsClientDisconnectedException(writeEx))
+            {
+                _logger.LogDebug(writeEx, "API client disconnected while the error response was being written.");
+            }
         }
         finally
         {
             _requestConcurrencyGate.Release();
         }
+    }
+
+    private static bool IsRootRequest(HttpListenerRequest request)
+    {
+        string path = request.Url?.AbsolutePath ?? "/";
+        return string.Equals(path, "/", StringComparison.Ordinal) || path.Length == 0;
+    }
+
+    private static void WriteRedirect(HttpListenerResponse response, string location)
+    {
+        if (response == null)
+            throw new ArgumentNullException(nameof(response));
+
+        if (string.IsNullOrWhiteSpace(location))
+            throw new ArgumentException("Redirect location is required.", nameof(location));
+
+        response.StatusCode = 302;
+        response.RedirectLocation = location;
+        response.Headers["Cache-Control"] = "no-store";
+        response.ContentLength64 = 0;
+        response.Close();
     }
 
     private void Handle(HttpListenerContext context)
@@ -240,6 +271,12 @@ internal sealed class WorkbenchApiServer
         if (string.Equals(request.HttpMethod, "OPTIONS", StringComparison.OrdinalIgnoreCase))
         {
             _responseWriter.WriteNoContent(response, _options.EnableCors);
+            return;
+        }
+
+        if (IsRootRequest(request))
+        {
+            WriteRedirect(response, "/viewer");
             return;
         }
 
@@ -279,13 +316,6 @@ internal sealed class WorkbenchApiServer
             WriteViewerCss(context, "ac-rule-viewer.css");
             return;
         }
-
-        if (route == "ac-rule-viewer-live.css" || route == "viewer/ac-rule-viewer-live.css")
-        {
-            WriteViewerCss(context, "ac-rule-viewer-live.css");
-            return;
-        }
-
         if (route == "ac-rule-viewer.js" || route == "viewer/ac-rule-viewer.js")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.js", "application/javascript; charset=utf-8", string.Empty);
@@ -307,12 +337,6 @@ internal sealed class WorkbenchApiServer
         if (route == "ac-rule-viewer.tree.json" || route == "viewer/ac-rule-viewer.tree.json")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.tree.json", "application/json; charset=utf-8", "{}");
-            return;
-        }
-
-        if (route == "ac-rule-viewer.flow.json" || route == "viewer/ac-rule-viewer.flow.json")
-        {
-            WriteViewerTextAsset(context, "ac-rule-viewer.flow.json", "application/json; charset=utf-8", "{}");
             return;
         }
 
@@ -550,38 +574,6 @@ internal sealed class WorkbenchApiServer
             });
         }
 
-        if (route == "api/ac/flow")
-        {
-            return _client.BuildAcFlow(new AcFlowOptions
-            {
-                Path = GetFwdPath(request),
-                ProcessName = Get(request, "process") ?? "AC",
-                Term = Get(request, "term"),
-                Scope = Get(request, "scope"),
-                FromRuleIndex = GetNullableInt(request, "fromRule"),
-                FromRuleGuid = Get(request, "fromGuid"),
-                IncludeHeuristicSequence = !GetBool(request, "noSequenceEdges", false),
-                RequireNativeOk = GetBool(request, "requireNativeOk", false)
-            });
-        }
-
-        if (route == "api/ac/flow-debug")
-        {
-            return _client.BuildAcFlowDebug(new AcFlowDebugOptions
-            {
-                Path = GetFwdPath(request),
-                ProcessName = Get(request, "process") ?? "AC",
-                Term = Get(request, "term"),
-                Scope = Get(request, "scope"),
-                FromRuleIndex = GetNullableInt(request, "fromRule"),
-                FromRuleGuid = Get(request, "fromGuid"),
-                MaxRules = GetInt(request, "maxRules", 25),
-                MaxRawTokensPerRule = GetInt(request, "maxRawTokens", 80),
-                MaxRawTokensPerScope = GetInt(request, "maxScopeTokens", 400),
-                RequireNativeOk = GetBool(request, "requireNativeOk", false)
-            });
-        }
-
         if (route == "api/fip")
         {
             return _client.InspectFip(new FipInspectionOptions
@@ -631,7 +623,6 @@ internal sealed class WorkbenchApiServer
                     "GET /api/debug/ac/rules",
                     "GET /api/debug/ac/tree",
                     "GET /api/debug/ac/relationships",
-                    "GET /api/debug/ac/flow-debug"
                 }
             };
         }
@@ -680,7 +671,6 @@ internal sealed class WorkbenchApiServer
         if (route == "api/debug/ac/rules") return Dispatch("api/ac/rules", request);
         if (route == "api/debug/ac/tree") return Dispatch("api/ac/tree", request);
         if (route == "api/debug/ac/relationships") return Dispatch("api/ac/relationships", request);
-        if (route == "api/debug/ac/flow-debug") return Dispatch("api/ac/flow-debug", request);
 
         throw new ApiRouteNotFoundException(route);
     }
@@ -708,7 +698,6 @@ internal sealed class WorkbenchApiServer
                 "GET /api/v1/rules/{nodeId}?include=subtree,references",
                 "GET /api/v1/search?q=provider",
                 "GET /api/v1/diagnostics",
-                "POST /api/v1/export",
                 "GET /api/v1/openapi.json"
             },
             compatibility = new
@@ -755,8 +744,6 @@ internal sealed class WorkbenchApiServer
         if (tail == "functions" || tail.StartsWith("functions/", StringComparison.OrdinalIgnoreCase)) return BuildFunctionsRoute(parts, request);
         if (tail == "resources" || tail.StartsWith("resources/", StringComparison.OrdinalIgnoreCase)) return BuildResourcesRoute(parts, request);
         if (tail == "search" || tail.StartsWith("search/", StringComparison.OrdinalIgnoreCase)) return BuildSearch(request, parts.Length > 3 ? parts[3] : null);
-        if (tail == "graph") return BuildGraph(request);
-        if (tail.StartsWith("impact/", StringComparison.OrdinalIgnoreCase)) return BuildImpact(parts.Length > 3 ? UrlDecode(parts[3]) : null, request);
         if (tail == "diagnostics" || tail.StartsWith("diagnostics/", StringComparison.OrdinalIgnoreCase)) return BuildSemanticDiagnostics(request, tail);
         if (tail == "evidence/summary") return BuildEvidenceSummary(request);
         if (tail == "evidence" || tail.StartsWith("evidence/", StringComparison.OrdinalIgnoreCase)) return BuildEvidence(request, parts.Length > 3 ? UrlDecode(parts[3]) : null);
@@ -834,7 +821,7 @@ internal sealed class WorkbenchApiServer
             serviceMode = "local-read-only",
             domainModel = new[]
             {
-                "configuration-identity", "true-hierarchy", "scope-aware-rules", "function-catalog", "field-schema", "reference-graph", "typed-search", "diagnostics", "evidence", "normalized-snapshot", "raw-stc-escape-hatch"
+                "configuration-identity", "true-hierarchy", "scope-aware-rules", "function-catalog", "field-schema", "typed-search", "diagnostics", "evidence", "normalized-snapshot", "raw-stc-escape-hatch"
             },
             supported = new
             {
@@ -844,8 +831,6 @@ internal sealed class WorkbenchApiServer
                 orderedRuleTree = true,
                 disabledInheritance = true,
                 relationshipExtraction = true,
-                graphProjection = true,
-                impactProjection = true,
                 typedSearch = true,
                 compare = false,
                 nativeRuleExecution = false,
@@ -855,8 +840,7 @@ internal sealed class WorkbenchApiServer
             caveats = new[]
             {
                 "Rule execution simulation is not exposed as native execution.",
-                "Raw STC endpoints are evidence/debug surfaces, not the primary domain model.",
-                "Graph and impact endpoints are projections from extracted rule/tree/relationship evidence."
+                "Raw STC endpoints are evidence/debug surfaces, not the primary domain model."
             }
         };
     }
@@ -890,7 +874,6 @@ internal sealed class WorkbenchApiServer
 
             fields = fwd.Fields,
             resources = fwd.Resources,
-            graph = BuildGraphPayload(fwd, tree, rels),
             diagnostics = new { fwdWarnings = fwd.Warnings, acDiagnostics = diag, treeDiagnostics = tree.Diagnostics, relationshipWarnings = rels.Warnings },
             evidenceSummary,
             evidence = BuildEvidencePayload(fwd, tree, rels, diag)
@@ -1059,25 +1042,6 @@ internal sealed class WorkbenchApiServer
         return new { schema = "FwdInspection.Search", q, kind, count = results.Count, results };
     }
 
-    private object BuildGraph(HttpListenerRequest request)
-    {
-        var fwd = InspectCore(request, includeFields: true);
-        var tree = TreeCore(request);
-        var rels = RelationshipsCore(request, includeRules: false);
-        return new { schema = "FwdInspection.Graph", schemaVersion = "2.0.0", graph = BuildGraphPayload(fwd, tree, rels) };
-    }
-
-    private object BuildImpact(string? nodeId, HttpListenerRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(nodeId)) throw new FormWorksInteropException("Impact endpoint requires /api/fwd/impact/{nodeId}.");
-        string id = nodeId!;
-        var rels = RelationshipsCore(request, includeRules: true);
-        var rules = RulesCore(request);
-        var affectedRels = rels.Relationships.Where(r => Contains(r.Target, id) || Contains(r.RuleGuid, id) || Contains(r.RuleName, id) || Contains(r.FunctionName, id)).ToList();
-        var affectedRules = rules.Rules.Where(r => RuleMatches(r, id) || affectedRels.Any(a => a.RuleIndex == r.RuleIndex && Eq(a.ScopePath, r.ScopePath))).ToList();
-        return new { schema = "FwdInspection.Impact", target = id, summary = new { affectedRuleCount = affectedRules.Count, affectedRelationshipCount = affectedRels.Count, confidence = "projection" }, affectedRules = affectedRules.Select(NormalizeRule).ToList(), relationships = affectedRels, caveat = "Impact is a static projection from extracted references. It is not native execution." };
-    }
-
     private object BuildSemanticDiagnostics(HttpListenerRequest request, string tail)
     {
         return new { schema = "FwdInspection.Diagnostics", schemaVersion = "2.0.0", fwd = InspectCore(request, includeFields: false).Warnings, ac = DiagnosticsCore(request), tree = TreeCore(request).Diagnostics, relationships = RelationshipsCore(request, includeRules: false).Warnings, category = tail };
@@ -1239,21 +1203,6 @@ internal sealed class WorkbenchApiServer
             evidence = new[] { "DocumentNames", "PageNames", "BatchNames", "ProcessNames", "VariantNames", "Fields when IncludeFields=true" },
             warnings = fwd.Warnings
         };
-    }
-
-    private static object BuildGraphPayload(FwdInspectionReport fwd, AcTreeReport tree, AcRelationshipReport rels)
-    {
-        var nodes = new List<object>();
-        var edges = new List<object>();
-        nodes.Add(new { id = "fwd", type = "fwd", label = Path.GetFileName(fwd.Path), path = fwd.Path });
-        foreach (string b in fwd.Batches) { string id = "batch:" + b; nodes.Add(new { id, type = "batchType", label = b }); edges.Add(new { from = "fwd", to = id, type = "CONTAINS", confidence = "Extracted" }); }
-        foreach (string d in fwd.Documents) { string id = "document:" + d; nodes.Add(new { id, type = "documentType", label = d }); edges.Add(new { from = "fwd", to = id, type = "CONTAINS", confidence = "Extracted" }); }
-        foreach (string p in fwd.Pages) { string id = "page:" + p; nodes.Add(new { id, type = "pageType", label = p }); edges.Add(new { from = "fwd", to = id, type = "CONTAINS", confidence = "Extracted" }); }
-        foreach (var bucket in fwd.Fields) foreach (var field in bucket.Fields) { string id = "field:" + bucket.ScopeName + ":" + field.Name; nodes.Add(new { id, type = "field", label = field.Name, scope = bucket.ScopeName, field.Type, field.Geometry }); edges.Add(new { from = "page:" + bucket.ScopeName, to = id, type = "HAS_FIELD", confidence = "Extracted" }); }
-        foreach (var n in tree.Nodes.Where(n => n.IsRuleNode)) { string id = "ruleNode:" + n.NodeId; nodes.Add(new { id, type = "rule", label = n.RuleName ?? n.FunctionName ?? ("Rule " + n.NodeId), scope = n.ScopePath, functionName = n.FunctionName, disabledState = n.DisabledState }); edges.Add(new { from = (string.IsNullOrWhiteSpace(n.ScopeName) ? "fwd" : (n.ScopeType.ToLowerInvariant() + ":" + n.ScopeName)), to = id, type = "HAS_RULE", confidence = "Parsed" }); if (!string.IsNullOrWhiteSpace(n.FunctionName)) { string fid = "function:" + n.FunctionName; nodes.Add(new { id = fid, type = "function", label = n.FunctionName }); edges.Add(new { from = id, to = fid, type = "CALLS_FUNCTION", confidence = "Parsed" }); } }
-        foreach (var e in tree.Edges) edges.Add(new { from = "ruleNode:" + e.FromNodeId, to = "ruleNode:" + e.ToNodeId, type = "HAS_ACTION", actionListIndex = e.ActionListIndex, actionName = e.ActionName, actionNameResolved = e.ActionNameResolved, confidence = e.Confidence, evidence = e.Evidence });
-        foreach (var r in rels.Relationships) edges.Add(new { from = "rule:" + r.ScopeName + ":" + r.RuleIndex, to = r.TargetType.ToLowerInvariant() + ":" + r.Target, type = NormalizeEdgeType(r), confidence = r.Confidence, evidence = r.Evidence });
-        return new { nodes = nodes.GroupBy(n => JsonConvert.SerializeObject(n)).Select(g => g.First()).ToList(), edges, counts = new { nodes = nodes.Count, edges = edges.Count } };
     }
 
     private static object BuildTruthModelPayload()
@@ -1702,7 +1651,6 @@ internal sealed class WorkbenchApiServer
                     completedUtc = DateTime.UtcNow,
                     fwd = new { path = fwdPath, exists = fwd != null, lastWriteUtc = fwd?.LastWriteTimeUtc, length = fwd?.Length },
                     viewer = new { path = viewerPath, exists = true, lastWriteUtc = viewer.LastWriteTimeUtc, length = viewer.Length },
-                    export = new { scopes = report.ScopeCount, rules = report.RuleCount, relationships = report.RelationshipCount },
                     links = new { viewer = "/viewer", harness = "/harness", status = "/api/v1/status" }
                 };
             }
@@ -1758,7 +1706,7 @@ internal sealed class WorkbenchApiServer
         try
         {
             string html = File.ReadAllText(viewerPath, Encoding.UTF8);
-            html = InjectApiWorkbenchBridge(html);
+            // Keep the viewer UI lean: do not inject the floating server refresh bridge.
             _responseWriter.WriteHtml(context.Response, html, _options.EnableCors);
         }
         catch (Exception ex)
@@ -1826,7 +1774,7 @@ internal sealed class WorkbenchApiServer
         return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>AC Rule Workbench not generated</title>" +
                "<style>body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}main{max-width:1040px;margin:44px auto;padding:0 22px}.card{background:white;border:1px solid #d7e0eb;border-radius:22px;padding:26px;box-shadow:0 18px 50px rgba(15,23,42,.10)}h1{margin:0 0 10px;font-size:28px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:24px 0 8px}p{color:#64748b;line-height:1.55}.facts{display:grid;grid-template-columns:160px 1fr;gap:8px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:16px 0}.facts b{color:#334155}pre{background:#101827;color:#eaf2ff;border-radius:14px;padding:16px;overflow:auto;white-space:pre-wrap}a{color:#3157d5;font-weight:800}.note{border-left:4px solid #3157d5;background:#eef3ff;padding:12px 14px;border-radius:12px;color:#334155}</style></head>" +
                "<body><main><section class=\"card\"><h1>Workbench file missing</h1><p>The API process is running, but no static <code>ac-rule-viewer.html</code> is attached or discoverable. This is a server setup issue, not an extraction failure.</p>" +
-               "<div class=\"facts\"><b>FWD path</b><span><code>" + path + "</code></span><b>Expected viewer</b><span><code>ac-rule-viewer.html</code></span><b>Best fix</b><span>Use the unified start script below. It generates the viewer and starts the API with refresh support.</span></div>" +
+               "<div class=\"facts\"><b>FWD path</b><span><code>" + path + "</code></span><b>Expected viewer</b><span><code>ac-rule-viewer.html</code></span><b>Best fix</b><span>Use the unified start script below. It prepares the viewer and starts the API.</span></div>" +
                "<h2>Recommended command</h2><pre>" + oneCommand + "</pre>" +
                "<h2>Manual command</h2><pre>" + manualCommand + "</pre>" +
                "<p class=\"note\">After running the command, open <a href=\"/viewer\">/viewer</a> or <a href=\"/harness\">/harness</a>.</p></section></main></body></html>";
@@ -1834,40 +1782,8 @@ internal sealed class WorkbenchApiServer
 
     private static string InjectApiWorkbenchBridge(string html)
     {
-        if (string.IsNullOrWhiteSpace(html) || html.IndexOf("AC_API_BRIDGE_V67", StringComparison.OrdinalIgnoreCase) >= 0)
-            return html;
-
-        const string bridge = @"
-<style id=""AC_API_BRIDGE_V67"">
-.ac-api-bridge-v67{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;background:rgba(20,24,31,.88);backdrop-filter:blur(7px);color:#e8eaed!important;font:700 11.5px/1.1 'IBM Plex Sans','Segoe UI',system-ui,sans-serif;border:1px solid rgba(255,255,255,.12);box-shadow:0 14px 34px rgba(2,6,23,.34),inset 0 1px 0 rgba(255,255,255,.05);opacity:.86;transition:opacity .16s ease,box-shadow .16s ease,transform .16s ease}
-.ac-api-bridge-v67:hover{opacity:.97;box-shadow:0 18px 40px rgba(2,6,23,.42),inset 0 1px 0 rgba(255,255,255,.07);transform:translateY(-1px)}
-.ac-api-bridge-v67 .bridge-title{display:inline-flex;align-items:center;gap:6px;padding:0 2px 0 0;color:#d4dae2;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;letter-spacing:.08em;text-transform:uppercase}
-.ac-api-bridge-v67 .bridge-title::before{content:'';width:6px;height:6px;border-radius:50%;background:#e8a030;box-shadow:0 0 8px rgba(232,160,48,.55)}
-.ac-api-bridge-v67 a,.ac-api-bridge-v67 button{appearance:none;border:1px solid #353840;border-radius:7px;text-decoration:none!important;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:27px;padding:0 9px;font:700 10.5px/1.1 'IBM Plex Sans','Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;background:#1c1f25;color:#d3d8e0!important;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
-.ac-api-bridge-v67 a:hover,.ac-api-bridge-v67 button:hover{background:#252a32;border-color:#4a505a;color:#f2f4f8!important;transform:translateY(-1px)}
-.ac-api-bridge-v67 a:focus-visible,.ac-api-bridge-v67 button:focus-visible{outline:2px solid rgba(232,160,48,.68);outline-offset:2px}
-.ac-api-bridge-v67 button{background:#1a1f2b;color:#c8d5ff!important}
-.ac-api-bridge-v67 .status{background:#1e232a;color:#d4dae2!important}
-.ac-api-bridge-v67 .mode{display:inline-flex;align-items:center;gap:7px;padding:0 8px;min-height:28px;border-radius:7px;background:#1b1f26;border:1px solid #353840;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;letter-spacing:.05em;text-transform:uppercase;color:#9aa0aa}
-.ac-api-bridge-v67 .mode select{min-height:24px;border-radius:6px;border:1px solid #4a505a;background:#10141c;color:#e8eaed;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;padding:0 8px}
-@media(max-width:720px){.ac-api-bridge-v67{right:10px;bottom:10px;max-width:calc(100vw - 20px);border-radius:10px;flex-wrap:wrap;justify-content:flex-end}.ac-api-bridge-v67 .bridge-title{width:100%;padding-bottom:2px}}
-</style>
-<div id=""acApiBridgeV67"" class=""ac-api-bridge-v67"" role=""region"" aria-label=""AC Rule Workbench server actions"">
-    <span class=""bridge-title"">Server</span>
-    <label class=""mode"" title=""Data mode for API-backed operations in this Workbench session""><span>Mode</span><select id=""acApiModeV67""><option value=""snapshot"">Snapshot</option><option value=""live"">Live</option></select></label>
-  <button id=""acApiRefreshV67"" type=""button"" title=""Regenerate this static viewer from the current FWD/CFD configuration on the server"">Refresh from FWD</button>
-  <a id=""acApiStatusV67"" class=""status"" href=""/api/v1/status"" target=""_blank"" rel=""noreferrer"" title=""View backend status and last refresh information"">Status</a>
-</div>
-<script id=""AC_API_BRIDGE_SCRIPT_V67"">
-(function(){try{var root=document.getElementById('acApiBridgeV67');if(!root)return;var base=location.protocol==='file:'?'http://127.0.0.1:8787':location.origin.replace(/\/$/,'');var params=new URLSearchParams(location.search);var mode=params.get('snapshotMode');if(mode!=='live'&&mode!=='snapshot')mode='snapshot';var status=document.getElementById('acApiStatusV67');var refresh=document.getElementById('acApiRefreshV67');var modeSelect=document.getElementById('acApiModeV67');function modeSuffix(){return '?snapshotMode='+encodeURIComponent(mode);}function applyLinks(){if(status)status.href=base+'/api/v1/status'+modeSuffix();}function applyModeToUrl(next){var nextUrl=new URL(location.href);nextUrl.searchParams.set('snapshotMode',next);location.replace(nextUrl.toString());}if(modeSelect){modeSelect.value=mode;modeSelect.addEventListener('change',function(){var next=modeSelect.value==='live'?'live':'snapshot';if(next!==mode)applyModeToUrl(next);});}applyLinks();if(refresh){refresh.addEventListener('click',async function(){if(!confirm('Regenerate the AC Rule Workbench from the current FWD/CFD configuration on the server?'))return;var old=refresh.textContent;refresh.disabled=true;refresh.textContent='Refreshing...';try{var res=await fetch(base+'/api/v1/snapshot/refresh'+modeSuffix(),{method:'POST',cache:'no-store'});var text=await res.text();var json=null;try{json=JSON.parse(text);}catch{}if(!res.ok||(json&&json.ok===false)){throw new Error((json&&(json.error||json.exceptionMessage||json.fix))||text||('HTTP '+res.status));}refresh.textContent='Refreshed';setTimeout(function(){location.reload();},650);}catch(e){alert('Refresh failed: '+(e&&e.message?e.message:e));refresh.textContent=old;refresh.disabled=false;}});}}catch(e){}}());
-</script>
-";
-
-        int bodyClose = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-        if (bodyClose >= 0)
-            return html.Insert(bodyClose, bridge);
-
-        return html + bridge;
+        // Server-side bridge injection was removed to keep /viewer focused on inspection.
+        return html;
     }
 
     private static void AddDeprecationHeaders(HttpListenerResponse response, string replacement)
@@ -1989,23 +1905,17 @@ internal sealed class WorkbenchApiServer
         _responseWriter.WriteText(context.Response, BuildViewerCss(cssFileName), "text/css; charset=utf-8", _options.EnableCors);
     }
 
-    // Uses local runtime/repo probing with fallback to ac-rule-viewer.css.
+    // Uses viewer-path-aware probing with fallback to ac-rule-viewer.css.
+    // The API process is normally launched from bin\x86\Debug\net48, while --viewer points
+    // to the repo-root ac-rule-viewer.html. Browser requests for /ac-rule-viewer.css,
+    // /ac-rule-viewer.js, and sidecar JSON files must therefore resolve next to the
+    // configured viewer file first, not only next to the executable.
     private string BuildViewerCss(string cssFileName)
     {
         string requested = string.IsNullOrWhiteSpace(cssFileName) ? "ac-rule-viewer.css" : cssFileName;
 
-        string[] requestedCandidates =
+        foreach (string candidate in EnumerateViewerAssetCandidates(requested))
         {
-            Path.Combine(Directory.GetCurrentDirectory(), requested),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, requested),
-            Path.Combine(Directory.GetCurrentDirectory(), "AcRuleWorkbench", requested)
-        };
-
-        foreach (string candidate in requestedCandidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
-                continue;
-
             try
             {
                 return File.ReadAllText(candidate, Encoding.UTF8);
@@ -2016,29 +1926,25 @@ internal sealed class WorkbenchApiServer
             }
         }
 
-        string[] fallbackCandidates =
+        if (!string.Equals(requested, "ac-rule-viewer.css", StringComparison.OrdinalIgnoreCase))
         {
-            Path.Combine(Directory.GetCurrentDirectory(), "ac-rule-viewer.css"),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ac-rule-viewer.css"),
-            Path.Combine(Directory.GetCurrentDirectory(), "AcRuleWorkbench", "ac-rule-viewer.css")
-        };
-
-        foreach (string candidate in fallbackCandidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
-                continue;
-
-            try
+            foreach (string candidate in EnumerateViewerAssetCandidates("ac-rule-viewer.css"))
             {
-                return File.ReadAllText(candidate, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Unable to read fallback viewer CSS from {Path}", candidate);
+                try
+                {
+                    return File.ReadAllText(candidate, Encoding.UTF8);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Unable to read fallback viewer CSS from {Path}", candidate);
+                }
             }
         }
 
-        return "body{font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}";
+        // Intentionally obvious fallback. If this appears in the browser, the server is
+        // running but cannot locate the real viewer stylesheet beside the generated viewer.
+        return "body{font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}"
+             + "body:before{content:'AC Rule Workbench CSS asset was not found by the server.';display:block;padding:10px 14px;background:#7c2d12;color:white;font-weight:700}";
     }
 
     // Serves viewer JavaScript/JSON sidecar assets so the hosted Workbench UI can fully bootstrap.
@@ -2047,26 +1953,15 @@ internal sealed class WorkbenchApiServer
         _responseWriter.WriteText(context.Response, BuildViewerTextAsset(assetFileName, fallbackContent), contentType, _options.EnableCors);
     }
 
-    // Uses runtime/repo probing so root-hosted and bin-hosted viewer assets resolve consistently.
+    // Uses viewer-path-aware probing so root-hosted and bin-hosted viewer assets resolve consistently.
     private string BuildViewerTextAsset(string assetFileName, string fallbackContent)
     {
         string requested = string.IsNullOrWhiteSpace(assetFileName) ? string.Empty : assetFileName;
         if (string.IsNullOrWhiteSpace(requested))
             return fallbackContent ?? string.Empty;
 
-        string[] candidates =
+        foreach (string candidate in EnumerateViewerAssetCandidates(requested))
         {
-            Path.Combine(Directory.GetCurrentDirectory(), requested),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, requested),
-            Path.Combine(Directory.GetCurrentDirectory(), "AcRuleWorkbench", requested),
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Viewer", requested)
-        };
-
-        foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(candidate) || !File.Exists(candidate))
-                continue;
-
             try
             {
                 return File.ReadAllText(candidate, Encoding.UTF8);
@@ -2078,6 +1973,97 @@ internal sealed class WorkbenchApiServer
         }
 
         return fallbackContent ?? string.Empty;
+    }
+
+    private IEnumerable<string> EnumerateViewerAssetCandidates(string assetFileName)
+    {
+        if (string.IsNullOrWhiteSpace(assetFileName))
+            yield break;
+
+        var directories = new List<string>();
+
+        void AddDirectory(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            try
+            {
+                string fullPath = Path.GetFullPath(path!);
+                if (!directories.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+                    directories.Add(fullPath);
+            }
+            catch
+            {
+                // Ignore invalid paths from command-line input or unusual working directories.
+            }
+        }
+
+        void AddFileDirectory(string? filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                return;
+
+            try
+            {
+                string resolvedFile = Path.IsPathRooted(filePath!)
+                    ? filePath!
+                    : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), filePath!));
+                AddDirectory(Path.GetDirectoryName(resolvedFile));
+            }
+            catch
+            {
+                // Ignore invalid paths from command-line input.
+            }
+        }
+
+        AddFileDirectory(_options.ViewerPath);
+
+        try
+        {
+            AddFileDirectory(ResolveStaticViewerPath());
+        }
+        catch
+        {
+            // Asset serving must not fail just because viewer discovery failed.
+        }
+
+        AddDirectory(Directory.GetCurrentDirectory());
+        AddDirectory(AppDomain.CurrentDomain.BaseDirectory);
+        AddDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Viewer"));
+        AddDirectory(Path.Combine(Directory.GetCurrentDirectory(), "Viewer"));
+        AddDirectory(Path.Combine(Directory.GetCurrentDirectory(), "AcRuleWorkbench.Core", "Viewer"));
+        AddDirectory(Path.Combine(Directory.GetCurrentDirectory(), "AcRuleWorkbench", "Viewer"));
+
+        string current = AppDomain.CurrentDomain.BaseDirectory;
+        for (int i = 0; i < 8 && !string.IsNullOrWhiteSpace(current); i++)
+        {
+            AddDirectory(current);
+            AddDirectory(Path.Combine(current, "Viewer"));
+            AddDirectory(Path.Combine(current, "AcRuleWorkbench.Core", "Viewer"));
+            AddDirectory(Path.Combine(current, "AcRuleWorkbench", "Viewer"));
+
+            DirectoryInfo? parent = Directory.GetParent(current);
+            if (parent == null)
+                break;
+            current = parent.FullName;
+        }
+
+        foreach (string dir in directories.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            string candidate;
+            try
+            {
+                candidate = Path.Combine(dir, assetFileName);
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (File.Exists(candidate))
+                yield return candidate;
+        }
     }
 
     private static string BuildFallbackHarnessHtml(string encodedDefaultPath)

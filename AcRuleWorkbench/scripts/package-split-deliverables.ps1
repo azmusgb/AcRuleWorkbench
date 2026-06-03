@@ -25,7 +25,7 @@ function Test-SourceExcludedPath {
     if ($n -match '(^|/)artifacts(/|$)') { return $true }
     if ($n -match '\.(log|tmp|bak|zip)$') { return $true }
     if ($n -match '(^|/)fwd\.cfd$') { return $true }
-    if ($n -match '(^|/)ac-rule-viewer\.(rules|tree|rel|flow)\.json$') { return $true }
+    if ($n -match '(^|/)ac-rule-viewer\.(rules|tree|rel)\.json$') { return $true }
     if ($n -match '(^|/)runtime-path\.generated\.ps1$') { return $true }
     return $false
 }
@@ -80,7 +80,7 @@ try {
         param($relative)
         $n = $relative -replace '\\', '/'
         if ($n -match '(^|/)ac-rule-viewer\.(html|css|js)$') { return $true }
-        if ($n -match '(^|/)ac-rule-viewer\.(rules|tree|rel|flow)\.json$') { return $true }
+        if ($n -match '(^|/)ac-rule-viewer\.(rules|tree|rel)\.json$') { return $true }
         if ($n -match '(^|/)SOURCE_MANIFEST\.csv$') { return $true }
         return $false
     }

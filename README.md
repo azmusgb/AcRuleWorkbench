@@ -1,32 +1,50 @@
 # AC Rule Workbench
 
-AC Rule Workbench is a local, read-only operational inspection app for FormWorks / Document Capture Manager Auto Capture rules. It opens a configured `fwd.cfd`, builds a normalized evidence model, serves a focused viewer, exposes a stable `/api/v1` product API, and exports reviewer-ready evidence packages.
+AC Rule Workbench is a local, read-only FW Editor companion for FormWorks / Document Capture Manager Auto Capture configuration. It opens a configured `fwd.cfd` and presents AC-related FWD configuration in a cleaner browser workspace with enhanced search, navigation, and inspection.
 
-## Production posture
+FW Editor remains the system of record for authoring, editing, testing, and saving FWD changes. AC Rule Workbench does not write to the FWD and does not simulate AC runtime execution.
 
-Default mode is intentionally conservative:
+## Product boundary
 
-- Debug API is **disabled by default**.
-- CORS is **disabled by default**.
-- Request-level `?path=` overrides are **disabled** when the server was started with `--path`.
-- Legacy `/api/fwd/*`, `/api/ac/*`, `/api/probe`, `/api/inspect`, and `/api/workbench/*` routes are compatibility or diagnostic surfaces, not product contracts.
-- The viewer treats Structure as hierarchy/order evidence and flat Inventory as search/completeness evidence only.
+The viewer is intended to represent what is in the FWD:
+
+- Global Definitions: Resources, Tables / SelectionLists, UDFs, Drivers
+- Rule Scopes: page and document AC rule scopes
+- Rule configuration: function, fields / parameters, attributes, status results, action lists, references, and raw FWD-derived data
+- UDF configuration: named parameters, status results, internal rules, caller mappings, and raw data
+- Table / SelectionList configuration: configuration, fields / columns, references, and raw data
+
+The viewer intentionally excludes FW Editor write operations:
+
+- no add / delete / move / rename rule operations
+- no enable / disable writeback
+- no parameter or attribute editing
+- no UDF or table editing
+- no save back to FWD
+- no AC Rules Tester runtime execution
 
 ## Build
 
 ```powershell
-.\scripts\build-and-doctor.ps1
+cd C:\dev\AcRuleWorkbench
+
+.\scripts\setup-dcm-deps.ps1
+
+.\scripts\build-and-doctor.ps1 `
+  -Configuration Debug `
+  -Platform x86 `
+  -FwdPath .\fwd.cfd
 ```
 
-The FormWorks/DCM runtime is x86. The project defaults to x86 to avoid accidental AnyCPU/x64 native-load failures.
+The FormWorks/DCM runtime is x86. Build and run as x86 to avoid AnyCPU/x64 native-load failures.
 
-## Run local production viewer
-
-On Windows hosts with restrictive execution policy, use the `.cmd` wrappers in `scripts` so startup works without local policy changes.
+## Run the local viewer
 
 ```powershell
-.\scripts\start-workbench.cmd `
-  -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd `
+cd C:\dev\AcRuleWorkbench
+
+.\scripts\start-workbench.ps1 `
+  -FwdPath .\fwd.cfd `
   -Port 8787 `
   -KillExisting
 ```
@@ -34,27 +52,16 @@ On Windows hosts with restrictive execution policy, use the `.cmd` wrappers in `
 Open:
 
 ```text
-http://127.0.0.1:8787/viewer
-http://127.0.0.1:8787/api/v1/status
-http://127.0.0.1:8787/api/v1/openapi.json
+http://127.0.0.1:8787/viewer?ui=readonly-editor-v62
 ```
 
-## Run diagnostic/developer mode
-
-Use this only when inspecting raw extraction behavior or using the API harness:
+For a cache-busted browser launch:
 
 ```powershell
-.\scripts\start-workbench.cmd `
-  -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd `
-  -Port 8787 `
-  -EnableDebugApi `
-  -AllowPathQuery `
-  -OpenHarness
+Start-Process msedge "http://127.0.0.1:8787/viewer?ui=readonly-editor-v62&nocache=$([guid]::NewGuid())"
 ```
 
-Diagnostic routes live under `/api/debug/*`. Top-level raw routes are legacy aliases and should not be used by new clients.
-
-## Public product API
+## Useful API endpoints
 
 ```http
 GET  /api/v1/health/live
@@ -66,21 +73,27 @@ GET  /api/v1/scopes
 GET  /api/v1/scopes/{scopeId}?include=structure,inventory,references,diagnostics
 GET  /api/v1/rules/{nodeId}?include=subtree,references,diagnostics
 GET  /api/v1/search?q=provider
-GET  /api/v1/diagnostics
-POST /api/v1/export
 GET  /api/v1/openapi.json
 ```
 
-Compatibility aliases for scope/rule subresources remain available, but the preferred production style is `include=`.
+Some legacy compatibility/debug routes remain in the codebase for existing callers, but the browser viewer is framed as a read-only FWD configuration viewer.
 
-## Validate package quality
+## Validation
 
 ```powershell
-.\scripts\test-code-quality.ps1
-.\scripts\test-api-v1.ps1 -BaseUrl http://127.0.0.1:8787
+.\scripts\build-and-doctor.ps1 `
+  -Configuration Debug `
+  -Platform x86 `
+  -FwdPath .\fwd.cfd
 ```
 
-`test-code-quality.ps1` checks PowerShell syntax, OpenAPI JSON, viewer JavaScript syntax when Node.js is available, duplicate viewer function declarations, unhandled viewer actions, and exposure of the removed density toggle.
+Then verify:
+
+```powershell
+Select-String -Path .\ac-rule-viewer.html -Pattern "readonly-editor-v62"
+Select-String -Path .\ac-rule-viewer.js -Pattern "ac-rule-workbench-v62-fw-editor-readonly"
+Invoke-WebRequest "http://127.0.0.1:8787/viewer?ui=readonly-editor-v62" -UseBasicParsing | Select-Object StatusCode, RawContentLength
+```
 
 ## Documentation
 
@@ -89,16 +102,6 @@ Compatibility aliases for scope/rule subresources remain available, but the pref
 - [Developer Guide](docs/developer-guide.md)
 - [API v1 Guide](docs/api-v1.md)
 - [Debug API Guide](docs/debug-api.md)
-- [Evidence Model](docs/evidence-model.md)
 - [Configuration](docs/configuration.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Runbooks](docs/runbooks)
-
-## Evidence discipline
-
-The app performs static configuration inspection. It does not simulate native AC runtime execution.
-
-- Structural tree evidence proves hierarchy, branch order, action routing, and disabled inheritance.
-- Flat inventory proves extraction coverage and broad searchability, not runtime order.
-- References are static evidence-coded relationships; confidence must be read explicitly.
-- Diagnostics are part of the product trust model, not debug noise.

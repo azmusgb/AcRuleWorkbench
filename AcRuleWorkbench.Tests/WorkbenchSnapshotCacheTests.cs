@@ -116,12 +116,7 @@ public sealed class WorkbenchSnapshotCacheTests
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-
-        public AcRuleFlowReport BuildAcFlow(AcFlowOptions options) => new AcRuleFlowReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-
-        public AcFlowDebugReport BuildAcFlowDebug(AcFlowDebugOptions options) => new AcFlowDebugReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-
-        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options)
+public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options)
         {
             Delay();
             return new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
