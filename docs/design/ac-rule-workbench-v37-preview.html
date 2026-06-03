@@ -1,4 +1,3 @@
-<!--  -->
 <!doctype html>
 <html lang="en" data-theme="dark">
 <head>
@@ -9,7 +8,7 @@
 </head>
 <body>
   <div class="app">
-    <header class="topbar">
+    <header class="topbar" role="banner">
       <div class="brand">
         <div class="brand-title">
           <div class="logo">AC</div>
@@ -20,7 +19,8 @@
         </div>
       </div>
       <div class="global-search">
-        <input type="search" placeholder="Search rules, functions, fields, routes, diagnostics...">
+        <label class="sr-only" for="previewSearch">Search preview content</label>
+        <input id="previewSearch" type="search" autocomplete="off" placeholder="Search rules, functions, fields, routes, diagnostics...">
         <span class="kbd">/</span>
       </div>
       <div class="top-actions">
@@ -29,17 +29,18 @@
       </div>
     </header>
     <div class="shell">
-      <aside class="pane left">
+      <aside class="pane left" aria-label="Scope navigator">
         <div class="pane-head">
           <div class="eyebrow">Scope navigator</div>
-          <input class="scope-search" type="search" placeholder="Filter scopes...">
+          <label class="sr-only" for="previewScopeSearch">Filter scopes</label>
+          <input id="previewScopeSearch" class="scope-search" type="search" autocomplete="off" placeholder="Filter scopes...">
         </div>
         <div class="scope-list scroll">
           <div class="scope-item active"><span class="scope-name">ClaimsEntry - pg1</span></div>
           <div class="scope-item"><span class="scope-name">ClaimsEntry - pg2</span></div>
         </div>
       </aside>
-      <main class="pane main">
+      <main class="pane main" id="mainContent" tabindex="-1">
         <div class="main-head">
           <div class="scope-title"><div class="scope-heading-stack"><div class="scope-kicker">Structure view</div><h2>ClaimsEntry - pg1</h2></div></div>
           <div class="tabs"><button class="tab active">Rules</button><button class="tab">Diagnostics</button></div>
@@ -55,7 +56,7 @@
           </div>
         </div>
       </main>
-      <aside class="pane right">
+      <aside class="pane right" aria-label="Inspector">
         <div class="inspector-head"><div class="inspector-title"><div><h3>Inspector</h3></div></div></div>
         <div class="inspector-body scroll"></div>
       </aside>

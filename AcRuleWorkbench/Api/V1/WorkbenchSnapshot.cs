@@ -20,7 +20,6 @@ internal sealed class WorkbenchSnapshot
     public Dictionary<string, ScopeModel> ScopesById { get; set; } = new Dictionary<string, ScopeModel>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, RuleModel> RulesByNodeId { get; set; } = new Dictionary<string, RuleModel>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, RuleModel> RulesByStructuralKey { get; set; } = new Dictionary<string, RuleModel>(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, RuleModel> RulesByFlatInventoryId { get; set; } = new Dictionary<string, RuleModel>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<AcRuleSummary>> FlatRulesByScopeId { get; set; } = new Dictionary<string, List<AcRuleSummary>>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<AcRuleRelationship>> RelationshipsByScopeId { get; set; } = new Dictionary<string, List<AcRuleRelationship>>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<AcTreeDiagnostic>> TreeDiagnosticsByScopeId { get; set; } = new Dictionary<string, List<AcTreeDiagnostic>>(StringComparer.OrdinalIgnoreCase);
@@ -35,11 +34,13 @@ internal sealed class ScopeModel
     public int StructuralRuleCount { get; set; }
     public int FlatInventoryCount { get; set; }
     public int FlatOnlyCount { get; set; }
-    public int AmbiguousCorrelationCount { get; set; }
     public int DirectDisabledCount { get; set; }
     public int InheritedDisabledCount { get; set; }
     public int ReferenceCount { get; set; }
     public int DiagnosticCount { get; set; }
+    public int StructuralCoverageGap { get; set; }
+    public double StructuralCoverageRatio { get; set; } = 1.0d;
+    public bool StructuralCoverageFailure { get; set; }
     public List<AcTreeNode> StructuralNodes { get; } = new List<AcTreeNode>();
     public List<AcTreeEdge> StructuralEdges { get; } = new List<AcTreeEdge>();
     public List<AcRuleSummary> FlatRules { get; } = new List<AcRuleSummary>();
@@ -53,8 +54,6 @@ internal sealed class RuleModel
     public string ScopeId { get; set; } = string.Empty;
     public AcTreeNode Node { get; set; } = new AcTreeNode();
     public AcRuleSummary? FlatRule { get; set; }
-    public RuleCorrelationMatch Correlation { get; set; } = RuleCorrelationMatch.None();
-    public List<AcRuleSummary> FlatRuleCandidates { get; } = new List<AcRuleSummary>();
     public List<AcRuleRelationship> Relationships { get; } = new List<AcRuleRelationship>();
     public List<AcTreeDiagnostic> Diagnostics { get; } = new List<AcTreeDiagnostic>();
     public List<RuleFieldResolutionEntry> FieldResolutions { get; } = new List<RuleFieldResolutionEntry>();
@@ -62,44 +61,6 @@ internal sealed class RuleModel
     public string Authority { get; set; } = "StructuralTree";
 
     public string DisabledAuthority { get; set; } = "Structural";
-}
-
-internal sealed class RuleCorrelationMatch
-{
-    public string Status { get; set; } = "None";
-    public string Confidence { get; set; } = "None";
-    public bool IsAccepted { get; set; }
-    public int CandidateCount { get; set; }
-    public string Evidence { get; set; } = "No flat inventory candidate matched this structural rule.";
-
-    public static RuleCorrelationMatch None()
-    {
-        return new RuleCorrelationMatch();
-    }
-
-    public static RuleCorrelationMatch Accepted(string status, string confidence, int candidateCount, string evidence)
-    {
-        return new RuleCorrelationMatch
-        {
-            Status = status,
-            Confidence = confidence,
-            IsAccepted = true,
-            CandidateCount = candidateCount,
-            Evidence = evidence
-        };
-    }
-
-    public static RuleCorrelationMatch Rejected(string status, string confidence, int candidateCount, string evidence)
-    {
-        return new RuleCorrelationMatch
-        {
-            Status = status,
-            Confidence = confidence,
-            IsAccepted = false,
-            CandidateCount = candidateCount,
-            Evidence = evidence
-        };
-    }
 }
 
 internal sealed class FieldCatalogEntry
@@ -121,7 +82,6 @@ internal sealed class RuleFieldResolutionEntry
     public string ParameterName { get; set; } = string.Empty;
     public string ParameterValue { get; set; } = string.Empty;
     public string ReferencedField { get; set; } = string.Empty;
-    public string ReferenceKind { get; set; } = "UnknownToken";
     public bool FieldExists { get; set; }
     public string Confidence { get; set; } = "Low";
     public string Source { get; set; } = "RuleParameter";
@@ -174,9 +134,7 @@ internal static class WorkbenchSnapshotBuilder
     private static void IndexSnapshot(WorkbenchSnapshot snapshot)
     {
         var scopes = new Dictionary<string, ScopeModel>(StringComparer.OrdinalIgnoreCase);
-        var structuralByExact = new Dictionary<string, List<AcTreeNode>>(StringComparer.OrdinalIgnoreCase);
-        var structuralByGuid = new Dictionary<string, List<AcTreeNode>>(StringComparer.OrdinalIgnoreCase);
-        var structuralByNameFunction = new Dictionary<string, List<AcTreeNode>>(StringComparer.OrdinalIgnoreCase);
+        var structuralKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (AcTreeNode node in snapshot.Tree.Nodes)
         {
@@ -186,9 +144,7 @@ internal static class WorkbenchSnapshotBuilder
             if (node.IsRuleNode)
             {
                 scope.StructuralRuleCount++;
-                AddLookup(structuralByExact, RuleCorrelation.StructuralKey(node), node);
-                AddLookup(structuralByGuid, RuleCorrelation.ScopedGuidKey(node), node);
-                AddLookup(structuralByNameFunction, RuleCorrelation.ScopedNameFunctionKey(node), node);
+                structuralKeys.Add(RuleCorrelation.StructuralKey(node));
             }
 
             if (node.DisabledState == AcDisabledStates.DisabledDirect) scope.DirectDisabledCount++;
@@ -208,12 +164,8 @@ internal static class WorkbenchSnapshotBuilder
             ScopeModel scope = GetOrCreateScope(scopes, scopeId, rule.ScopeName, rule.ScopeType);
             scope.FlatRules.Add(rule);
             scope.FlatInventoryCount++;
-
-            RuleCorrelationMatch structuralMatch = ResolveStructuralCorrelation(rule, structuralByExact, structuralByGuid, structuralByNameFunction);
-            if (!structuralMatch.IsAccepted)
+            if (!structuralKeys.Contains(RuleCorrelation.FlatKey(rule)))
                 scope.FlatOnlyCount++;
-            if (structuralMatch.Status.IndexOf("Ambiguous", StringComparison.OrdinalIgnoreCase) >= 0)
-                scope.AmbiguousCorrelationCount++;
 
             if (!snapshot.FlatRulesByScopeId.TryGetValue(scopeId, out List<AcRuleSummary>? flatList))
             {
@@ -256,51 +208,39 @@ internal static class WorkbenchSnapshotBuilder
             diagList.Add(diagnostic);
         }
 
+        ApplyStructuralCoverageDiagnostics(snapshot, scopes);
+
         snapshot.ScopesById = scopes;
         snapshot.FieldCatalogByName = BuildFieldCatalog(snapshot);
 
-        var flatByExact = snapshot.Rules.Rules
+        var flatByKey = snapshot.Rules.Rules
             .GroupBy(RuleCorrelation.FlatKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-        var flatByGuid = snapshot.Rules.Rules
-            .Select(r => new { Key = RuleCorrelation.ScopedGuidKey(r), Rule = r })
-            .Where(x => !string.IsNullOrWhiteSpace(x.Key))
-            .GroupBy(x => x.Key, x => x.Rule, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-        var flatByNameFunction = snapshot.Rules.Rules
-            .Select(r => new { Key = RuleCorrelation.ScopedNameFunctionKey(r), Rule = r })
-            .Where(x => !string.IsNullOrWhiteSpace(x.Key))
-            .GroupBy(x => x.Key, x => x.Rule, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+            .Where(g => g.Count() == 1)
+            .ToDictionary(g => g.Key, g => g.Single(), StringComparer.OrdinalIgnoreCase);
 
         foreach (AcTreeNode node in snapshot.Tree.Nodes.Where(n => n.IsRuleNode))
         {
             string nodeId = RuleCorrelation.NodeId(node);
             string scopeId = RuleCorrelation.ScopeId(node);
             string key = RuleCorrelation.StructuralKey(node);
-            List<AcRuleSummary> candidates;
-            RuleCorrelationMatch correlation = ResolveFlatCorrelation(node, flatByExact, flatByGuid, flatByNameFunction, out candidates);
-            AcRuleSummary? flat = correlation.IsAccepted && candidates.Count == 1 ? candidates[0] : null;
 
+            bool hasFlatRule = flatByKey.TryGetValue(key, out AcRuleSummary? flat);
             var model = new RuleModel
             {
                 NodeId = nodeId,
                 ScopeId = scopeId,
                 Node = node,
-                FlatRule = flat,
-                Correlation = correlation,
-                Authority = flat != null ? "StructuralTree+FlatInventory" : "StructuralTree",
+                FlatRule = hasFlatRule ? flat : null,
+                Authority = hasFlatRule ? "StructuralTree+FlatInventory" : "StructuralTree",
                 DisabledAuthority = node.DisabledState == AcDisabledStates.DisabledDirect
                     ? "StructuralDirect"
                     : node.DisabledState == AcDisabledStates.DisabledInherited
                         ? "StructuralInherited"
                         : "Structural"
             };
-            model.FlatRuleCandidates.AddRange(candidates.Take(25));
 
-            if (model.FlatRule != null)
+            if (model.FlatRule != null && node.DisabledState != AcDisabledStates.Enabled)
             {
-                // Structural disabled state is the only primary disabled authority for matched tree nodes.
                 model.FlatRule.DisabledState = node.DisabledState;
                 model.FlatRule.DisabledConfidence = node.DisabledConfidence;
                 model.FlatRule.DisabledReason = "Structural tree disabled state is authoritative for this matched rule.";
@@ -324,8 +264,6 @@ internal static class WorkbenchSnapshotBuilder
 
             snapshot.RulesByNodeId[nodeId] = model;
             snapshot.RulesByStructuralKey[key] = model;
-            if (model.FlatRule != null)
-                snapshot.RulesByFlatInventoryId[RuleCorrelation.InventoryId(model.FlatRule)] = model;
         }
 
         ResolveEdgeActionNamesFromFlatInventory(snapshot);
@@ -344,11 +282,7 @@ internal static class WorkbenchSnapshotBuilder
                 if (!snapshot.RulesByNodeId.TryGetValue(parentNodeId, out RuleModel? parentRule))
                     continue;
 
-                // Do not resolve labels from ambiguous or weak flat inventory candidates.
-                if (!parentRule.Correlation.IsAccepted || parentRule.FlatRule == null)
-                    continue;
-
-                List<string>? names = parentRule.FlatRule.ActionNames;
+                List<string>? names = parentRule.FlatRule?.ActionNames;
                 if (names == null || edge.ActionListIndex >= names.Count)
                     continue;
 
@@ -359,8 +293,8 @@ internal static class WorkbenchSnapshotBuilder
                 edge.ActionName = value.Trim();
                 edge.ActionNameResolved = true;
                 edge.Evidence = string.IsNullOrWhiteSpace(edge.Evidence)
-                    ? "Action label resolved from an accepted flat rule correlation."
-                    : edge.Evidence + " Action label resolved from an accepted flat rule correlation.";
+                    ? "Action label resolved from matched flat rule inventory ActionNames."
+                    : edge.Evidence + " Action label resolved from matched flat rule inventory ActionNames.";
             }
         }
     }
@@ -382,106 +316,65 @@ internal static class WorkbenchSnapshotBuilder
         return scope;
     }
 
-    private static void AddLookup<T>(Dictionary<string, List<T>> lookup, string key, T value)
+    private static void ApplyStructuralCoverageDiagnostics(WorkbenchSnapshot snapshot, Dictionary<string, ScopeModel> scopes)
     {
-        if (string.IsNullOrWhiteSpace(key))
-            return;
-
-        if (!lookup.TryGetValue(key, out List<T>? values))
+        foreach (ScopeModel scope in scopes.Values)
         {
-            values = new List<T>();
-            lookup[key] = values;
-        }
+            scope.StructuralCoverageGap = Math.Max(0, scope.FlatInventoryCount - scope.StructuralRuleCount);
+            scope.StructuralCoverageRatio = scope.StructuralRuleCount <= 0
+                ? scope.FlatInventoryCount > 0 ? double.PositiveInfinity : 1.0d
+                : (double)scope.FlatInventoryCount / scope.StructuralRuleCount;
+            scope.StructuralCoverageFailure = IsStructuralCoverageFailure(scope);
 
-        values.Add(value);
+            if (!scope.StructuralCoverageFailure)
+                continue;
+
+            var diagnostic = new AcTreeDiagnostic
+            {
+                Severity = "Critical",
+                ScopePath = scope.ScopeId,
+                NodeId = null,
+                Category = "StructuralCoverageFailure",
+                Message = scope.FlatInventoryCount + " flat inventory rows were extracted, but only " + scope.StructuralRuleCount + " structural rule nodes were parsed. Treat this scope as unreconciled; do not use it for order, route, or disabled-state review until extraction is corrected."
+            };
+
+            scope.TreeDiagnostics.Add(diagnostic);
+            scope.DiagnosticCount++;
+
+            if (!snapshot.TreeDiagnosticsByScopeId.TryGetValue(scope.ScopeId, out List<AcTreeDiagnostic>? diagList))
+            {
+                diagList = new List<AcTreeDiagnostic>();
+                snapshot.TreeDiagnosticsByScopeId[scope.ScopeId] = diagList;
+            }
+
+            diagList.Add(diagnostic);
+        }
     }
 
-    private static RuleCorrelationMatch ResolveFlatCorrelation(
-        AcTreeNode node,
-        Dictionary<string, List<AcRuleSummary>> flatByExact,
-        Dictionary<string, List<AcRuleSummary>> flatByGuid,
-        Dictionary<string, List<AcRuleSummary>> flatByNameFunction,
-        out List<AcRuleSummary> candidates)
+    private static bool IsStructuralCoverageFailure(ScopeModel scope)
     {
-        candidates = new List<AcRuleSummary>();
+        if (scope.FlatInventoryCount <= 0)
+            return false;
 
-        if (TryCandidateLookup(flatByExact, RuleCorrelation.StructuralKey(node), out candidates))
-        {
-            if (candidates.Count == 1)
-                return RuleCorrelationMatch.Accepted("Exact", "Authoritative", 1, "Matched by exact scope/index/GUID/rule/function identity.");
-
-            return RuleCorrelationMatch.Rejected("AmbiguousExact", "Unsafe", candidates.Count, "Multiple flat inventory rows share the exact structural identity. No row was selected automatically.");
-        }
-
-        if (TryCandidateLookup(flatByGuid, RuleCorrelation.ScopedGuidKey(node), out candidates))
-        {
-            if (candidates.Count == 1)
-                return RuleCorrelationMatch.Accepted("UniqueGuid", "Strong", 1, "Matched by unique scoped GUID fallback.");
-
-            return RuleCorrelationMatch.Rejected("AmbiguousGuid", "Unsafe", candidates.Count, "Multiple flat inventory rows share this scoped GUID. No row was selected automatically.");
-        }
-
-        if (TryCandidateLookup(flatByNameFunction, RuleCorrelation.ScopedNameFunctionKey(node), out candidates))
-        {
-            if (candidates.Count == 1)
-                return RuleCorrelationMatch.Rejected("UniqueNameFunction", "Weak", 1, "A unique name/function fallback exists, but it is not accepted as authoritative correlation.");
-
-            return RuleCorrelationMatch.Rejected("AmbiguousNameFunction", "Unsafe", candidates.Count, "Multiple flat inventory rows share this name/function pair.");
-        }
-
-        candidates = new List<AcRuleSummary>();
-        return RuleCorrelationMatch.None();
-    }
-
-    private static RuleCorrelationMatch ResolveStructuralCorrelation(
-        AcRuleSummary rule,
-        Dictionary<string, List<AcTreeNode>> structuralByExact,
-        Dictionary<string, List<AcTreeNode>> structuralByGuid,
-        Dictionary<string, List<AcTreeNode>> structuralByNameFunction)
-    {
-        List<AcTreeNode> candidates;
-        if (TryCandidateLookup(structuralByExact, RuleCorrelation.FlatKey(rule), out candidates))
-        {
-            return candidates.Count == 1
-                ? RuleCorrelationMatch.Accepted("Exact", "Authoritative", 1, "Matched one structural rule by exact identity.")
-                : RuleCorrelationMatch.Rejected("AmbiguousExact", "Unsafe", candidates.Count, "Multiple structural rules share this exact key.");
-        }
-
-        if (TryCandidateLookup(structuralByGuid, RuleCorrelation.ScopedGuidKey(rule), out candidates))
-        {
-            return candidates.Count == 1
-                ? RuleCorrelationMatch.Accepted("UniqueGuid", "Strong", 1, "Matched one structural rule by unique scoped GUID.")
-                : RuleCorrelationMatch.Rejected("AmbiguousGuid", "Unsafe", candidates.Count, "Multiple structural rules share this scoped GUID.");
-        }
-
-        if (TryCandidateLookup(structuralByNameFunction, RuleCorrelation.ScopedNameFunctionKey(rule), out candidates))
-        {
-            return candidates.Count == 1
-                ? RuleCorrelationMatch.Rejected("UniqueNameFunction", "Weak", 1, "Unique name/function fallback exists but is not authoritative.")
-                : RuleCorrelationMatch.Rejected("AmbiguousNameFunction", "Unsafe", candidates.Count, "Multiple structural rules share this name/function pair.");
-        }
-
-        return RuleCorrelationMatch.None();
-    }
-
-    private static bool TryCandidateLookup<T>(Dictionary<string, List<T>> lookup, string key, out List<T> candidates)
-    {
-        if (!string.IsNullOrWhiteSpace(key) && lookup.TryGetValue(key, out List<T>? values))
-        {
-            candidates = values;
+        if (scope.StructuralRuleCount <= 0)
             return true;
-        }
 
-        candidates = new List<T>();
-        return false;
+        int gap = scope.FlatInventoryCount - scope.StructuralRuleCount;
+        return (scope.FlatInventoryCount > scope.StructuralRuleCount * 2 && gap > 100) || gap > 500;
     }
 
     private static bool RelationshipMatchesNode(AcRuleRelationship relationship, AcTreeNode node)
     {
-        // Relationships are static dependency evidence. Avoid GUID-only matching because duplicate GUIDs exist in real exports.
-        if (relationship.RuleIndex == node.RuleIndexWithinScope && RuleCorrelation.Eq(relationship.FunctionName, node.FunctionName)) return true;
-        if (relationship.RuleIndex == node.RuleIndexWithinScope && RuleCorrelation.Eq(relationship.RuleName, node.RuleName)) return true;
-        if (relationship.RuleIndex == node.RuleIndexWithinScope && !string.IsNullOrWhiteSpace(relationship.RuleGuid) && RuleCorrelation.Eq(relationship.RuleGuid, node.RuleGuid)) return true;
+        // Relationship evidence is accepted only when the flat relationship row
+        // agrees with the structural ordinal and at least one identity signal.
+        // A GUID-only match is deliberately not enough because repeated GUIDs
+        // are common in copied/reused AC rules.
+        if (relationship.RuleIndex != node.RuleIndexWithinScope)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(node.RuleGuid) && RuleCorrelation.Eq(relationship.RuleGuid, node.RuleGuid)) return true;
+        if (RuleCorrelation.Eq(relationship.FunctionName, node.FunctionName) && RuleCorrelation.Eq(relationship.RuleName, node.RuleName)) return true;
+        if (RuleCorrelation.Eq(relationship.FunctionName, node.FunctionName) && string.IsNullOrWhiteSpace(relationship.RuleName)) return true;
         return false;
     }
 
@@ -545,10 +438,6 @@ internal static class WorkbenchSnapshotBuilder
         foreach (KeyValuePair<string, List<string>> parameter in model.Node.Parameters)
         {
             string parameterName = parameter.Key ?? string.Empty;
-            string referenceKind = ClassifyReferenceKind(parameterName);
-            if (!referenceKind.Equals("FieldReference", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             foreach (string rawValue in parameter.Value)
             {
                 string parameterValue = (rawValue ?? string.Empty).Trim();
@@ -562,14 +451,17 @@ internal static class WorkbenchSnapshotBuilder
                         continue;
 
                     bool hasMatch = snapshot.FieldCatalogByName.TryGetValue(token, out List<FieldCatalogEntry>? matches);
+                    bool fieldLikeParam = LooksLikeFieldParameter(parameterName);
+                    if (!hasMatch && !fieldLikeParam)
+                        continue;
+
                     var entry = new RuleFieldResolutionEntry
                     {
                         ParameterName = parameterName,
                         ParameterValue = parameterValue,
                         ReferencedField = token,
-                        ReferenceKind = referenceKind,
                         FieldExists = hasMatch,
-                        Confidence = hasMatch ? "High" : "Low"
+                        Confidence = hasMatch ? (fieldLikeParam ? "High" : "Medium") : "Low"
                     };
 
                     if (matches != null)
@@ -604,18 +496,13 @@ internal static class WorkbenchSnapshotBuilder
         }
     }
 
-    private static string ClassifyReferenceKind(string parameterName)
+    private static bool LooksLikeFieldParameter(string parameterName)
     {
         if (string.IsNullOrWhiteSpace(parameterName))
-            return "UnknownToken";
+            return false;
 
         string key = parameterName.ToLowerInvariant();
-        if (key.Contains("field") || key.Contains("column")) return "FieldReference";
-        if (key.Contains("attr")) return "AttributeReference";
-        if (key.Contains("source") || key.Contains("fileref")) return "SourceReference";
-        if (key.Contains("table") || key.Contains("selection")) return "TableReference";
-        if (key.Contains("function") || key.Contains("udf")) return "FunctionReference";
-        return "UnknownToken";
+        return key.Contains("field") || key.Contains("column");
     }
 
     private static void ParseGeometry(string? geometry, out int? x, out int? y, out int? width, out int? height)

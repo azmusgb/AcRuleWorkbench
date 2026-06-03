@@ -25,7 +25,8 @@ function Invoke-ApiCheck {
         $result = Invoke-RestMethod -Method $Method -Uri $uri -Body $json -ContentType 'application/json' -Headers @{ 'X-Request-Id' = "smoke-$Name" }
     }
 
-    if ($null -ne $result.ok -and $result.ok -ne $true) {
+    $okProperty = $result.PSObject.Properties['ok']
+    if ($null -ne $okProperty -and $okProperty.Value -ne $true) {
         throw "$Name returned ok=false"
     }
 
@@ -46,9 +47,9 @@ if ([string]::IsNullOrWhiteSpace($ScopeId) -and $scopes.data.items.Count -gt 0) 
 if (-not [string]::IsNullOrWhiteSpace($ScopeId)) {
     $encodedScope = [uri]::EscapeDataString($ScopeId)
     Invoke-ApiCheck -Name 'scope' -Path "/api/v1/scopes/$encodedScope" | Out-Null
-    Invoke-ApiCheck -Name 'scope-include' -Path "/api/v1/scopes/$encodedScope?include=structure,inventory,references,diagnostics&limit=10" | Out-Null
+    Invoke-ApiCheck -Name 'scope-include' -Path "/api/v1/scopes/${encodedScope}?include=structure,inventory,references,diagnostics&limit=10" | Out-Null
     Invoke-ApiCheck -Name 'structure-alias' -Path "/api/v1/scopes/$encodedScope/structure" | Out-Null
-    Invoke-ApiCheck -Name 'inventory-alias' -Path "/api/v1/scopes/$encodedScope/inventory?limit=10" | Out-Null
+    Invoke-ApiCheck -Name 'inventory-alias' -Path "/api/v1/scopes/${encodedScope}/inventory?limit=10" | Out-Null
     Invoke-ApiCheck -Name 'references-alias' -Path "/api/v1/scopes/$encodedScope/references" | Out-Null
     Invoke-ApiCheck -Name 'scope-diagnostics-alias' -Path "/api/v1/scopes/$encodedScope/diagnostics" | Out-Null
 }
@@ -61,8 +62,8 @@ Invoke-ApiCheck -Name 'export' -Method 'POST' -Path '/api/v1/export' -Body $expo
 
 if (-not [string]::IsNullOrWhiteSpace($NodeId)) {
     Invoke-ApiCheck -Name 'rule' -Path "/api/v1/rules/$NodeId" | Out-Null
-    Invoke-ApiCheck -Name 'rule-include' -Path "/api/v1/rules/$NodeId?include=subtree,references,diagnostics&maxDepth=2" | Out-Null
-    Invoke-ApiCheck -Name 'subtree-alias' -Path "/api/v1/rules/$NodeId/subtree?maxDepth=2" | Out-Null
+    Invoke-ApiCheck -Name 'rule-include' -Path "/api/v1/rules/${NodeId}?include=subtree,references,diagnostics&maxDepth=2" | Out-Null
+    Invoke-ApiCheck -Name 'subtree-alias' -Path "/api/v1/rules/${NodeId}/subtree?maxDepth=2" | Out-Null
 }
 
 Write-Host "API v1 smoke checks completed." -ForegroundColor Green

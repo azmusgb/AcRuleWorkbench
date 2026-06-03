@@ -1,0 +1,26 @@
+AC Rule Workbench x86 script patch
+
+Full replacement files:
+- AcRuleWorkbench/scripts/build.ps1
+- AcRuleWorkbench/scripts/build-and-doctor.ps1
+- AcRuleWorkbench/scripts/start-workbench.ps1
+- AcRuleWorkbench/scripts/start-workbench.cmd
+- AcRuleWorkbench/scripts/start-api.ps1
+- AcRuleWorkbench/scripts/start-api.cmd
+- AcRuleWorkbench/scripts/run-doctor.ps1
+- AcRuleWorkbench/scripts/run-harness.ps1
+- AcRuleWorkbench/scripts/setup-dcm-deps.ps1
+- AcRuleWorkbench/scripts/new-evidence-baseline.ps1
+- AcRuleWorkbench/scripts/package-split-deliverables.ps1
+- README_X86_SCRIPT_PATCH.md
+
+Validation performed in sandbox:
+- File generation completed
+- Basic brace / parenthesis / bracket balance check on PowerShell files
+
+Not performed:
+- Full PowerShell execution
+- MSBuild compile
+- FormWorks native runtime validation
+
+Reason: this sandbox does not include Windows PowerShell, Visual Studio/MSBuild, .NET Framework 4.8 build tools, or the x86 FormWorks native runtime.

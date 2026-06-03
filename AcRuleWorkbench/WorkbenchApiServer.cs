@@ -1841,7 +1841,7 @@ internal sealed class WorkbenchApiServer
 <style id=""AC_API_BRIDGE_V67"">
 .ac-api-bridge-v67{position:fixed;right:16px;bottom:16px;z-index:2147483000;display:flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;background:rgba(20,24,31,.88);backdrop-filter:blur(7px);color:#e8eaed!important;font:700 11.5px/1.1 'IBM Plex Sans','Segoe UI',system-ui,sans-serif;border:1px solid rgba(255,255,255,.12);box-shadow:0 14px 34px rgba(2,6,23,.34),inset 0 1px 0 rgba(255,255,255,.05);opacity:.86;transition:opacity .16s ease,box-shadow .16s ease,transform .16s ease}
 .ac-api-bridge-v67:hover{opacity:.97;box-shadow:0 18px 40px rgba(2,6,23,.42),inset 0 1px 0 rgba(255,255,255,.07);transform:translateY(-1px)}
-.ac-api-bridge-v67 .bridge-title{display:inline-flex;align-items:center;gap:6px;padding:0 2px 0 0;color:#9aa0aa;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;letter-spacing:.08em;text-transform:uppercase}
+.ac-api-bridge-v67 .bridge-title{display:inline-flex;align-items:center;gap:6px;padding:0 2px 0 0;color:#d4dae2;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;letter-spacing:.08em;text-transform:uppercase}
 .ac-api-bridge-v67 .bridge-title::before{content:'';width:6px;height:6px;border-radius:50%;background:#e8a030;box-shadow:0 0 8px rgba(232,160,48,.55)}
 .ac-api-bridge-v67 a,.ac-api-bridge-v67 button{appearance:none;border:1px solid #353840;border-radius:7px;text-decoration:none!important;display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:27px;padding:0 9px;font:700 10.5px/1.1 'IBM Plex Sans','Segoe UI',system-ui,sans-serif;cursor:pointer;white-space:nowrap;background:#1c1f25;color:#d3d8e0!important;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .14s ease}
 .ac-api-bridge-v67 a:hover,.ac-api-bridge-v67 button:hover{background:#252a32;border-color:#4a505a;color:#f2f4f8!important;transform:translateY(-1px)}
@@ -1852,7 +1852,7 @@ internal sealed class WorkbenchApiServer
 .ac-api-bridge-v67 .mode select{min-height:24px;border-radius:6px;border:1px solid #4a505a;background:#10141c;color:#e8eaed;font:700 10px/1 'IBM Plex Mono','Cascadia Code',monospace;padding:0 8px}
 @media(max-width:720px){.ac-api-bridge-v67{right:10px;bottom:10px;max-width:calc(100vw - 20px);border-radius:10px;flex-wrap:wrap;justify-content:flex-end}.ac-api-bridge-v67 .bridge-title{width:100%;padding-bottom:2px}}
 </style>
-<div id=""acApiBridgeV67"" class=""ac-api-bridge-v67"" aria-label=""AC Rule Workbench server actions"">
+<div id=""acApiBridgeV67"" class=""ac-api-bridge-v67"" role=""region"" aria-label=""AC Rule Workbench server actions"">
     <span class=""bridge-title"">Server</span>
     <label class=""mode"" title=""Data mode for API-backed operations in this Workbench session""><span>Mode</span><select id=""acApiModeV67""><option value=""snapshot"">Snapshot</option><option value=""live"">Live</option></select></label>
   <button id=""acApiRefreshV67"" type=""button"" title=""Regenerate this static viewer from the current FWD/CFD configuration on the server"">Refresh from FWD</button>

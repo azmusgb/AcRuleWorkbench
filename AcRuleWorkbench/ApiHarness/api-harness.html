@@ -18,14 +18,14 @@
       <span>Versioned /api/v1 product API - local developer console</span>
     </div>
   </div>
-  <div class="top-tools" aria-label="Console actions">
-    <span class="pill" id="statusPill"><span class="dot warn"></span> Checking</span>
+  <div class="top-tools" role="toolbar" aria-label="Console actions">
+    <span class="pill" id="statusPill" role="status" aria-live="polite"><span class="dot warn"></span> Checking</span>
     <a class="btn" href="/viewer" target="_blank" rel="noreferrer">Open Workbench</a>
     <button class="btn" id="refreshHealth" type="button">Refresh health</button>
   </div>
 </header>
 <div class="layout">
-<aside class="side" aria-label="API endpoints"><div class="head"><div class="eyebrow">Explorer</div><label class="caption" for="endpointSearch">Endpoint search</label><input class="search" id="endpointSearch" type="search" placeholder="status, scopes, rules..."></div><div class="list" id="endpointList"></div></aside>
+<aside class="side" aria-label="API endpoints"><div class="head"><div class="eyebrow">Explorer</div><label class="caption" for="endpointSearch">Endpoint search</label><input class="search" id="endpointSearch" type="search" autocomplete="off" placeholder="status, scopes, rules..."></div><div class="list" id="endpointList" role="list"></div></aside>
 <main class="main" id="consoleMain" tabindex="-1"><div class="content">
 <section class="card request-card" aria-labelledby="endpointTitle"><div class="card-title-row"><div><div class="eyebrow">Request builder</div><h2 id="endpointTitle">Endpoint</h2><div class="caption" id="endpointDescription"></div></div><span class="method-large" id="methodBadge">GET</span></div><div class="row"><label for="baseUrl">Base URL</label><input id="baseUrl"></div><div class="grid"><div class="row"><label for="scopeId">scopeId</label><input id="scopeId" placeholder="AC/Pages/DentalADA"></div><div class="row"><label for="nodeId">nodeId</label><input id="nodeId" placeholder="123"></div><div class="row"><label for="query">q</label><input id="query" placeholder="provider"></div><div class="row"><label for="snapshotMode">snapshot mode</label><select id="snapshotMode"><option value="default">Default (server setting)</option><option value="snapshot">Snapshot cache</option><option value="live">Live rebuild</option></select></div><div class="row"><label for="extraQuery">extra query</label><input id="extraQuery" placeholder="limit=100&classification=FlatOnly"></div></div><div id="bodyBlock" class="is-hidden"><label class="caption" for="requestBody">Request body</label><textarea id="requestBody" rows="8"></textarea></div><div class="url" id="urlPreview"></div><div class="actions-row"><button class="btn primary" id="send" type="button">Send</button><button class="btn" id="copyUrl" type="button">Copy URL</button><button class="btn" id="copyCurl" type="button">Copy curl</button><button class="btn" id="copyResponse" type="button">Copy response</button><button class="btn" id="openSwagger" type="button">Open OpenAPI JSON</button></div></section>
 <section class="summary" id="metrics"></section>
