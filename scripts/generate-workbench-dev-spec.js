@@ -24,7 +24,8 @@ async function run() {
           heading: HeadingLevel.HEADING_1,
           children: [new TextRun({ text: 'AC Rule Workbench Frontend Design Spec', bold: true, size: 32, font: 'Arial' })]
         }),
-        p('This generated document is a workspace artifact for the v37 viewer design package.'),
+        p('This generated document is a historical workspace artifact for the v37 viewer design package.'),
+        p('Current product authority lives in README.md, docs/formworks-editor-ac-reference-guide.md, docs/project-code-catalog.md, and docs/editor-gap-closure-plan.md.'),
         p('Primary assets:'),
         p('- ac-rule-viewer.css'),
         p('- docs/design/ac-rule-workbench-v37-preview.html'),

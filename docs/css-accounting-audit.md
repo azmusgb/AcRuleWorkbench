@@ -1,6 +1,8 @@
 <!--  -->
 # CSS Accounting Audit
 
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md), [Project Code Catalog](project-code-catalog.md), and [Editor Gap Closure Plan](editor-gap-closure-plan.md). This file only accounts for CSS/viewer asset coverage.
+
 ## Scope
 - ac-rule-viewer.html -> ac-rule-viewer.css
 - AcRuleWorkbench.Core/Viewer/ac-viewer-template.html -> AcRuleWorkbench.Core/Viewer/ac-viewer-template.css

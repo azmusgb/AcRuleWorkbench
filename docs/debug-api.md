@@ -1,5 +1,7 @@
 # Debug API Guide
 
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md), [Project Code Catalog](project-code-catalog.md), and [Editor Gap Closure Plan](editor-gap-closure-plan.md). Debug routes are evidence support only and are not product contracts.
+
 Debug routes are disabled by default. Enable explicitly:
 
 ```powershell

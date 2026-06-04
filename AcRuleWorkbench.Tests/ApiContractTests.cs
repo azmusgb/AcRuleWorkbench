@@ -236,6 +236,54 @@ public sealed class ApiContractTests
     }
 
     [TestMethod]
+    public void Dispatch_FwdFunctions_Returns_Catalog_And_ObservedFunctions()
+    {
+        var service = new WorkbenchApiService(new UdfDetailStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/functions");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/functions", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.FwdFunctions", body.Value<string>("schema"));
+
+        JArray items = (JArray)(body["data"]?["items"] ?? new JArray());
+        JObject? formatf = items.FirstOrDefault(i => string.Equals((string?)i?["name"], "Formatf", StringComparison.OrdinalIgnoreCase)) as JObject;
+        JObject? udf = items.FirstOrDefault(i => string.Equals((string?)i?["name"], "CopyIfDestBlank", StringComparison.OrdinalIgnoreCase)) as JObject;
+
+        Assert.IsNotNull(formatf);
+        Assert.IsTrue(formatf!["defined"]?.Value<bool>() ?? false);
+        Assert.IsNotNull(udf);
+        Assert.IsTrue(udf!["observed"]?.Value<bool>() ?? false);
+        Assert.AreEqual("User Defined", udf["category"]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdFunctionDetail_Returns_ConfiguredStatuses_And_Parameters()
+    {
+        var service = new WorkbenchApiService(new UdfDetailStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/functions/CopyIfDestBlank");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/functions/CopyIfDestBlank", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.FwdFunctionDetail", body.Value<string>("schema"));
+        Assert.AreEqual("CopyIfDestBlank", body["data"]?["name"]?.Value<string>());
+
+        JArray configured = (JArray)(body["data"]?["interfaceModel"]?["configuredStatusResults"] ?? new JArray());
+        JArray parameters = (JArray)(body["data"]?["interfaceModel"]?["observedParameterNames"] ?? new JArray());
+
+        Assert.IsTrue(configured.Any(x => string.Equals(x.Value<string>(), "Copied", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(parameters.Any(x => string.Equals(x.Value<string>(), "Source", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(body["data"]?["usage"]?["ruleCount"]?.Value<int>() >= 1);
+    }
+
+    [TestMethod]
     public void Dispatch_FwdProcessDrivers_Returns_ProcessDriverEnvelope()
     {
         var service = new WorkbenchApiService(new ProcessPrivateStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
@@ -260,7 +308,7 @@ public sealed class ApiContractTests
     }
 
     [TestMethod]
-    public void Dispatch_Routes_Contains_SemanticHonesty_For_Drivers_Tables_And_Udfs()
+    public void Dispatch_Routes_Contains_SemanticHonesty_For_Drivers_Tables_Functions_And_Udfs()
     {
         var service = new WorkbenchApiService(new StubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
         using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/routes");
@@ -276,6 +324,7 @@ public sealed class ApiContractTests
 
         JObject? drivers = routes.FirstOrDefault(r => string.Equals((string?)r?["path"], "/api/v1/fwd/processes/drivers", StringComparison.OrdinalIgnoreCase)) as JObject;
         JObject? tables = routes.FirstOrDefault(r => string.Equals((string?)r?["path"], "/api/v1/fwd/tables", StringComparison.OrdinalIgnoreCase)) as JObject;
+        JObject? functions = routes.FirstOrDefault(r => string.Equals((string?)r?["path"], "/api/v1/fwd/functions", StringComparison.OrdinalIgnoreCase)) as JObject;
         JObject? udfs = routes.FirstOrDefault(r => string.Equals((string?)r?["path"], "/api/v1/fwd/udfs", StringComparison.OrdinalIgnoreCase)) as JObject;
 
         Assert.IsNotNull(drivers);
@@ -283,6 +332,9 @@ public sealed class ApiContractTests
 
         Assert.IsNotNull(tables);
         Assert.IsTrue(((string?)tables!["description"] ?? string.Empty).IndexOf("usage-derived", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        Assert.IsNotNull(functions);
+        Assert.IsTrue(((string?)functions!["description"] ?? string.Empty).IndexOf("curated semantics", StringComparison.OrdinalIgnoreCase) >= 0);
 
         Assert.IsNotNull(udfs);
         Assert.IsTrue(((string?)udfs!["description"] ?? string.Empty).IndexOf("caller-side usage evidence", StringComparison.OrdinalIgnoreCase) >= 0);

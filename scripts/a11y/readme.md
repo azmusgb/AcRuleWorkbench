@@ -1,3 +1,7 @@
+Current documentation authority:
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `../../README.md`, `../../docs/formworks-editor-ac-reference-guide.md`, `../../docs/project-code-catalog.md`, and `../../docs/editor-gap-closure-plan.md`. This file only covers accessibility test tooling.
+
 Run this from PowerShell:
 
 cd scripts/a11y

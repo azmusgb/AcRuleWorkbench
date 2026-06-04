@@ -2,6 +2,8 @@
 
 Base path: `/api/v1`
 
+The API exposes read-only static FWD configuration evidence. It does not execute AC rules, run AC Rules Tester, or prove runtime operator outcomes. See [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md) for the rule-list, function, UDF, SelectionList/table, and runtime-UX model.
+
 ## Stable endpoints
 
 ```http
@@ -13,11 +15,27 @@ POST /snapshot/refresh
 GET  /scopes
 GET  /scopes/{scopeId}
 GET  /rules/{nodeId}
+GET  /fwd
+GET  /fwd/documents
+GET  /fwd/pages
+GET  /fwd/page-variants
+GET  /fwd/fields
+GET  /fwd/batches
+GET  /fwd/processes
+GET  /fwd/processes/{process}
+GET  /fwd/resources
+GET  /fwd/functions
+GET  /fwd/functions/{name}
+GET  /fwd/tables
+GET  /fwd/tables/inferred
+GET  /fwd/udfs
+GET  /fwd/udfs/{name}
 GET  /search
 GET  /diagnostics
-POST /export
 GET  /openapi.json
 ```
+
+`/fwd/functions` is the AC function catalog endpoint. It merges seeded function metadata with observed rule usage, configured ActionNames/status results, observed parameter names, relationship samples, and static runtime-impact notes. Unknown/custom functions remain visible as observed usage instead of being silently dropped.
 
 ## Include expansion
 

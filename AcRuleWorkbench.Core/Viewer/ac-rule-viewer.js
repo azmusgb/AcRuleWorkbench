@@ -141,6 +141,7 @@ async function loadFwdApiData(){
     ['processes','fwd/processes'],
     ['processDrivers','fwd/processes/drivers'],
     ['resources','fwd/resources'],
+    ['functions','fwd/functions'],
     ['tables','fwd/tables'],
     ['udfs','fwd/udfs?includeDetails=true'],
     ['pageVariants','fwd/page-variants'],
@@ -189,6 +190,7 @@ async function loadFwdApiData(){
     processes:hydrated.processes,
     processDrivers:hydrated.processDrivers,
     resources:hydrated.resources,
+    functions:hydrated.functions,
     tables:hydrated.tables,
     udfs:hydrated.udfs,
     pageVariants:hydrated.pageVariants,
@@ -240,6 +242,7 @@ function readState(){
     fieldResolutionFilter:saved.fieldResolutionFilter||'unresolved',
     focusNodeId:'',theme:['light','dark'].includes(saved.theme)?saved.theme:'light',density:saved.density==='high'?'high':'standard',modal:'',
     selectedResourceKey:saved.selectedResourceKey||'',
+    selectedFunctionName:saved.selectedFunctionName||'',
     selectedDriverKey:saved.selectedDriverKey||'',
     globalDetailKind:'',
     selectedTableName:saved.selectedTableName||'',
@@ -507,11 +510,12 @@ function selectedInventory(){return state.selectedType==='inventory'?model.inven
 function selectedRel(){return state.selectedType==='rel'?model.rels.find(x=>x.id===state.selectedId):null;}
 function selectedDiag(){return state.selectedType==='diag'?model.diags.find(x=>x.id===state.selectedId):null;}
 function isGlobalDefinitionView(view=state.workspaceView){
-  return ['resources','tables','drivers','udfs'].includes(view);
+  return ['resources','functions','tables','drivers','udfs'].includes(view);
 }
 function globalViewHeading(view=state.workspaceView){
   const map={
     resources:{title:'Resources',caption:'FWD-level shared definitions. Page and document rules reference these definitions; they remain global.'},
+    functions:{title:'Functions',caption:'AC function catalog, configured status results, behavior flags, parameter roles, and rule usage.'},
     tables:{title:'Tables',caption:'Shared SelectionList and lookup table definitions from the FWD.'},
     drivers:{title:'Drivers',caption:'Input, output, and process-private driver definitions from the FWD.'},
     udfs:{title:'UDFs',caption:'User Defined Function interfaces, internal rules, status results, and caller mappings.'}
@@ -553,6 +557,7 @@ function renderStructure(){
 function renderContent(){
   if(state.workspaceView==='field-resolution')return renderFieldResolutionCatalog();
   if(state.workspaceView==='resources')return renderGlobalResourceDefinitions();
+  if(state.workspaceView==='functions')return renderGlobalFunctionDefinitions();
   if(state.workspaceView==='tables')return renderGlobalTablesMasterDetail();
   if(state.workspaceView==='drivers')return renderGlobalDriverDefinitions();
   if(state.workspaceView==='udfs')return renderUdfMasterDetail();
@@ -599,6 +604,10 @@ function domainRowsByView(view){
     const buckets=list(fwd.resources?.buckets);
     return buckets.map(b=>({name:`${text(b.type)}: ${fmt(list(b.names).length)} items`,count:list(b.names).length}));
   }
+  if(fwd&&view==='functions'){
+    const items=list(fwd.functions?.items);
+    if(items.length)return items.map(f=>({name:text(f.name),count:Number(first(f.observedRuleCount,f.relationshipCount,0))||0}));
+  }
   if(fwd&&view==='drivers'){
     const items=list(fwd.processDrivers?.items);
     if(items.length)return items.map(p=>({name:`${text(p.processName)} (${fmt(first(p.findingCount,0))} findings)`,count:Number(first(p.findingCount,0))||0}));
@@ -622,6 +631,10 @@ function domainRowsByView(view){
       return /source|option|parameter|attribute|reject/.test(t)||/source|option|parameter|attribute|reject/.test(k)||/resource|fileref|inventory/.test(target);
     });
     return topCounts(rows.map(r=>`${r.targetType||'Resource'}: ${r.target||'(empty)'}`)).map(x=>({name:x.name,count:x.count}));
+  }
+  if(view==='functions'){
+    const allFns=[...list(model.nodes).map(n=>n.fn),...list(model.inventory).map(r=>r.fn)].map(text).filter(Boolean);
+    return topCounts(allFns).map(x=>({name:x.name,count:x.count}));
   }
   if(view==='tables'){
     const rows=rels.filter(r=>/table|indexed|lookup|db|database/i.test(`${r.targetType} ${r.kind} ${r.target}`));
@@ -702,8 +715,8 @@ function summaryTilesHtml(items){
   return `<div class="global-summary-tiles">${items.map(x=>`<div class="global-summary-tile ${x.tone||''}"><span>${esc(x.label)}</span><b>${x.value}</b></div>`).join('')}</div>`;
 }
 function definitionListHtml(kind,rows,selectedKey){
-  const metricLabel=kind==='udfs'?'caller rules':kind==='tables'?'rule refs':'rule refs';
-  return `<div class="global-list-head"><span>${kind==='udfs'?'Functions':'Definitions'}</span><b>${fmt(rows.length)}</b></div><div class="table-index-list global-def-list">${rows.slice(0,800).map(row=>{
+  const metricLabel=kind==='udfs'?'caller rules':kind==='functions'?'observed rules':kind==='tables'?'rule refs':'rule refs';
+  return `<div class="global-list-head"><span>${kind==='udfs'||kind==='functions'?'Functions':'Definitions'}</span><b>${fmt(rows.length)}</b></div><div class="table-index-list global-def-list">${rows.slice(0,800).map(row=>{
     const exceptionBadge=row.defined?'':`<span class="badge amber">Referenced</span>`;
     const metric=fmt(list(row.usage).length||row.metric);
     return `<button class="table-index-row ${row.key===selectedKey?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span class="table-index-main"><b>${esc(row.name)}</b><span>${esc(row.type)} · ${metric} ${metricLabel}</span></span><span class="table-index-side">${exceptionBadge}</span></button>`;
@@ -842,6 +855,7 @@ function udfInternalRulesHtml(u){
 
 function globalDetailRecord(){
   if(state.globalDetailKind==='resources')return {kind:'resources',label:'Resource details',row:buildGlobalResourceDefinitions().find(r=>r.key===state.selectedResourceKey)};
+  if(state.globalDetailKind==='functions')return {kind:'functions',label:'Function details',row:buildGlobalFunctionDefinitions().find(r=>r.key===state.selectedFunctionName)};
   if(state.globalDetailKind==='drivers')return {kind:'drivers',label:'Driver details',row:buildGlobalDriverDefinitions().find(r=>r.key===state.selectedDriverKey)};
   if(state.globalDetailKind==='tables'){
     const table=buildGlobalTableDefinitions().find(r=>r.name===state.selectedTableName);
@@ -861,6 +875,10 @@ function renderGlobalDefinitionModal(){
     const callers=list(row.callerRules);
     return `<div class="global-modal-shell"><div class="global-modal-summary">${summaryTilesHtml([{label:'Parameters',value:fmt(list(row.parameterNames).length)},{label:'Caller rules',value:fmt(callers.length)},{label:'Type',value:esc(row.type)}])}</div><div class="table-columns-head">Parameters</div>${parameterMatrixHtml(callers,effectiveUdfParameterNames(row))}<div class="table-columns-head">Caller hierarchy</div>${usagePreviewHtml(callers.map(c=>({scopeId:c.scopeId,ruleName:c.ruleName,functionName:c.functionName,node:c.nodeId?model.nodesById.get(String(c.nodeId)):null,target:'',targetType:'UDF caller',relationshipKind:'Calls'})))}</div>`;
   }
+  if(record.kind==='functions'){
+    const f=row.fn||row;
+    return `<div class="global-modal-shell"><div class="global-modal-summary">${summaryTilesHtml([{label:'Observed rules',value:fmt(first(f.observedRuleCount,row.metric,0))},{label:'Statuses',value:fmt(list(f.statusResults).length)},{label:'Category',value:esc(first(f.category,row.type,'Function'))}])}</div>${functionConfigurationHtml(f,row)}<div class="table-columns-head">Rule usage</div>${usagePreviewHtml(row.usage)}</div>`;
+  }
   const usage=list(row.usage);
   const exceptionalOrigin=!row.defined;
   const tiles=[{label:'Usage rows',value:fmt(usage.length)},{label:'Type',value:esc(row.type||'Definition')}];
@@ -868,25 +886,122 @@ function renderGlobalDefinitionModal(){
   return `<div class="global-modal-shell"><div class="global-modal-summary">${summaryTilesHtml(tiles)}</div><div class="table-columns-head">Rule usage</div>${usage.length?`<div class="global-usage-list">${usage.slice(0,160).map(u=>`<div class="global-usage-row"><div><b>${esc(u.ruleName)}</b><span>${esc(u.scopeId)} · ${esc(u.functionName||u.relationshipKind||u.targetType||'Reference')}</span></div>${u.node?`<button class="btn ghost" type="button" data-node="${esc(u.node.id)}" data-node-scope="${esc(u.scopeId||u.node.scopeId||'')}">Open details</button>`:`<span class="badge amber">Unlinked</span>`}<div class="definition-preview">${esc(u.target||'')}</div></div>`).join('')}</div>`:'<div class="global-empty-state">No rule usage is mapped for this definition.</div>'}</div>`;
 }
 function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,detailHtml){
+  const q=lower(state.query).trim();
+  if(q){
+    rows=rows.filter(row=>lower([
+      row.name,row.type,row.source,row.metric,
+      JSON.stringify(row.fn||row.table||row.udf||row.details||{}),
+      list(row.usage).map(u=>[u.scopeId,u.ruleName,u.functionName,u.target,u.targetType,u.relationshipKind].join(' ')).join(' ')
+    ].join(' ')).includes(q));
+  }
   if(!rows.length){$('content').innerHTML=`<section class="global-explorer">${emptyHtml(copy.emptyTitle,copy.emptyBody)}</section>`;return;}
   const selected=rows.find(r=>r.key===selectedKey)||rows[0];
   state[stateKey]=selected.key;
   const exceptionalOrigin=!selected.defined;
   const withUsage=rows.filter(r=>list(r.usage).length>0).length;
-  const summaryLabel=kind==='udfs'?'functions':'definitions';
-  const usageLabel=kind==='udfs'?'with callers':'used';
-  const metricLabel=kind==='udfs'?'caller rules':'usage';
+  const summaryLabel=kind==='udfs'||kind==='functions'?'functions':'definitions';
+  const usageLabel=kind==='udfs'?'with callers':kind==='functions'?'observed':'used';
+  const metricLabel=kind==='udfs'?'caller rules':kind==='functions'?'observed rules':'usage';
   const summary=`<div class="global-inline-summary"><span>${fmt(rows.length)} ${summaryLabel}</span><span>${fmt(withUsage)} ${usageLabel}</span></div>`;
   const originBadge=exceptionalOrigin?`<span class="badge amber">${esc(selected.source||'Inferred')}</span>`:'';
   const originFact=exceptionalOrigin?`<span><b>Origin</b>${esc(selected.source||'Inferred from usage')}</span>`:'';
   const detailSub=exceptionalOrigin?`${esc(selected.type)} · ${esc(selected.source||'Inferred')}`:esc(selected.type);
-  $('content').innerHTML=`<section class="global-explorer global-explorer-${esc(kind)}">${summary}<div class="global-explorer-grid"><aside class="global-index-panel">${definitionListHtml(kind,rows,selected.key)}</aside><section class="global-detail-panel"><div class="global-detail-head"><div><h3>${esc(selected.name)}</h3><p>${detailSub}</p></div><div class="tree-detail-badges">${originBadge}<span class="badge blue">${fmt(list(selected.usage).length||selected.metric)} ${metricLabel}</span></div></div><div class="global-detail-facts"><span><b>Type</b>${esc(selected.type)}</span>${originFact}<span><b>${kind==='udfs'?'Callers':'Used by'}</b>${fmt(list(selected.usage).length)}</span></div>${detailHtml(selected)}<div class="global-detail-actions"><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Full details</button></div></section></div></section>`;
+  $('content').innerHTML=`<section class="global-explorer global-explorer-${esc(kind)}">${summary}<div class="global-explorer-grid"><aside class="global-index-panel">${definitionListHtml(kind,rows,selected.key)}</aside><section class="global-detail-panel"><div class="global-detail-head"><div><h3>${esc(selected.name)}</h3><p>${detailSub}</p></div><div class="tree-detail-badges">${originBadge}<span class="badge blue">${fmt(list(selected.usage).length||selected.metric)} ${metricLabel}</span></div></div><div class="global-detail-facts"><span><b>Type</b>${esc(selected.type)}</span>${originFact}<span><b>${kind==='udfs'?'Callers':kind==='functions'?'Observed by':'Used by'}</b>${fmt(list(selected.usage).length||selected.metric)}</span></div>${detailHtml(selected)}<div class="global-detail-actions"><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Full details</button></div></section></div></section>`;
 }
 function renderGlobalResourceDefinitions(){
   renderGlobalDefinitionExplorer('resources',buildGlobalResourceDefinitions(),state.selectedResourceKey,'selectedResourceKey',{title:'Resources',body:'Global resources are shared definitions. The main panel stays focused on identity and usage status; details open separately.',emptyTitle:'No resources found',emptyBody:'No FWD resources or usage-derived resources were discovered.'},row=>`<div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}`);
 }
 function renderGlobalDriverDefinitions(){
   renderGlobalDefinitionExplorer('drivers',buildGlobalDriverDefinitions(),state.selectedDriverKey,'selectedDriverKey',{title:'Input / Output Drivers',body:'Driver definitions and process-private findings are global configuration definitions, not page or document children.',emptyTitle:'No drivers found',emptyBody:'No process driver definitions or driver-like definitions were discovered.'},row=>`<div class="table-columns-head">Finding preview</div>${usagePreviewHtml(row.usage)}`);
+}
+
+function functionUsageRowsForName(functionName){
+  const target=lower(functionName);
+  const rows=[];
+  const seen=new Set();
+  function add(scopeId,ruleName,fn,nodeId='',statusResults=[],parameters={},source='Rule usage'){
+    const key=[scopeId,ruleName,fn,nodeId,source].join('|').toLowerCase();
+    if(!fn||lower(fn)!==target||seen.has(key))return;
+    seen.add(key);
+    rows.push({scopeId:text(scopeId),ruleName:text(ruleName||'Unnamed rule'),functionName:text(fn),node:nodeId?model.nodesById.get(String(nodeId)):null,nodeId:text(nodeId),target:text(functionName),targetType:'Function',relationshipKind:source,statusResults:list(statusResults).map(text).filter(Boolean),parameters:parameters||{}});
+  }
+  model.nodes.forEach(n=>add(n.scopeId,n.title,n.fn,n.id,n.ActionNames,n.Parameters,'Structural rule'));
+  model.inventory.forEach(r=>add(r.scopeId,r.title,r.fn,r.nodeId,r.ActionNames,r.Parameters,r.classification||'Flat inventory'));
+  return rows.sort((a,b)=>a.scopeId.localeCompare(b.scopeId,undefined,{sensitivity:'base'})||a.ruleName.localeCompare(b.ruleName,undefined,{sensitivity:'base'}));
+}
+function inferClientFunctionCategory(functionName){
+  const fn=lower(functionName);
+  if(/udf|user.?defined/.test(fn))return 'User Defined';
+  if(/table|selectionlist|lookup|fuzzy|\bsl\b/.test(fn))return 'Table';
+  if(/format|copy|delete|plug|merge|limit/.test(fn))return 'Formatting';
+  if(/check|test|compare|^is|^has/.test(fn))return 'Testing';
+  if(/attr/.test(fn))return 'Intrinsic Attribute';
+  if(/^_i/.test(fn))return 'Intrinsic';
+  return 'Custom / Unknown';
+}
+function buildGlobalFunctionDefinitions(){
+  const definedItems=list(model.fwd?.functions?.items);
+  if(definedItems.length){
+    return definedItems.map(f=>{
+      const name=text(f.name);
+      const usage=functionUsageRowsForName(name);
+      const observed=Number(first(f.observedRuleCount,usage.length,0))||usage.length;
+      return {
+        key:name,
+        name,
+        type:text(first(f.category,'Function')),
+        source:text(first(f.source,'Function catalog')),
+        defined:first(f.defined,false)===true||first(f.functionResource,false)===true,
+        metric:observed,
+        usage,
+        fn:f
+      };
+    }).filter(r=>r.name).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||(b.metric-a.metric)||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  }
+  return domainRowsByView('functions').map(r=>{
+    const name=text(r.name);
+    const usage=functionUsageRowsForName(name);
+    return {
+      key:name,
+      name,
+      type:inferClientFunctionCategory(name),
+      source:'Structural and inventory usage',
+      defined:false,
+      metric:Number(first(r.count,usage.length,0))||usage.length,
+      usage,
+      fn:{name,category:inferClientFunctionCategory(name),description:'Function observed in static rule configuration. Catalog metadata was not available in this snapshot.',observedRuleCount:Number(first(r.count,usage.length,0))||usage.length,statusResults:[],configuredStatusResults:[...new Set(usage.flatMap(u=>u.statusResults))],observedParameterNames:[...new Set(usage.flatMap(u=>Object.keys(u.parameters||{})))],behaviorFlags:['UnknownStaticBehavior'],runtimeImpacts:['Inspect configured action lists and parameter bindings before inferring runtime behavior.'],diagnostics:['FunctionNotHydratedFromApi']}
+    };
+  }).filter(r=>r.name);
+}
+function functionTokenStripHtml(items,tone='blue',empty='None extracted.'){
+  const values=list(items).map(text).filter(Boolean);
+  return values.length?`<div class="udf-token-strip">${values.slice(0,80).map(x=>`<span class="udf-token ${esc(tone)}" title="${esc(x)}">${esc(x)}</span>`).join('')}</div>`:`<div class="global-empty-state compact">${esc(empty)}</div>`;
+}
+function functionConfigurationHtml(f,row){
+  const statuses=list(f.statusResults).map(text).filter(Boolean);
+  const configured=list(f.configuredStatusResults).map(text).filter(Boolean);
+  const params=list(f.observedParameterNames).map(text).filter(Boolean);
+  const roles=list(f.parameterRoles).map(text).filter(Boolean);
+  const flags=list(f.behaviorFlags).map(text).filter(Boolean);
+  const impacts=list(f.runtimeImpacts).map(text).filter(Boolean);
+  const diagnostics=list(f.diagnostics).map(text).filter(Boolean);
+  const facts=[
+    ['Category',esc(first(f.category,row.type,'Function'))],
+    ['Catalog',f.defined?'Curated definition':(f.functionResource?'Function resource':'Observed usage')],
+    ['Observed rules',fmt(first(f.observedRuleCount,row.metric,0))],
+    ['Relationships',fmt(first(f.relationshipCount,0))]
+  ];
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Function Model</h4><p>${esc(first(f.description,'AC function observed in static FWD configuration.'))}</p></div><span class="badge ${f.deprecated?'amber':'blue'}">${f.deprecated?'deprecated':esc(first(f.source,row.source,'catalog'))}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Interface</h4><p>Status results and parameters shown as configured/static evidence.</p></div><span class="badge blue">${fmt(statuses.length||configured.length)} statuses</span></div><div class="table-columns-head">Status results</div>${functionTokenStripHtml(statuses,'amber','No catalog or configured status results were extracted.')}${configured.length?`<div class="caption mt-8">Configured ActionNames from this snapshot: ${esc(configured.join(', '))}</div>`:''}<div class="table-columns-head">Parameter roles</div>${functionTokenStripHtml(roles,'blue','No curated parameter roles are available.')}${params.length?`<div class="table-columns-head">Observed parameter names</div>${functionTokenStripHtml(params,'blue')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Behavior / Runtime UX</h4><p>Static behavior flags and likely operator impact. Native AC execution is not simulated.</p></div><span class="badge blue">${fmt(flags.length)} flags</span></div>${functionTokenStripHtml(flags,'blue','No behavior flags are available.')}${impacts.length?`<div class="table-columns-head">Runtime impact</div><div class="mini-list">${impacts.map(x=>`<div class="mini-row"><span>${esc(x)}</span></div>`).join('')}</div>`:''}</section>`;
+}
+function renderGlobalFunctionDefinitions(){
+  const rows=buildGlobalFunctionDefinitions();
+  if(!rows.length){
+    $('content').innerHTML=`<section class="global-explorer">${emptyHtml('No functions found','No function definitions or rule usage were discovered in this FWD snapshot.')}</section>`;
+    return;
+  }
+  renderGlobalDefinitionExplorer('functions',rows,state.selectedFunctionName,'selectedFunctionName',{title:'Functions',body:'AC functions are first-class rule operations with parameters, status results, behavior flags, and runtime UX impact.',emptyTitle:'No functions found',emptyBody:'No function definitions or rule usage were discovered.'},row=>{
+    return `${functionConfigurationHtml(row.fn,row)}<div class="table-columns-head">Used By</div>${usagePreviewHtml(row.usage)}<div class="table-columns-head">Raw</div><pre class="raw compact">${esc(JSON.stringify(row.fn,null,2))}</pre>`;
+  });
 }
 
 // Build global table definitions and inferred column names from relationship co-occurrence.
@@ -1213,11 +1328,15 @@ function renderNoData(){
 }
 // Curated in-product guide content for first-use navigation.
 function renderHelp(){
-  const quickStart=`<div class="panel"><h3>Quick Start</h3><ol class="config-list"><li>Choose a business scope from the left rail.</li><li>Open <b>Structure</b> to see rule hierarchy, parent rules, status results, and action lists.</li><li>Select a rule to review summary, fields/parameters, attributes, status results/actions, references, and raw FWD data.</li><li>Use <b>Fields</b> to review field references resolved against the FWD field catalog.</li></ol></div>`;
-  const fwdModel=`<div class="panel"><h3>How to Read the FWD Model</h3><div class="kv">${kv('Structure','Hierarchy, parent rules, action-list order, and disabled inheritance.')}${kv('Fields','Resolved against the extracted FWD field catalog.')}${kv('References','Configured relationships found in the snapshot.')}${kv('Messages','FWD snapshot messages that may affect completeness.')}</div></div>`;
+  const quickStart=`<div class="panel"><h3>Quick Start</h3><ol class="config-list"><li>Choose a FormWorks scope or global definition from the left rail.</li><li>Open <b>Structure</b> to inspect rule lists, parent rules, status results, and action lists.</li><li>Select a rule to review function metadata, fields/parameters, attributes, status-result actions, references, messages, and raw FWD data.</li><li>Use <b>Functions</b>, <b>UDFs</b>, and <b>Tables</b> for AC function behavior, reusable rule-list functions, and SelectionList/table lookup configuration.</li></ol></div>`;
+  const editorModel=`<div class="panel"><h3>FormWorks Editor Model</h3><div class="kv">${kv('FWD/STC','Documents, pages, variants, fields, batches, processes, resources, and private configuration nodes.')}${kv('Read-only boundary','FW Editor authors and saves the FWD. This workbench inspects static configuration only.')}${kv('Runtime boundary','The viewer does not execute AC, run AC Rules Tester, or prove actual claim outcomes.')}</div></div>`;
+  const ruleModel=`<div class="panel"><h3>AC Rule Model</h3><div class="mini-list"><div class="mini-row"><span><b>Rule List</b></span><span class="caption">Ordered rules in a page, document, UDF, or process scope</span></div><div class="mini-row"><span><b>Rule</b></span><span class="caption">Function plus fields/parameters, attributes, sources, and actions</span></div><div class="mini-row"><span><b>Status Result</b></span><span class="caption">Function return token owned by the parent rule</span></div><div class="mini-row"><span><b>Action List</b></span><span class="caption">Sub-list selected by a status result; not a rule</span></div></div></div>`;
+  const functionModel=`<div class="panel"><h3>Functions, UDFs, Tables</h3><div class="kv">${kv('Function categories','Intrinsic, Tcl/custom, User Defined, Testing, Formatting, Rectifying, Table, Store, Deprecated.')}${kv('UDFs','Reusable rule-list functions with named field-list parameters, status results, internal rules, and caller bindings.')}${kv('SelectionLists','Lookup configuration: table identity, match fields, plug fields, persistence, rerun triggers, and keyer impact.')}</div></div>`;
+  const fwdModel=`<div class="panel"><h3>Evidence Classes</h3><div class="kv">${kv('Structure','Hierarchy, rule order, parent rules, action-list order, and disabled inheritance.')}${kv('Inventory','Broad search and completeness evidence; not hierarchy proof.')}${kv('References','Static relationships. Read confidence and parameter role explicitly.')}${kv('Messages','Snapshot diagnostics that may affect completeness.')}${kv('Raw','Final confirmation when formatted views are incomplete.')}</div></div>`;
+  const docsModel=`<div class="panel"><h3>Project Docs</h3><div class="kv">${kv('Model guide','docs/formworks-editor-ac-reference-guide.md')}${kv('Code catalog','docs/project-code-catalog.md')}${kv('Gap plan','docs/editor-gap-closure-plan.md')}</div><div class="caption mt-8">Use these files for implementation decisions. The viewer remains a read-only inspection surface and does not replace FormWorks Editor authoring or AC Rules Tester execution.</div></div>`;
   const operators=`<div class="panel"><h3>Search Operators</h3><div class="mini-list"><div class="mini-row"><span><b>action:"Run Rules"</b></span><span class="caption">Match action-list labels</span></div><div class="mini-row"><span><b>function:_IGetDocAttr</b></span><span class="caption">Match mapped function</span></div><div class="mini-row"><span><b>has:disabled</b></span><span class="caption">Rules with disable usage</span></div><div class="mini-row"><span><b>children&gt;20</b></span><span class="caption">Large structural nodes</span></div><div class="mini-row"><span><b>scope:DentalADA</b></span><span class="caption">Scope-limited matches</span></div></div></div>`;
   const shortcuts=`<div class="panel"><h3>Keyboard Shortcuts</h3><div class="kv">${kv('/','Focus global search')}${kv('Alt + A','Expand all visible rules')}${kv('Alt + D','Expand selected rule one level')}${kv('Alt + P','Collapse selected rule peers')}${kv('Alt + F','Clear focus/subtree mode')}</div><div class="caption mt-8">Tip: Use arrow keys and Enter to review dense trees without leaving the keyboard.</div></div>`;
-  $('helpBody').innerHTML=`${quickStart}${fwdModel}${operators}${shortcuts}`;
+  $('helpBody').innerHTML=`${quickStart}${editorModel}${ruleModel}${functionModel}${fwdModel}${docsModel}${operators}${shortcuts}`;
 }
 function renderScopeInspector(s){const hotspots=scopedRuleNodes().filter(isHotspotNode).length;$('inspectorBody').innerHTML=`<details class="inspector-section" open><summary>Scope summary <span class="section-count">${fmt(s.structural)} rules</span></summary><div class="inspector-section-body"><div class="kv">${kv('Scope ID',esc(s.scopeId))}${kv('Kind',esc(s.kind))}${kv('Structural rules',fmt(s.structural))}${kv('Large/branched rules',fmt(hotspots))}${kv('Messages',s.diags?`<span class="badge amber">${fmt(s.diags)}</span>`:'<span class="badge green">None</span>')}</div><div class="caption mt-10">Select a rule in the structure view to inspect its read-only configuration.</div></div></details>`;}
 
@@ -1269,7 +1388,7 @@ function displayParameterEntriesForCopy(n){
 function pathObjects(n){const path=[];let cur=n,guard=0;while(cur&&guard++<128){const incoming=model.incomingByChild.get(cur.id);path.push({nodeId:cur.id,name:cur.title,functionName:cur.fn||null,incomingAction:incoming?{label:incoming.label,actionListIndex:first(incoming.ActionListIndex,incoming.actionListIndex,null),resolved:!!incoming.resolved}:null});const parent=model.parentByChild.get(cur.id);cur=parent?model.nodesById.get(String(parent)):null;}return path.reverse();}
 function renderGenericInspector(obj,label){if(state.inspectorView==='raw'){$('inspectorBody').innerHTML=`<pre class="raw">${esc(JSON.stringify(obj,null,2))}</pre>`;return;}const linked=obj.nodeId?model.nodesById.get(String(obj.nodeId)):null;$('inspectorBody').innerHTML=`<div class="panel"><h3>${esc(label)}</h3><div class="kv">${Object.keys(obj).slice(0,18).map(k=>kv(k,esc(typeof obj[k]==='object'?JSON.stringify(obj[k]):obj[k]))).join('')}</div></div>${linked?`<button class="btn primary" type="button" data-action="open-linked-node">Open linked structural node</button>`:''}`;}
 function ancestors(n){const rows=[];let cur=n;const seen=new Set();while(cur&&!seen.has(cur.id)){seen.add(cur.id);rows.unshift(cur);const p=model.parentByChild.get(cur.id);cur=p?model.nodesById.get(p):null;}return rows;}
-function pathHtml(n){return `<div class="route-path">${ancestors(n).map((a,i)=>{const e=model.incomingByChild.get(a.id);return `${i?'<span class="route-arrow">→</span>':''}<span class="route-step">${i?routeChip(e):'<span class="route-chip root">root rule list</span>'}<b title="${esc(a.title)}">${esc(a.title)}</b></span>`}).join('')}</div>`;}
+function pathHtml(n){return `<div class="route-path">${ancestors(n).map((a,i)=>{const e=model.incomingByChild.get(a.id);return `${i?'<span class="route-arrow">-&gt;</span>':''}<span class="route-step">${i?routeChip(e):'<span class="route-chip root">root rule list</span>'}<b title="${esc(a.title)}">${esc(a.title)}</b></span>`}).join('')}</div>`;}
 function outgoingGroups(n){const edges=list(model.edgesByParent.get(n.id));const groups={};edges.forEach(e=>{const key=e.label||'Unnamed';(groups[key]||(groups[key]=[])).push(e);});return groups;}
 
 function branchSummaryHtml(n){
@@ -1292,7 +1411,7 @@ function renderNodeInspector(n){
  const fieldResolution=resolveNodeFieldReferences(n);
  const fieldBody=renderFieldResolutionBlock(fieldResolution);
  const parentActionPath=parentRuleActionListBlock(n);
- const relBody=refs.length?refs.slice(0,120).map(r=>`<div class="split-row my-7"><span>${esc(r.kind)} → <b>${esc(r.target)}</b><div class="caption">${esc(r.targetType||'Reference')}</div></span><span class="badge blue">configured</span></div>`).join(''):'<div class="muted">No references are linked to this rule in the current snapshot.</div>';
+ const relBody=refs.length?refs.slice(0,120).map(r=>`<div class="split-row my-7"><span>${esc(r.kind)} -&gt; <b>${esc(r.target)}</b><div class="caption">${esc(r.targetType||'Reference')}</div></span><span class="badge blue">configured</span></div>`).join(''):'<div class="muted">No references are linked to this rule in the current snapshot.</div>';
  const diagBody=diags.length?diags.map(d=>`<div class="notice compact"><div class="notice-icon">!</div><div><b>${esc(d.title)}</b><br>${esc(d.detail)}</div></div>`).join(''):'<div class="muted">No messages linked to this rule.</div>';
  const summary=`<div class="kv">${kv('Rule name',esc(n.title))}${kv('Function',`<span class="mono">${esc(n.fn||'')}</span>`)}${kv('Scope',esc(n.scopeId))}${kv('Display path',`<span class="mono path-line">${esc(displayPath)}</span>`)}${kv('Parent action',incoming?`<span class="route-chip ${incoming.resolved?'resolved':'unresolved'}">${esc(incoming.label)}</span>`:'Root rule list')}${kv('Disabled state',disabledHtml)}${kv('Sub-list children',fmt(childIds(n.id).length))}${kv('References',fmt(refs.length))}${kv('Node',esc(n.id))}</div><div class="inline-actions mt-12"><button class="btn" type="button" data-action="copy-route-path">Copy path</button><button class="btn primary" type="button" data-action="copy-rule-config">Copy config</button></div>`;
  const raw=`<pre class="raw">${esc(JSON.stringify(n,null,2))}</pre>`;
@@ -1524,12 +1643,12 @@ function requestedWorkspaceView(){
     const href=text(window.location?.href||'');
     const match=href.match(/[?&]view=([^&#]+)/i);
     const view=match?decodeURIComponent(match[1].replace(/\+/g,' ')):'';
-    return ['structure','field-resolution','resources','tables','drivers','udfs'].includes(view)?view:'';
+    return ['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(view)?view:'';
   }catch{return '';}
 }
 function noteRecentScope(scopeId){const id=text(scopeId);if(!id)return;state.recentScopes=[id,...state.recentScopes.filter(x=>x!==id)].slice(0,6);}
-function saveState(){try{localStorage.setItem(snapshotStoreKey(),JSON.stringify({scopeId:state.scopeId,theme:state.theme,density:state.density,treeFilter:state.treeFilter,scopeKindFilter:state.scopeKindFilter,workspaceView:state.workspaceView,fieldResolutionFilter:state.fieldResolutionFilter,selectedResourceKey:state.selectedResourceKey,selectedDriverKey:state.selectedDriverKey,selectedTableName:state.selectedTableName,selectedUdfName:state.selectedUdfName,udfFilter:state.udfFilter,inspectorOpen:document.body.classList.contains('inspector-open'),recentScopes:state.recentScopes,disclosureLevel:state.disclosureLevel}));localStorage.setItem('ac-rule-workbench-v62-1-theme',state.theme);}catch{}}
-function restoreSnapshotState(){const saved=safeJson(localStorage.getItem(snapshotStoreKey())||'{}',{});const theme=localStorage.getItem('ac-rule-workbench-v62-1-theme')||(['light','dark'].includes(saved.theme)?saved.theme:'light');state.theme=theme;document.documentElement.dataset.theme=theme;state.density=saved.density==='high'?'high':state.density;applyDensityClass(state.density);document.body.classList.toggle('inspector-open',saved.inspectorOpen===true);if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;if(saved.treeFilter)state.treeFilter=saved.treeFilter;if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;state.workspaceView=['structure','field-resolution','resources','tables','drivers','udfs'].includes(saved.workspaceView)?saved.workspaceView:'structure';state.workspaceView=requestedWorkspaceView()||state.workspaceView;state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';state.selectedResourceKey=text(saved.selectedResourceKey||'');state.selectedDriverKey=text(saved.selectedDriverKey||'');state.selectedTableName=text(saved.selectedTableName||'');state.selectedUdfName=text(saved.selectedUdfName||'');state.udfFilter=['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;state.recentScopes=Array.isArray(saved.recentScopes)?saved.recentScopes:[];state.disclosureLevel=Number(saved.disclosureLevel||state.disclosureLevel||2)||2;}
+function saveState(){try{localStorage.setItem(snapshotStoreKey(),JSON.stringify({scopeId:state.scopeId,theme:state.theme,density:state.density,treeFilter:state.treeFilter,scopeKindFilter:state.scopeKindFilter,workspaceView:state.workspaceView,fieldResolutionFilter:state.fieldResolutionFilter,selectedResourceKey:state.selectedResourceKey,selectedFunctionName:state.selectedFunctionName,selectedDriverKey:state.selectedDriverKey,selectedTableName:state.selectedTableName,selectedUdfName:state.selectedUdfName,udfFilter:state.udfFilter,inspectorOpen:document.body.classList.contains('inspector-open'),recentScopes:state.recentScopes,disclosureLevel:state.disclosureLevel}));localStorage.setItem('ac-rule-workbench-v62-1-theme',state.theme);}catch{}}
+function restoreSnapshotState(){const saved=safeJson(localStorage.getItem(snapshotStoreKey())||'{}',{});const theme=localStorage.getItem('ac-rule-workbench-v62-1-theme')||(['light','dark'].includes(saved.theme)?saved.theme:'light');state.theme=theme;document.documentElement.dataset.theme=theme;state.density=saved.density==='high'?'high':state.density;applyDensityClass(state.density);document.body.classList.toggle('inspector-open',saved.inspectorOpen===true);if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;if(saved.treeFilter)state.treeFilter=saved.treeFilter;if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;state.workspaceView=['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(saved.workspaceView)?saved.workspaceView:'structure';state.workspaceView=requestedWorkspaceView()||state.workspaceView;state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';state.selectedResourceKey=text(saved.selectedResourceKey||'');state.selectedFunctionName=text(saved.selectedFunctionName||'');state.selectedDriverKey=text(saved.selectedDriverKey||'');state.selectedTableName=text(saved.selectedTableName||'');state.selectedUdfName=text(saved.selectedUdfName||'');state.udfFilter=['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;state.recentScopes=Array.isArray(saved.recentScopes)?saved.recentScopes:[];state.disclosureLevel=Number(saved.disclosureLevel||state.disclosureLevel||2)||2;}
 function branchIdFor(parentId,g){return `${state.scopeId}|${String(parentId)}|action:${text(first(g?.actionListIndex,g?.key,g?.label,'route')).replace(/\s+/g,'_')}`;}
 function branchVmFromKey(key,scopeId=state.scopeId){for(const n of model.nodes){if(n.scopeId!==scopeId)continue;for(const g of childRouteGroups(n.id)){const k=branchKey(n.id,g);if(k===key){const childNodes=g.childIds.map(id=>model.nodesById.get(String(id))).filter(Boolean);return {kind:'ActionList',key:k,branchId:branchIdFor(n.id,g),scopeId,parent:n,group:g,childNodes,childIds:g.childIds,childCount:g.childIds.length,routeState:g.routeState||'UnnamedAction',resolved:!!g.resolved,label:g.label||'Unnamed action list',actionListIndex:g.actionListIndex};}}}return null;}
 function selectedBranch(){return state.selectedType==='branch'?branchVmFromKey(state.selectedId):null;}
@@ -1631,7 +1750,7 @@ function branchMarkdownReport(b){const p=branchPacket(b);return `# Action List C
 function renderBranchInspector(b){
   const diags=branchMessages(b);
   const summary=`<div class="kv">${kv('Action List',`<span class="route-chip ${b.resolved?'resolved':'unresolved'}">${esc(b.label)}</span>`)}${kv('Parent Rule',`<button class="btn ghost" type="button" data-node="${esc(b.parent.id)}">${esc(b.parent.title)}</button>`)}${kv('Parent function',`<span class="mono">${esc(b.parent.fn||'')}</span>`)}${kv('Status/action index',esc(b.actionListIndex??''))}${kv('Sub-list children',fmt(b.childCount))}${diags.length?kv('Messages',`<span class="badge amber">${fmt(diags.length)}</span>`):''}</div><div class="branch-actions"><button class="btn" type="button" data-action="copy-branch-route">Copy action-list path</button></div>`;
-  const path=`<div class="route-breadcrumb">${branchPathObjects(b).map((seg,i)=>`${i?'<span class="route-arrow">→</span>':''}${seg.kind==='ActionList'?`<span class="route-step"><span class="route-chip ${seg.resolved?'resolved':'unresolved'}">Action List: ${esc(seg.label)}</span></span>`:`<button class="route-step" type="button" data-node="${esc(seg.nodeId)}"><b>${esc(seg.name)}</b></button>`}`).join('')}</div><div class="caption mt-8">Configured parent rule and sub-list path from the FWD snapshot.</div>`;
+  const path=`<div class="route-breadcrumb">${branchPathObjects(b).map((seg,i)=>`${i?'<span class="route-arrow">-&gt;</span>':''}${seg.kind==='ActionList'?`<span class="route-step"><span class="route-chip ${seg.resolved?'resolved':'unresolved'}">Action List: ${esc(seg.label)}</span></span>`:`<button class="route-step" type="button" data-node="${esc(seg.nodeId)}"><b>${esc(seg.name)}</b></button>`}`).join('')}</div><div class="caption mt-8">Configured parent rule and sub-list path from the FWD snapshot.</div>`;
   const children=b.childNodes.length?`<div class="mini-list">${b.childNodes.map(n=>`<button class="quick-card" type="button" data-node="${esc(n.id)}"><b>${esc(n.title)}</b><span>${esc(n.fn||'no function')} · ${n.disabled==='none'?'enabled':n.disabled}</span></button>`).join('')}</div>`:'<div class="muted">No child rules under this sub-list.</div>';
   $('inspectorBody').innerHTML=`${sectionHtml('Summary','action list',summary,true)}${sectionHtml('Parent Rule / Sub-list Path','path',path,true)}${sectionHtml('Child rules',b.childCount,children,true)}`;
 }
@@ -1655,6 +1774,7 @@ function globalNavigationCounts(){
   const tableDefs=buildGlobalTableDefinitions();
   return {
     resources:first(definedCounts.resourceTypes,domainRowsByView('resources').length),
+    functions:first(model.fwd?.functions?.count,domainRowsByView('functions').length),
     tables:first(model.fwd?.tables?.count,definedCounts.tables,tableDefs.length),
     drivers:domainRowsByView('drivers').length,
     udfs:buildUdfDefinitions().length
@@ -1672,6 +1792,7 @@ function renderGlobalNavigation(){
   }
   el.innerHTML=`<div class="scope-group global-nav-heading"><span>Global Definitions</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
     row('view-resources','Resources',counts.resources,'FWD-level resource buckets and definitions'),
+    row('view-functions','Functions',counts.functions,'AC function catalog and observed rule usage'),
     row('view-tables','Tables',counts.tables,'Global table definitions and rule usage'),
     row('view-udfs','UDFs',counts.udfs,'Global User Defined Functions and caller rules'),
     row('view-drivers','Drivers',counts.drivers,'Driver definitions and process-private driver findings')
@@ -1694,6 +1815,7 @@ function renderObjectTreeBlock(){
     processes:first(definedCounts?.processes,scopeCountBy(v=>/process|\bac\b|\bdv\b|\bfip\b|\bocr\b|render|store|webkey|\bkfi\b|\bke\b/i.test(v))),
     structure:scopedRuleNodes().length,
     resources:first(definedCounts?.resourceTypes,toTotal(resources)),
+    functions:first(model.fwd?.functions?.count,toTotal(domainRowsByView('functions'))),
     tables:first(model.fwd?.tables?.count,definedCounts?.tables,tableDefs.length),
     drivers:toTotal(drivers),
     udfs:toTotal(udfs),
@@ -1792,7 +1914,7 @@ function jumpToSearchResult(r){if(!r)return;closeSearchPopover();if(r.kind==='Sc
 function normalizeWorkspaceViewForScope(){
   const scope=currentScope();
   if(!scope)return;
-  if(!['structure','field-resolution','resources','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
+  if(!['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
 }
 function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();if(isGlobalDefinitionView())document.body.classList.remove('inspector-open');saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
 function renderTop(){
@@ -1845,6 +1967,7 @@ function activeSliceHtml(){
     structure:['Structure','Rule hierarchy'],
     'field-resolution':['Fields','Resolution matrix'],
     resources:['Resources','Global definitions'],
+    functions:['Functions','AC catalog'],
     tables:['Tables','Global definitions'],
     drivers:['Drivers','Global definitions'],
     udfs:['UDFs','Global definitions'],
@@ -1857,7 +1980,7 @@ function renderViewbar(){
   const globalView=isGlobalDefinitionView();
   const hasFilter=!!state.query;
   const viewDefs=globalView
-    ? [['resources','Resources'],['tables','Tables'],['udfs','UDFs'],['drivers','Drivers']]
+    ? [['resources','Resources'],['functions','Functions'],['tables','Tables'],['udfs','UDFs'],['drivers','Drivers']]
     : [['structure','Structure'],['field-resolution','Fields']];
   const viewButtons=viewDefs.map(([id,label])=>`<button class="btn ${state.workspaceView===id?'primary':''}" type="button" data-action="view-${id}" aria-pressed="${state.workspaceView===id?'true':'false'}">${label}</button>`);
   const treeMenu=struct?`<details class="action-menu tree-options"><summary class="btn">Tree</summary><div class="action-menu-pop"><button class="btn" type="button" data-action="expand-selected-depth">Open selected branch</button><button class="btn" type="button" data-action="expand-selected-subtree">Open subtree</button><button class="btn" type="button" data-action="collapse-siblings">Collapse siblings</button><button class="btn" type="button" data-action="collapse-all">Collapse all</button></div></details>`:'';
@@ -1901,19 +2024,19 @@ function handleModalFocusTrap(event){
 function renderContextHelp(topic){
   const help={
     'action-branch':{
-      title:'Action Lists',
-      body:'An action list is the static child rule list selected by a parent rule result. It shows configured structure, not runtime execution.',
-      checks:['Confirm the incoming action label.','Review child rules in order.','Use Copy path when documenting findings.']
+      title:'Action Lists / Status Results',
+      body:'An action list is the configured sub-list selected by a parent rule status result. The parent rule owns the status/action label; child rules do not.',
+      checks:['Confirm the parent rule and status result.','Review child rules in configured order.','Treat the path as static FWD configuration, not runtime execution.']
     },
     model:{
       title:'FWD model',
-      body:'The viewer presents the extracted FWD structure, resources, relationships, and field catalog when available.',
-      checks:['Use the structure view for hierarchy.','Use inventory rows as a secondary index.','Use Raw when a value is missing from the formatted view.']
+      body:'FormWorks Editor authors the FWD/STC model: documents, pages, variants, fields, batches, processes, resources, and private configuration nodes. This viewer is read-only.',
+      checks:['Use Structure for rule-list hierarchy.','Use global definitions for functions, UDFs, tables, resources, and drivers.','Use Raw only as final confirmation.']
     },
     disabled:{
       title:'Disabled state',
-      body:'Disabled state is reported from the extracted structural model. Inherited disabled means a parent branch disables downstream nodes.',
-      checks:['Distinguish direct disabled from inherited disabled.','Check the parent rule and action-list context before drawing conclusions.','Use the inspector raw view for the exact extracted object.']
+      body:'Disabled state is reported from extracted structural evidence when available. Inherited disabled means the rule sits under a disabled parent in the rule-list tree.',
+      checks:['Distinguish direct disabled from inherited disabled.','Treat sequence-only hints as audit evidence only.','Check parent rule and action-list context before drawing conclusions.']
     }
   };
   const item=help[topic]||{title:'Context help',body:'This view is read-only and FWD-first.',checks:['Select a scope.','Inspect the rule or branch.','Copy config when documenting findings.']};
@@ -1934,12 +2057,13 @@ function subtreeNodes(nodeId){
   return result;
 }
 
-function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'Workbench help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FWD configuration viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
+function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'Workbench help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FormWorks Editor companion.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
 function handleAction(a){if(a==='open-global-detail'){state.globalDetailKind=state.workspaceView;state.modal='global-detail';renderModal();return;}if(a==='go-structure'){state.treeFilter='all';state.query='';state.treeQuery='';renderAll();toast('Structure workspace ready');return;}if(a==='clear-tree-search'){state.query='';state.treeQuery='';$('globalSearch').value='';renderContent();renderInspector();renderViewbar();renderSearchPopover();$('viewSearch')?.focus();return;}if(a==='show-messages'){const d=scopedDiags()[0];if(d){state.selectedType='diag';state.selectedId=d.id;document.body.classList.add('inspector-open');renderAll();}else toast('No messages in this scope');return;}if(a==='open-help'){state.modal='help';renderModal();return;}if(a==='help-action-branch'||a==='help-model'||a==='help-disabled'){state.modal=a.replace(/^help-/,'help-');renderModal();return;}if(a==='close-modal'){closeModalRender();return;}if(a==='toggle-theme'){state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;saveState();toast(`${state.theme==='dark'?'Dark':'Light'} mode`);return;}if(a==='close-inspector'){document.body.classList.remove('inspector-open');saveState();return;}if(a==='show-inspector'){document.body.classList.add('inspector-open');saveState();return;}if(a==='expand-all'){const count=scopedRuleNodes().length;if(count>2500&&!confirm(`Expand ${fmt(count)} structural rules and all action lists? This can be slow.`))return;scopedNodes().forEach(n=>state.expanded.add(n.id));state.collapsedBranches.clear();renderAll();return;}if(a==='collapse-all'){state.expanded.clear();(model.rootsByScope.get(state.scopeId)||[]).forEach(id=>state.expanded.add(String(id)));state.collapsedBranches=new Set(allBranchKeysForScope(state.scopeId));renderAll();return;}if(a==='expand-selected-depth'){const n=selectedNode();if(!n){toast('Select a rule first');return;}state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();return;}if(a==='expand-selected-subtree'){const n=selectedNode();if(!n){toast('Select a rule first');return;}subtreeNodes(n.id).forEach(x=>state.expanded.add(x.id));childRouteGroups(n.id).forEach(g=>state.collapsedBranches.delete(branchKey(n.id,g)));renderAll();return;}if(a==='collapse-siblings'){const n=selectedNode();if(!n){toast('Select a rule first');return;}const parent=model.parentByChild.get(n.id);if(parent){childIds(parent).filter(id=>id!==n.id).forEach(id=>state.expanded.delete(id));}renderAll();return;}if(a==='expand-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.delete(k));renderAll();return;}if(a==='collapse-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.add(k));renderAll();return;}if(a==='clear-focus'){state.focusNodeId='';renderAll();return;}if(a==='focus-selected'){const n=selectedNode();if(n){state.focusNodeId=n.id;state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();}return;}if(a==='open-linked-node'){const obj=selectedInventory()||selectedRel();if(obj&&obj.nodeId){selectNode(obj.nodeId);}else toast('No linked structural node');return;}if(a==='copy-route-path'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(JSON.stringify(selectedPathPacket(n),null,2));return;}if(a==='copy-rule-config'){const b=selectedBranch();if(b){copyText(JSON.stringify(branchPacket(b),null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or branch first');return;}copyText(JSON.stringify(selectedRuleConfigPacket(n),null,2));return;}if(a==='copy-rule-explanation'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(rulePlainLanguageNarrative(n));return;}if(a==='copy-branch-route'){const b=selectedBranch();if(!b){toast('Select an action list first');return;}copyText(JSON.stringify({schema:'AcWorkbench.ActionListPath',scopeId:b.scopeId,path:branchPathObjects(b)},null,2));return;}if(a==='first-warning-scope'){const s=model.scopes.find(x=>x.warnings>0);if(s)selectScope(s.scopeId);return;}if(a==='largest-scope'){const s=[...model.scopes].sort((a,b)=>b.structural-a.structural)[0];if(s)selectScope(s.scopeId);return;}}
 function viewSearchMeta(){
   if(state.workspaceView==='structure')return {label:'Filter structure',placeholder:'Filter rules by name, function, status result, action list, field, or disabled state'};
   if(state.workspaceView==='field-resolution')return {label:'Filter field resolution',placeholder:'Filter field references by field name, rule, function, or parameter'};
   if(state.workspaceView==='resources')return {label:'Filter resources',placeholder:'Filter resource definitions and references'};
+  if(state.workspaceView==='functions')return {label:'Filter functions',placeholder:'Filter functions by name, category, status result, parameter, behavior, or rule usage'};
   if(state.workspaceView==='tables')return {label:'Filter tables',placeholder:'Filter tables by name, column, scope, or rule reference'};
   if(state.workspaceView==='drivers')return {label:'Filter drivers',placeholder:'Filter drivers and process findings'};
   if(state.workspaceView==='udfs')return {label:'Filter UDFs',placeholder:'Filter UDF names, real parameter names, internal rules, caller rules, or status results'};
@@ -1984,7 +2108,7 @@ function wireOnboardingChecklist(){
     dismissBtn.addEventListener('click',()=>dismissOnboardingChecklist());
   }
 }
-function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='view-structure'||act==='view-field-resolution'||act==='view-resources'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView())document.body.classList.remove('inspector-open');renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='view-structure'||act==='view-field-resolution'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView())document.body.classList.remove('inspector-open');renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
   document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch')applyQueryInput(e.target.value);});
   document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderViewbar();return;}});
@@ -1992,7 +2116,7 @@ function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.tar
 }
 function wireTableSelection(){document.addEventListener('click',e=>{const tableName=e.target.closest('[data-table-name]')?.dataset.tableName;if(!tableName)return;state.selectedTableName=tableName;renderContent();saveState();});}
 function wireUdfSelection(){document.addEventListener('click',e=>{const udfName=e.target.closest('[data-udf-name]')?.dataset.udfName;if(!udfName)return;state.selectedUdfName=udfName;renderContent();saveState();});}
-function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const row=e.target.closest('[data-global-kind][data-global-key]');if(!row)return;const kind=row.dataset.globalKind,key=row.dataset.globalKey;if(kind==='resources')state.selectedResourceKey=key;else if(kind==='drivers')state.selectedDriverKey=key;else if(kind==='tables')state.selectedTableName=key;else if(kind==='udfs')state.selectedUdfName=key;else return;e.preventDefault();renderContent();saveState();});}
+function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const row=e.target.closest('[data-global-kind][data-global-key]');if(!row)return;const kind=row.dataset.globalKind,key=row.dataset.globalKey;if(kind==='resources')state.selectedResourceKey=key;else if(kind==='functions')state.selectedFunctionName=key;else if(kind==='drivers')state.selectedDriverKey=key;else if(kind==='tables')state.selectedTableName=key;else if(kind==='udfs')state.selectedUdfName=key;else return;e.preventDefault();renderContent();saveState();});}
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.branch-row[data-branch]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.branch&&state.selectedId===r.dataset.branch));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.branch)selectBranch(row.dataset.branch);row.focus();}
 function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const branch=active?.closest?.('[data-branch]')?.dataset.branch;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(branch)selectBranch(branch);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(branch){state.collapsedBranches.has(branch)?state.collapsedBranches.delete(branch):state.collapsedBranches.add(branch);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseBranchesForNode(node));}renderContent();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(branch)state.collapsedBranches.delete(branch);else if(node){state.expanded.add(node);collapseBranchesForNode(node);}renderContent();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(branch)state.collapsedBranches.add(branch);else if(node)state.expanded.delete(node);renderContent();renderInspector();return;}}

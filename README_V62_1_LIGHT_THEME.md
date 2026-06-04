@@ -1,4 +1,8 @@
-# AC Rule Workbench v62.1 — Light Theme Repair
+# AC Rule Workbench v62.1 - Light Theme Repair
+
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical theme note.
 
 This update fixes the viewer theme defaults and dark/light toggle behavior.
 

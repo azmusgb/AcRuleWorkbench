@@ -1,5 +1,7 @@
 # Troubleshooting
 
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md), [Project Code Catalog](project-code-catalog.md), and [Editor Gap Closure Plan](editor-gap-closure-plan.md). Troubleshooting should preserve the product boundary: the workbench reads FWD configuration and does not execute AC runtime logic.
+
 ## Port already in use
 
 ```powershell

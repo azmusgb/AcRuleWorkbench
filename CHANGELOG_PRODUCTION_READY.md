@@ -1,5 +1,9 @@
 # AC Rule Workbench v38 Production-Ready Hardening
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is historical release context.
+
 This package applies the production boundary, API, viewer, diagnostics, script, and documentation hardening pass requested for the v37 workbench package.
 
 ## Product posture

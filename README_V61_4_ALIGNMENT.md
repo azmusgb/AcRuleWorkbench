@@ -1,5 +1,9 @@
 # v61.4 Alignment Review
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical alignment note.
+
 AC Rule Workbench is aligned as a read-only FW Editor companion for AC-related FWD configuration.
 
 ## Product boundary

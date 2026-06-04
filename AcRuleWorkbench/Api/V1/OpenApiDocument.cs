@@ -71,6 +71,7 @@ internal static class OpenApiDocument
             ["operationId"] = OperationId(route),
             ["summary"] = route.Description,
             ["tags"] = new[] { TagFor(route.Path) },
+            ["parameters"] = ParametersFor(route.Path),
             ["responses"] = new Dictionary<string, object>
             {
                 ["200"] = new { description = "Successful response", content = JsonContent("ApiEnvelope", route.Path) },
@@ -150,7 +151,7 @@ internal static class OpenApiDocument
             parameters.Add(PathParameter("process", "Process name such as AC, FIP, Store, OCR, or DV."));
 
         if (path.Contains("{name}"))
-            parameters.Add(PathParameter("name", "Resource or UDF name."));
+            parameters.Add(PathParameter("name", "Resource, function, table, or UDF name."));
 
         if (path.EndsWith("/scopes", StringComparison.OrdinalIgnoreCase))
         {
@@ -164,6 +165,12 @@ internal static class OpenApiDocument
             parameters.Add(QueryParameter("q", "Search query. Operators include function:, field:, action:, route:, scope:, guid:, disabled:, flatonly:, message:."));
             parameters.Add(QueryParameter("kind", "Optional result kind filter such as rule, scope, field, resource, message, or reference."));
             parameters.Add(QueryParameter("limit", "Maximum result count."));
+        }
+
+        if (path.EndsWith("/fwd/functions", StringComparison.OrdinalIgnoreCase))
+        {
+            parameters.Add(QueryParameter("q", "Filter function name, category, status result, parameter, behavior, or description."));
+            parameters.Add(QueryParameter("includeUnobserved", "When false, omit catalog-only functions not observed in the current snapshot."));
         }
 
         return parameters.ToArray();

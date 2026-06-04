@@ -4,6 +4,20 @@
 
 The workbench must clearly separate evidence tiers. This is the core trust model for FormWorks/DCM AC rule inspection.
 
+This authority model is grounded in the FormWorks Editor authoring model:
+
+```text
+Rule List
+  Rule
+    Function
+    Fields / Parameters
+    Attributes
+    Status Results
+      Status -> Do Nothing / Reject Fields / Action List / Sub-list
+```
+
+Use native Editor terms in user-facing analysis whenever possible: `Rule List`, `Rule`, `Status Result`, `Action List`, `Sub-list`, `Parent Rule`, `Fields / Parameters`, and `Attributes`. Route/path language is secondary and should only explain traversal through parent status-result action mappings.
+
 ## Evidence tiers
 
 | Tier | Meaning | Use for |
@@ -13,6 +27,7 @@ The workbench must clearly separate evidence tiers. This is the core trust model
 | Relationship report | Classified static references | Field/resource/table/UDF dependency review |
 | Flow projection | Flat sequence/skip/action projection | Diagnostics only unless confidence is parsed/proven |
 | Generated viewer sidecars | Static export snapshot | Offline review and business/dev distribution |
+| Runtime/test evidence | AC Rules Tester, WR/OCR diff, KE/WebKey behavior, production evidence | Actual execution or operator workflow claims |
 
 ## Authority rules
 
@@ -23,6 +38,20 @@ The workbench must clearly separate evidence tiers. This is the core trust model
 5. Flow projections are not runtime execution traces.
 6. Relationship matches must expose confidence.
 7. Usage-derived table fields are not table schema.
+8. UDFs are function-shaped rule lists and need definition/caller context.
+9. SelectionList/table functions must preserve lookup configuration separately from rule usage.
+10. Static configuration can explain possible runtime impact, but cannot prove branch execution or claim outcome.
+
+## Rule-list handling
+
+| Editor concept | Authority rule |
+|---|---|
+| Rule List | Structural order is authoritative when parsed from the packed tree. |
+| Rule | Treat as a function instance with fields/parameters, attributes, source bindings, status-result actions, and optional reject messages. |
+| Status Result | Belongs to the selected rule/function, not to the child rule reached by an action list. |
+| Action List / Sub-list | Structural grouping selected by a parent status result; selectable and inspectable, but not a rule. |
+| Parent Rule | Owns the incoming status/action label for child rules. |
+| UDF | Requires function-resource interface and internal rule tree context where available. |
 
 ## Disabled-state handling
 

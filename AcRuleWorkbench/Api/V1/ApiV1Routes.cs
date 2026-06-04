@@ -41,6 +41,8 @@ internal static class ApiV1Routes
         new ApiRouteDescriptor("GET", "/api/v1/fwd/processes/{process}/private", "Process private STC tree summary."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/processes/drivers", "Heuristic process-private input/output driver-like findings (separate from process inventory)."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/resources", "FWD resources grouped by type. Supports ?type=..., ?includeDetails=true, ?includePrivate=true."),
+        new ApiRouteDescriptor("GET", "/api/v1/fwd/functions", "AC function catalog with curated semantics plus observed rule usage. Supports ?q=...&includeUnobserved=false."),
+        new ApiRouteDescriptor("GET", "/api/v1/fwd/functions/{name}", "AC function detail with catalog metadata, configured status results, parameters, relationships, and usage."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/tables", "FWD table resources with usage-derived field lists; parsed schema columns are emitted separately when available. Supports ?q=..."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/tables/inferred", "Relationship-derived table candidates with usage-derived field lists. Supports ?q=..."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/udfs", "Function resource/UDF candidates with caller-side usage evidence. Supports ?q=..."),

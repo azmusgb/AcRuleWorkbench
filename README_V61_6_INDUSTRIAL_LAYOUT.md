@@ -1,5 +1,9 @@
 # v61.6 Industrial Read-Only Editor Layout
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical layout note.
+
 This package applies the supplied compact dark workbench prototype direction without changing the viewer's data contract or interaction wiring.
 
 ## Intent

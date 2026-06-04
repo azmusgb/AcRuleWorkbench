@@ -1,5 +1,9 @@
 # AC Rule Workbench — Recommendations Applied
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file records prior recommendations and remains useful historical context.
+
 This package applies the highest-priority review recommendations across rule logic, rule-tree authority, UDF handling, API cache correctness, viewer UX, and packaging hygiene.
 
 ## Applied source changes
@@ -106,4 +110,3 @@ Suggested flow:
 .\scripts\build-and-doctor.ps1
 .\scripts\start-workbench.ps1 -FwdPath C:\path\to\fwd.cfd -Port 8787 -KillExisting
 ```
-

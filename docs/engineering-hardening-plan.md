@@ -2,6 +2,8 @@
 
 This plan records the current production direction for the Workbench. It is intentionally practical: reduce ambiguity, keep the product read-only, and make evidence limitations visible at API and UI boundaries.
 
+The deeper product model is recorded in [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md). Future hardening should preserve FormWorks Editor vocabulary, first-class UDF handling, configuration-first SelectionList/table inspection, and explicit static-vs-runtime caveats.
+
 ## Product intent
 
 AC Rule Workbench is a static configuration inspection tool for FormWorks / Document Capture Manager FWD/CFD files. It does not execute native AC rules and must not claim runtime truth that it did not observe.

@@ -4,6 +4,8 @@ AC Rule Workbench is a local, read-only FW Editor companion for FormWorks / Docu
 
 FW Editor remains the system of record for authoring, editing, testing, and saving FWD changes. AC Rule Workbench does not write to the FWD and does not simulate AC runtime execution.
 
+The current product model is documented in depth in [FormWorks Editor And AC Function Reference](docs/formworks-editor-ac-reference-guide.md). Treat that guide as the baseline for future UI, extraction, API, and documentation decisions: FormWorks Editor is the authoring IDE over the FWD/STC model; AC rules are ordered rule-list trees; status results own action lists/sub-lists; UDFs are reusable rule-list functions with named field-list parameters; and table/SelectionList configuration connects static AC rules to KE/WebKey operator workflows.
+
 ## Product boundary
 
 The viewer is intended to represent what is in the FWD:
@@ -22,6 +24,34 @@ The viewer intentionally excludes FW Editor write operations:
 - no UDF or table editing
 - no save back to FWD
 - no AC Rules Tester runtime execution
+
+## FormWorks / AC mental model
+
+The workbench should use FormWorks Editor vocabulary before workbench-specific shorthand.
+
+| Native concept | Workbench meaning |
+|---|---|
+| FWD/STC model | Durable system configuration: documents, pages, variants, fields, batches, processes, resources, and private configuration nodes |
+| Rule List | Ordered list of rules in a page, document, UDF, Store, or related configuration scope |
+| Rule | Function instance plus field/source bindings, attributes, status-result actions, and optional rejection messages |
+| Status Result | Function return token such as OK, Failed, Empty, Plugged, or Multiple entries |
+| Action List / Sub-list | Nested rule list selected by a parent rule status result |
+| UDF | Function-shaped reusable rule list with named field-list parameters, status results, internal rules, and caller bindings |
+| SelectionList / Table | Lookup configuration that can plug field values and drive operator lookup UX |
+
+When reading the viewer, prefer this structure:
+
+```text
+Rule List
+  Rule
+    Function
+    Fields / Parameters
+    Attributes
+    Status Results
+      Result -> Do Nothing / Reject Fields / Action List / Sub-list
+```
+
+Route/path language is secondary. It helps explain how a selected rule was reached, but the native authoring model is parent rule, status result, action list, and sub-list.
 
 ## Build
 
@@ -72,6 +102,10 @@ POST /api/v1/snapshot/refresh
 GET  /api/v1/scopes
 GET  /api/v1/scopes/{scopeId}?include=structure,inventory,references,diagnostics
 GET  /api/v1/rules/{nodeId}?include=subtree,references,diagnostics
+GET  /api/v1/fwd/functions
+GET  /api/v1/fwd/functions/{name}
+GET  /api/v1/fwd/tables
+GET  /api/v1/fwd/udfs
 GET  /api/v1/search?q=provider
 GET  /api/v1/openapi.json
 ```
@@ -97,6 +131,9 @@ Invoke-WebRequest "http://127.0.0.1:8787/viewer?ui=readonly-editor-v62" -UseBasi
 
 ## Documentation
 
+- [FormWorks Editor And AC Function Reference](docs/formworks-editor-ac-reference-guide.md)
+- [Project Code Catalog](docs/project-code-catalog.md)
+- [Editor Gap Closure Plan](docs/editor-gap-closure-plan.md)
 - [Operator Guide](docs/operator-guide.md)
 - [Admin Guide](docs/admin-guide.md)
 - [Developer Guide](docs/developer-guide.md)

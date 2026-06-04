@@ -1,5 +1,7 @@
 # Admin Guide
 
+AC Rule Workbench is a read-only FormWorks Editor companion. It opens a configured FWD and exposes static configuration evidence for inspection; it does not edit the FWD, save configuration, run AC Rules Tester, or execute AC runtime logic. For the full model, see [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md).
+
 ## Default secure local mode
 
 Start with a fixed FWD path and no debug API:

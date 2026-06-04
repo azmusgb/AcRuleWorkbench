@@ -1,5 +1,9 @@
 # AC Rule Workbench v61.7 - UDF / Global Definition Layout Balance
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical UDF/global-definition layout note.
+
 This patch keeps the read-only FW Editor companion model and improves the UDF/global-definition workspace.
 
 ## Changes

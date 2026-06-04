@@ -1,5 +1,9 @@
 # AC Rule Workbench correctness patch
 
+## Current documentation authority
+
+For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical patch note.
+
 This zip contains the full updated files that need to replace the matching files in the project.
 
 ## Updated files

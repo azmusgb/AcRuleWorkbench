@@ -1,3 +1,4 @@
+// Accessibility helper for the current read-only FormWorks Editor companion viewer.
 const { chromium } = require('playwright');
 const AxeBuilder = require('@axe-core/playwright').default;
 const fs = require('fs');
