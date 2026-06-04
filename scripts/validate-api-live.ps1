@@ -80,7 +80,7 @@ $checks = @(
     @{ Name = "Rule Detail (GUID)"; Method = "GET"; Url = "$BaseUrl/api/v1/rules/$ruleGuid"; Expected = @(200) },
     @{ Name = "Rule Subtree (GUID)"; Method = "GET"; Url = "$BaseUrl/api/v1/rules/$ruleGuid/subtree"; Expected = @(200) },
     @{ Name = "Search"; Method = "GET"; Url = "$BaseUrl/api/v1/search?q=provider"; Expected = @(200) },
-    @{ Name = "Diagnostics"; Method = "GET"; Url = "$BaseUrl/api/v1/diagnostics"; Expected = @(200) },' }
+    @{ Name = "Diagnostics"; Method = "GET"; Url = "$BaseUrl/api/v1/diagnostics"; Expected = @(200) }
 )
 
 $results = foreach ($check in $checks) {

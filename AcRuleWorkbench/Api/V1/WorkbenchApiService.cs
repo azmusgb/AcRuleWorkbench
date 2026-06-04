@@ -1049,9 +1049,12 @@ internal sealed class WorkbenchApiService
         ApiHttpResult? method = RequireMethod(request, "GET");
         if (method != null) return method;
 
-        WorkbenchSnapshot snapshot = GetSnapshot(request);
         string normalized = tail.Trim('/');
         string[] parts = normalized.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (!IsKnownFwdRoute(parts))
+            return Fail(request, "RouteNotFound", "FWD route was not found.", 404, "/api/v1/" + normalized);
+
+        WorkbenchSnapshot snapshot = GetSnapshot(request);
 
         if (parts.Length == 1 || (parts.Length == 2 && parts[1].Equals("overview", StringComparison.OrdinalIgnoreCase)))
             return Ok(request, "AcWorkbench.FwdOverview", BuildFwdOverview(snapshot));
@@ -1074,9 +1077,10 @@ internal sealed class WorkbenchApiService
         if (parts.Length == 3 && parts[1].Equals("processes", StringComparison.OrdinalIgnoreCase) && !parts[2].Equals("drivers", StringComparison.OrdinalIgnoreCase))
         {
             string process = UrlDecode(parts[2]);
-            if (!snapshot.Fwd.Processes.Any(p => RuleCorrelation.Eq(p, process)))
+            string? canonicalProcess = snapshot.Fwd.Processes.FirstOrDefault(p => RuleCorrelation.Eq(p, process));
+            if (string.IsNullOrWhiteSpace(canonicalProcess))
                 return Fail(request, "ProcessNotFound", "FWD process was not found.", 404, "/api/v1/fwd/processes/" + UrlEncode(process));
-            return Ok(request, "AcWorkbench.FwdProcessDetail", BuildFwdProcessDetail(snapshot, request, process));
+            return Ok(request, "AcWorkbench.FwdProcessDetail", BuildFwdProcessDetail(snapshot, request, canonicalProcess!));
         }
 
         if (parts.Length == 3 && parts[1].Equals("processes", StringComparison.OrdinalIgnoreCase) && parts[2].Equals("drivers", StringComparison.OrdinalIgnoreCase))
@@ -1085,10 +1089,13 @@ internal sealed class WorkbenchApiService
         if (parts.Length == 4 && parts[1].Equals("processes", StringComparison.OrdinalIgnoreCase) && parts[3].Equals("private", StringComparison.OrdinalIgnoreCase))
         {
             string process = UrlDecode(parts[2]);
+            string? canonicalProcess = snapshot.Fwd.Processes.FirstOrDefault(p => RuleCorrelation.Eq(p, process));
+            if (string.IsNullOrWhiteSpace(canonicalProcess))
+                return Fail(request, "ProcessNotFound", "FWD process was not found.", 404, "/api/v1/fwd/processes/" + UrlEncode(process));
             var payload = _client.InspectProcessTree(new StcTraversalOptions
             {
                 Path = GetFwdPath(request),
-                ProcessName = process,
+                ProcessName = canonicalProcess!,
                 MaxDepth = Math.Max(0, GetInt(request, "maxDepth", 5)),
                 MaxNodes = Math.Max(1, GetInt(request, "maxNodes", 1500)),
                 MaxPreviewBytes = Math.Max(0, GetInt(request, "maxPreviewBytes", 256)),
@@ -1156,6 +1163,57 @@ internal sealed class WorkbenchApiService
         }
 
         return Fail(request, "RouteNotFound", "FWD route was not found.", 404, "/api/v1/" + normalized);
+    }
+
+    private static bool IsKnownFwdRoute(string[] parts)
+    {
+        if (parts == null || parts.Length == 0)
+            return false;
+
+        if (!parts[0].Equals("fwd", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (parts.Length == 1)
+            return true;
+
+        if (parts.Length == 2)
+        {
+            string section = parts[1];
+            return section.Equals("overview", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("object-graph", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("documents", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("pages", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("batches", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("processes", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("resources", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("functions", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("tables", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("selection-lists", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("udfs", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("page-variants", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("fields", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("runtime-impact", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("fip", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (parts.Length == 3)
+        {
+            if (parts[1].Equals("processes", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (parts[1].Equals("functions", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (parts[1].Equals("tables", StringComparison.OrdinalIgnoreCase))
+                return parts[2].Equals("inferred", StringComparison.OrdinalIgnoreCase);
+
+            if (parts[1].Equals("udfs", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return parts.Length == 4
+            && parts[1].Equals("processes", StringComparison.OrdinalIgnoreCase)
+            && parts[3].Equals("private", StringComparison.OrdinalIgnoreCase);
     }
 
     private object BuildFwdOverview(WorkbenchSnapshot snapshot)
@@ -2709,6 +2767,13 @@ internal sealed class WorkbenchApiService
                 found = false,
                 warnings = new[] { "UDF/function was not found in canonical resources, rule callers, parsed private rules, or relationship evidence." }
             };
+
+        string? canonicalName = canonicalHits.Select(x => x.name).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n))
+            ?? directCallers.Select(c => c.functionName).FirstOrDefault(n => RuleCorrelation.Eq(n, name))
+            ?? relationshipCalls.Select(c => c.functionName).FirstOrDefault(n => RuleCorrelation.Eq(n, name))
+            ?? internalNodes.Select(n => n.FunctionName).FirstOrDefault(n => RuleCorrelation.Eq(n, name));
+        if (!string.IsNullOrWhiteSpace(canonicalName))
+            name = canonicalName!;
 
         var definitionParameterNames = ExtractUdfInterfaceParameterNames(primaryDetails);
         var callerParameterNames = directCallers

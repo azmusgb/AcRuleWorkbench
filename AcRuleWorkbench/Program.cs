@@ -342,7 +342,7 @@ if (Has(context.Args, "ac-diagnostics"))
             {
                 Path = GetValue(context.Args, "--path"),
                 ProcessName = GetValue(context.Args, "--process") ?? "AC",
-                OutputPath = GetValue(context.Args, "--out") ?? "ac-rule-viewer.html",
+                OutputPath = GetValue(context.Args, "--out") ?? "ac-rule-viewer-live.html",
                 Scope = GetValue(context.Args, "--scope"),
                 Term = GetValue(context.Args, "--term"),
                 Function = GetValue(context.Args, "--function"),
@@ -368,6 +368,7 @@ if (Has(context.Args, "ac-diagnostics"))
             if (string.IsNullOrWhiteSpace(prefix))
                 prefix = $"http://{host}:{port}/";
 
+            bool enableDebugApi = Has(context.Args, "--enable-debug-api") && !Has(context.Args, "--disable-debug-api") && !Has(context.Args, "--no-debug-api");
             var serverOptions = new WorkbenchApiServerOptions
             {
                 Prefix = prefix,
@@ -376,8 +377,8 @@ if (Has(context.Args, "ac-diagnostics"))
                 OpenBrowser = Has(context.Args, "--open") || Has(context.Args, "web-test"),
                 EnableCors = Has(context.Args, "--enable-cors") && !Has(context.Args, "--no-cors"),
                 AllowMutatingCommands = Has(context.Args, "--allow-refresh") || Has(context.Args, "--allow-mutations"),
-                EnableDebugApi = Has(context.Args, "--enable-debug-api") && !Has(context.Args, "--disable-debug-api") && !Has(context.Args, "--no-debug-api"),
-                AllowPathQuery = Has(context.Args, "--allow-path-query") || Has(context.Args, "--enable-debug-api"),
+                EnableDebugApi = enableDebugApi,
+                AllowPathQuery = Has(context.Args, "--allow-path-query") || enableDebugApi,
                 DisableSnapshotCache = Has(context.Args, "--no-snapshot-cache") || Has(context.Args, "--disable-snapshot-cache")
             };
 
@@ -543,7 +544,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("  AcRuleWorkbench.exe ac-attr --path C:\\path\\to\\fwd.cfd --attr RejectLetter [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-rejects --path C:\\path\\to\\fwd.cfd [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ac-disabled --path C:\\path\\to\\fwd.cfd [--state inherited] [--json]");
-        Console.WriteLine("  AcRuleWorkbench.exe ac-viewer --path C:\\path\\to\\fwd.cfd --out ac-viewer.html [--open]");
+        Console.WriteLine("  AcRuleWorkbench.exe ac-viewer --path C:\\path\\to\\fwd.cfd --out ac-rule-viewer-live.html [--open]");
         Console.WriteLine("  AcRuleWorkbench.exe fip --path C:\\path\\to\\fwd.cfd [--page DentalADA --variant Standard] [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe ocr --path C:\\path\\to\\result.ocr [--json]");
         Console.WriteLine("  AcRuleWorkbench.exe smoke --fwd C:\\path\\to\\fwd.cfd --ocr C:\\path\\to\\result.ocr [--json]");
@@ -576,7 +577,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("  AcRuleWorkbench.exe ac-rejects --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --json > ac-rejects.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-disabled --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --json > ac-disabled.json");
         Console.WriteLine("  AcRuleWorkbench.exe ac-tree --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --scope DentalADA --json > ac-tree-dentalada.json");
-        Console.WriteLine("  AcRuleWorkbench.exe ac-viewer --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --out ac-viewer.html --open");
+        Console.WriteLine("  AcRuleWorkbench.exe ac-viewer --path C:\\rri\\ddce\\configs\\Server\\R1\\fwd\\fwd.cfd --out ac-rule-viewer-live.html --open");
         Console.WriteLine();
         Console.WriteLine("Options:");
         Console.WriteLine("  --path <path>                  Path to fwd.cfd/fwd.sfd/fwd.fwd or OCR result file.");

@@ -93,7 +93,7 @@ foreach ($dir in $generatedOrBuildDirectories) {
 }
 
 $generatedFiles = @(
-    "ac-rule-viewer.html",
+    "ac-rule-viewer-live.html",
     "ac-rules.json",
     "scripts\runtime-path.generated.ps1"
 )

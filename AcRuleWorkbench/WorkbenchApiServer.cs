@@ -280,7 +280,8 @@ internal sealed class WorkbenchApiServer
             return;
         }
 
-        string route = (request.Url?.AbsolutePath ?? "/").Trim('/').ToLowerInvariant();
+        string route = (request.Url?.AbsolutePath ?? "/").Trim('/');
+        string routeKey = route.ToLowerInvariant();
         if (ViewerRoutes.Contains(route))
         {
             WriteStaticViewer(context);
@@ -299,7 +300,7 @@ internal sealed class WorkbenchApiServer
             return;
         }
 
-        if (route == "api-harness.css")
+        if (routeKey == "api-harness.css")
         {
             if (!_options.EnableDebugApi)
             {
@@ -311,43 +312,43 @@ internal sealed class WorkbenchApiServer
             return;
         }
 
-        if (route == "ac-rule-viewer.css" || route == "viewer/ac-rule-viewer.css")
+        if (routeKey == "ac-rule-viewer.css" || routeKey == "viewer/ac-rule-viewer.css")
         {
             WriteViewerCss(context, "ac-rule-viewer.css");
             return;
         }
-        if (route == "ac-rule-viewer.js" || route == "viewer/ac-rule-viewer.js")
+        if (routeKey == "ac-rule-viewer.js" || routeKey == "viewer/ac-rule-viewer.js")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.js", "application/javascript; charset=utf-8", string.Empty);
             return;
         }
 
-        if (route == "ac-rule-viewer.rules.json" || route == "viewer/ac-rule-viewer.rules.json")
+        if (routeKey == "ac-rule-viewer.rules.json" || routeKey == "viewer/ac-rule-viewer.rules.json")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.rules.json", "application/json; charset=utf-8", "{}");
             return;
         }
 
-        if (route == "ac-rule-viewer.rel.json" || route == "viewer/ac-rule-viewer.rel.json")
+        if (routeKey == "ac-rule-viewer.rel.json" || routeKey == "viewer/ac-rule-viewer.rel.json")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.rel.json", "application/json; charset=utf-8", "{}");
             return;
         }
 
-        if (route == "ac-rule-viewer.tree.json" || route == "viewer/ac-rule-viewer.tree.json")
+        if (routeKey == "ac-rule-viewer.tree.json" || routeKey == "viewer/ac-rule-viewer.tree.json")
         {
             WriteViewerTextAsset(context, "ac-rule-viewer.tree.json", "application/json; charset=utf-8", "{}");
             return;
         }
 
-        if (route == "api/workbench/status")
+        if (routeKey == "api/workbench/status")
         {
             AddDeprecationHeaders(response, "/api/v1/status");
             _responseWriter.WriteJson(response, BuildWorkbenchStatus(request), 200, _options.EnableCors);
             return;
         }
 
-        if (route == "api/workbench/refresh" || route == "api/fwd/refresh")
+        if (routeKey == "api/workbench/refresh" || routeKey == "api/fwd/refresh")
         {
             AddDeprecationHeaders(response, "/api/v1/snapshot/refresh");
             if (!string.Equals(request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
@@ -366,13 +367,13 @@ internal sealed class WorkbenchApiServer
             return;
         }
 
-        if (route == "favicon.ico")
+        if (routeKey == "favicon.ico")
         {
             _responseWriter.WriteNoContent(response, _options.EnableCors);
             return;
         }
 
-        if (route == "api/v1" || route.StartsWith("api/v1/", StringComparison.OrdinalIgnoreCase))
+        if (routeKey == "api/v1" || routeKey.StartsWith("api/v1/", StringComparison.Ordinal))
         {
             ApiHttpResult v1Result = _v1Api.Dispatch(route, request);
             _responseWriter.WriteApiResult(response, v1Result, _options.EnableCors);
@@ -381,10 +382,10 @@ internal sealed class WorkbenchApiServer
 
         if (route.StartsWith("api/fwd/", StringComparison.OrdinalIgnoreCase))
             AddDeprecationHeaders(response, "/api/v1");
-        else if (IsDebugRoute(route))
+        else if (IsDebugRoute(routeKey))
             AddDeprecationHeaders(response, "/api/debug");
 
-        object result = _legacyDispatcher.Dispatch(route, request);
+        object result = _legacyDispatcher.Dispatch(routeKey, request);
         _responseWriter.WriteJson(response, result, 200, _options.EnableCors);
     }
 
@@ -1597,7 +1598,7 @@ internal sealed class WorkbenchApiServer
                 ok = false,
                 refreshEnabled = false,
                 error = "Workbench refresh is disabled for this server process.",
-                fix = "Use .\\scripts\\start-workbench.ps1 to generate the viewer and start the API with refresh support, or restart this process with --allow-refresh and --viewer .\\ac-rule-viewer.html.",
+                fix = "Use .\\scripts\\start-workbench.ps1 to generate the live viewer and start the API with refresh support, or restart this process with --allow-refresh and --viewer .\\ac-rule-viewer-live.html.",
                 links = new { status = "/api/v1/status" }
             };
         }
@@ -1684,13 +1685,7 @@ internal sealed class WorkbenchApiServer
                 : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), configuredPath));
         }
 
-        string? existing = ResolveStaticViewerPath();
-        if (!string.IsNullOrWhiteSpace(existing))
-        {
-            return existing!;
-        }
-
-        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "ac-rule-viewer.html"));
+        return Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "ac-rule-viewer-live.html"));
     }
 
     private void WriteStaticViewer(HttpListenerContext context)
@@ -1770,7 +1765,7 @@ internal sealed class WorkbenchApiServer
     {
         string path = HtmlEncode(_options.DefaultFwdPath ?? @"C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd");
         string oneCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\scripts\\start-workbench.ps1 -FwdPath \"" + path + "\" -Port 8787 -KillExisting";
-        string manualCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe ac-viewer --path \"" + path + "\" --out .\\ac-rule-viewer.html\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe api --path \"" + path + "\" --port 8787 --viewer .\\ac-rule-viewer.html --allow-refresh";
+        string manualCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe ac-viewer --path \"" + path + "\" --out .\\ac-rule-viewer-live.html\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe api --path \"" + path + "\" --port 8787 --viewer .\\ac-rule-viewer-live.html --allow-refresh";
         return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>AC Rule Workbench not generated</title>" +
                "<style>body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}main{max-width:1040px;margin:44px auto;padding:0 22px}.card{background:white;border:1px solid #d7e0eb;border-radius:22px;padding:26px;box-shadow:0 18px 50px rgba(15,23,42,.10)}h1{margin:0 0 10px;font-size:28px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:24px 0 8px}p{color:#64748b;line-height:1.55}.facts{display:grid;grid-template-columns:160px 1fr;gap:8px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:16px 0}.facts b{color:#334155}pre{background:#101827;color:#eaf2ff;border-radius:14px;padding:16px;overflow:auto;white-space:pre-wrap}a{color:#3157d5;font-weight:800}.note{border-left:4px solid #3157d5;background:#eef3ff;padding:12px 14px;border-radius:12px;color:#334155}</style></head>" +
                "<body><main><section class=\"card\"><h1>Workbench file missing</h1><p>The API process is running, but no static <code>ac-rule-viewer.html</code> is attached or discoverable. This is a server setup issue, not an extraction failure.</p>" +
@@ -1906,8 +1901,8 @@ internal sealed class WorkbenchApiServer
     }
 
     // Uses viewer-path-aware probing with fallback to ac-rule-viewer.css.
-    // The API process is normally launched from bin\x86\Debug\net48, while --viewer points
-    // to the repo-root ac-rule-viewer.html. Browser requests for /ac-rule-viewer.css,
+    // The API process is normally launched from bin\x86\Debug\net48, while --viewer can
+    // point to a repo-root shell or generated live viewer. Browser requests for /ac-rule-viewer.css,
     // /ac-rule-viewer.js, and sidecar JSON files must therefore resolve next to the
     // configured viewer file first, not only next to the executable.
     private string BuildViewerCss(string cssFileName)

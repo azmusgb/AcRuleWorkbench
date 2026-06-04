@@ -92,7 +92,7 @@ elseif ($conn.Count -gt 0) {
     throw "Port $Port is already in use by: $($details -join ', '). Choose another port or rerun with -KillExisting."
 }
 
-$viewerOutputPath = Join-Path $root 'ac-rule-viewer.html'
+$viewerOutputPath = Join-Path $root 'ac-rule-viewer-live.html'
 if (-not $SkipViewerRefresh) {
     Push-Location (Split-Path -Parent $exe)
     try {

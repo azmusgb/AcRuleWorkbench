@@ -118,7 +118,7 @@ $managedLibDir = Join-Path $repoRoot 'lib'
 $nativeLibDir = Join-Path $repoRoot 'rri_bin'
 $runtimeHelperPath = Join-Path $scriptDir 'runtime-path.generated.ps1'
 $workbenchExePath = Join-Path $repoRoot "AcRuleWorkbench\bin\x86\$Configuration\net48\AcRuleWorkbench.exe"
-$viewerOutputPath = Join-Path $repoRoot 'ac-rule-viewer.html'
+$viewerOutputPath = Join-Path $repoRoot 'ac-rule-viewer-live.html'
 
 $expectedManagedDlls = @(
     'rribase_net.dll',

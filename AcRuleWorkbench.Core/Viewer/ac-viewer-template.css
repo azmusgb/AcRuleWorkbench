@@ -6354,3 +6354,67 @@ body.layout-v61 #inspectorBody:focus-visible{
   }
 }
 
+/* v62.12 desktop-only production guard.
+   Older responsive experiments remain above for historical compatibility, but
+   the shipped workbench is a desktop evidence-inspection surface. Keep the
+   three-pane shell stable and avoid mobile/tablet reflow in production. */
+html,
+body{
+  min-width:1280px!important;
+}
+
+body.layout-v61{
+  width:auto!important;
+  min-width:1280px!important;
+  max-width:none!important;
+  min-height:100dvh!important;
+  overflow:hidden!important;
+}
+
+body.layout-v61 .app{
+  width:100%!important;
+  min-width:1280px!important;
+  max-width:none!important;
+  height:100dvh!important;
+  min-height:100dvh!important;
+  display:grid!important;
+  grid-template-rows:var(--topbar-h) minmax(0,1fr)!important;
+  overflow:hidden!important;
+}
+
+body.layout-v61 .topbar,
+body.layout-v61 .shell{
+  min-width:1280px!important;
+  max-width:none!important;
+}
+
+body.layout-v61 .shell{
+  width:100%!important;
+  height:calc(100dvh - var(--topbar-h))!important;
+  display:grid!important;
+  grid-template-columns:var(--left-w-effective) var(--splitter-w) minmax(0,1fr) var(--splitter-w) var(--right-w-effective)!important;
+  overflow:hidden!important;
+}
+
+body.layout-v61 .inspector-mobile{
+  display:none!important;
+}
+
+@media (max-width:1279px){
+  :root{
+    --left-w-effective:300px;
+    --right-w-effective:420px;
+  }
+
+  body.layout-v61 .topbar{
+    grid-template-columns:minmax(260px,320px) minmax(320px,1fr) auto!important;
+  }
+
+  body.layout-v61 .snapshot-rail{
+    display:flex!important;
+  }
+
+  body.layout-v61 .brand-sub{
+    display:block!important;
+  }
+}

@@ -2787,17 +2787,17 @@ function renderGlobalNavigation(){
   if(!el)return;
   if(!model){el.innerHTML='';return;}
   const counts=globalNavigationCounts();
-  function row(action,label,count,title){
+  function globalNavRow(action,label,count,title){
     const view=action.replace(/^view-/,'');
     const active=state.workspaceView===view;
     return `<button class="global-view-row ${active?'active':''}" type="button" data-action="${esc(action)}" aria-current="${active?'true':'false'}" title="${esc(title)}"><span class="global-view-name">${esc(label)}</span><span class="global-view-count">${fmt(count)}</span></button>`;
   }
   el.innerHTML=`<div class="scope-group global-nav-heading"><span>Global Definitions</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
-    row('view-resources','Resources',counts.resources,'FWD-level resource buckets and definitions'),
-    row('view-functions','Functions',counts.functions,'AC function catalog and observed rule usage'),
-    row('view-tables','Tables',counts.tables,'Global table definitions and rule usage'),
-    row('view-udfs','UDFs',counts.udfs,'Global User Defined Functions and caller rules'),
-    row('view-drivers','Drivers',counts.drivers,'Driver definitions and process-private driver findings')
+    globalNavRow('view-resources','Resources',counts.resources,'FWD-level resource buckets and definitions'),
+    globalNavRow('view-functions','Functions',counts.functions,'AC function catalog and observed rule usage'),
+    globalNavRow('view-tables','Tables',counts.tables,'Global table definitions and rule usage'),
+    globalNavRow('view-udfs','UDFs',counts.udfs,'Global User Defined Functions and caller rules'),
+    globalNavRow('view-drivers','Drivers',counts.drivers,'Driver definitions and process-private driver findings')
   ].join('')}</div>`;
 }
 
@@ -2823,7 +2823,7 @@ function renderObjectTreeBlock(){
     udfs:toTotal(udfs),
     unresolvedFields:getScopeFieldResolutionIndex(state.scopeId).summary.unresolved
   };
-  function row(action,label,count,title,active=false,child=false){
+  function objectTreeRow(action,label,count,title,active=false,child=false){
     return `<button class="global-view-row ${active?'active':''} ${child?'child':''}" type="button" data-action="${action}" aria-current="${active?'true':'false'}" title="${esc(title)}"><span class="global-view-name">${esc(label)}</span><span class="global-view-count">${fmt(count)}</span></button>`;
   }
   function section(title,rows,open=true){
@@ -2837,10 +2837,10 @@ function renderObjectTreeBlock(){
     processes:state.workspaceView==='structure'&&state.scopeKindFilter==='all'&&/process|\bac\b|\bdv\b|\bfip\b|\bocr\b|render|store|webkey|\bkfi\b|\bke\b/i.test(state.scopeQuery)
   };
   const objectRows=[
-    row('nav-documents','Documents',counts.documents,'Document type configuration scopes',nav.documents,true),
-    row('nav-pages','Pages',counts.pages,'Page type configuration scopes',nav.pages,true),
-    row('nav-batches','Batches',counts.batches,'Batch configuration scopes',nav.batches,true),
-    row('nav-processes','Processes',counts.processes,'Process-node configuration scopes',nav.processes,true)
+    objectTreeRow('nav-documents','Documents',counts.documents,'Document type configuration scopes',nav.documents,true),
+    objectTreeRow('nav-pages','Pages',counts.pages,'Page type configuration scopes',nav.pages,true),
+    objectTreeRow('nav-batches','Batches',counts.batches,'Batch configuration scopes',nav.batches,true),
+    objectTreeRow('nav-processes','Processes',counts.processes,'Process-node configuration scopes',nav.processes,true)
   ];
   return `<div class="scope-group"><span>Objects</span></div><div class="global-view-list" role="group" aria-label="Scope object presets">${section('Scope Presets',objectRows,true)}</div>`;
 }

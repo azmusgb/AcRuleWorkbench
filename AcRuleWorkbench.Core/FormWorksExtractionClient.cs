@@ -1305,7 +1305,7 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         ApplyViewerSnapshotIdentity(rules, relationships, tree, snapshotId, generatedAtUtc, options.RequireNativeOk);
 
         string outputPath = string.IsNullOrWhiteSpace(options.OutputPath)
-            ? Path.GetFullPath("ac-rule-viewer.html")
+            ? Path.GetFullPath("ac-rule-viewer-live.html")
             : Path.GetFullPath(options.OutputPath);
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? Environment.CurrentDirectory);

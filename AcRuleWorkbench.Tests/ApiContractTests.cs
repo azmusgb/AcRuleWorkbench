@@ -311,14 +311,14 @@ public sealed class ApiContractTests
     }
 
     [TestMethod]
-    public void Dispatch_FwdProcessPrivate_UsesRequestedProcessName()
+    public void Dispatch_FwdProcessPrivate_UsesCanonicalProcessName()
     {
         var client = new ProcessPrivateStubClient();
         var service = new WorkbenchApiService(client, new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
-        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/processes/AC/private");
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/processes/ac/private");
         HttpListenerRequest request = requestHandle.Request;
 
-        var result = service.Dispatch("api/v1/fwd/processes/AC/private", request);
+        var result = service.Dispatch("api/v1/fwd/processes/ac/private", request);
 
         Assert.AreEqual(200, result.StatusCode);
         Assert.AreEqual("AC", client.LastProcessName);
@@ -523,6 +523,37 @@ public sealed class ApiContractTests
         Assert.AreEqual("AcWorkbench.FwdProcessDetail", body.Value<string>("schema"));
         Assert.AreEqual("AC", body["data"]?["Name"]?.Value<string>());
         Assert.AreEqual("Fwd.ProcessNames", body["data"]?["Source"]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdProcessDetail_WithLowercaseRoute_Returns_CanonicalProcessName()
+    {
+        var service = new WorkbenchApiService(new ProcessPrivateStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/processes/ac");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/processes/ac", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AC", body["data"]?["Name"]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_UnknownFwdRoute_DoesNotBuildSnapshot()
+    {
+        var client = new CountingSnapshotClient();
+        var service = new WorkbenchApiService(client, new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/not-a-route");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/not-a-route", request);
+
+        Assert.AreEqual(404, result.StatusCode);
+        Assert.AreEqual(0, client.InspectCalls);
+        dynamic body = result.Body;
+        Assert.AreEqual("RouteNotFound", (string)body.Error.Code);
     }
     [TestMethod]
     public void Dispatch_Snapshot_WithSnapshotModeLive_Rebuilds_ForEachRequest()

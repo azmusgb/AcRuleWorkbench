@@ -415,7 +415,7 @@ if ($null -eq $workbenchExe) {
     throw "Could not find AcRuleWorkbench executable under bin for configuration '$Configuration'."
 }
 
-$viewerOutputPath = Join-Path $repoRoot "ac-rule-viewer.html"
+$viewerOutputPath = Join-Path $repoRoot "ac-rule-viewer-live.html"
 $exeDir = Split-Path -Parent $workbenchExe.FullName
 
 Test-RuntimeFolder -Directory $exeDir -RequiredDlls $expectedManagedDlls -Label "Executable managed DLL folder"
@@ -431,7 +431,7 @@ if ($SkipViewerRefresh) {
     Write-Host "Skipping viewer refresh. Existing file will be used: $viewerOutputPath" -ForegroundColor Yellow
 }
 else {
-    # Regenerate the root viewer artifact from the current FWD so the served HTML does not go stale.
+    # Regenerate an ignored live viewer artifact from the current FWD so source-controlled shell files stay clean.
     $viewerArgs = @(
         "ac-viewer",
         "--path", $resolvedFwdPath,
