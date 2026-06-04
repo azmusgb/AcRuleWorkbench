@@ -12,10 +12,15 @@ GET  /health/ready
 GET  /status
 GET  /snapshot
 POST /snapshot/refresh
+GET  /editor-model
 GET  /scopes
 GET  /scopes/{scopeId}
 GET  /rules/{nodeId}
+GET  /rules/{nodeId}/editor-model
+GET  /rule-lists
+GET  /rule-lists/{scopeId}
 GET  /fwd
+GET  /fwd/object-graph
 GET  /fwd/documents
 GET  /fwd/pages
 GET  /fwd/page-variants
@@ -27,9 +32,12 @@ GET  /fwd/resources
 GET  /fwd/functions
 GET  /fwd/functions/{name}
 GET  /fwd/tables
+GET  /fwd/selection-lists
 GET  /fwd/tables/inferred
 GET  /fwd/udfs
+GET  /fwd/udfs/canonical
 GET  /fwd/udfs/{name}
+GET  /fwd/runtime-impact
 GET  /search
 GET  /diagnostics
 GET  /openapi.json
@@ -45,6 +53,29 @@ Use `include=` to reduce endpoint sprawl:
 GET /api/v1/scopes/{scopeId}?include=structure,inventory,references,diagnostics
 GET /api/v1/rules/{nodeId}?include=subtree,references,diagnostics
 ```
+
+Rule detail responses preserve the compatibility payload and include an `editorModel`
+section. `GET /api/v1/rules/{nodeId}/editor-model` returns that canonical selected-rule
+packet directly as `AcWorkbench.SelectedRulePacket`. The packet uses FormWorks Editor
+vocabulary: Rule List, Rule, parent Rule, incoming Status Result, Function, Parameters,
+Attributes, Field Bindings, Action Lists, References, Diagnostics, Evidence, and
+static-inspection caveats.
+
+`GET /api/v1/editor-model` returns the snapshot-level FormWorks Editor parity model.
+Use `include=objectGraph,ruleLists,udfs,selectionLists,runtimeImpacts` to request
+specific sections. The section aliases also have direct routes:
+
+```http
+GET /api/v1/rule-lists
+GET /api/v1/fwd/object-graph
+GET /api/v1/fwd/udfs/canonical
+GET /api/v1/fwd/selection-lists
+GET /api/v1/fwd/runtime-impact
+```
+
+These routes are canonical read-only projections, not authoring surfaces. UDF bodies
+and SelectionList schemas remain explicitly marked as unparsed when only resource names
+and usage-derived evidence are available.
 
 ## Rule identifier behavior
 

@@ -1,10 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcRuleReport
 {
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? SnapshotId { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public DateTime? GeneratedAtUtc { get; set; }
+
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public bool? RequireNativeOk { get; set; }
+
     public string FwdPath { get; set; } = string.Empty;
 
     public string ProcessName { get; set; } = "AC";

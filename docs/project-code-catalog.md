@@ -111,10 +111,11 @@ API v1 is the stable product contract. It wraps extraction output in consistent 
 |---|---|
 | `ApiV1Routes.cs` | Machine-readable route catalog and API/schema version constants. |
 | `ApiEnvelope.cs` | Success/error envelope contracts. |
+| `FormWorksEditorModel.cs` | Snapshot-level FormWorks Editor parity models and builder: object graph, rule lists, UDF definitions, SelectionList definitions, runtime impacts. |
 | `OpenApiDocument.cs` | Generated OpenAPI 3.0 contract. |
 | `RuleCorrelation.cs` | Shared identity, scope, node, key, and matching helpers. |
 | `WorkbenchApiService.cs` | API v1 route dispatch and payload builders. |
-| `WorkbenchSnapshot.cs` | Snapshot DTOs, snapshot builder, scope/rule model indexing, field resolution, coverage diagnostics. |
+| `WorkbenchSnapshot.cs` | Snapshot DTOs, snapshot builder, scope/rule model indexing, field resolution, coverage diagnostics, and Editor parity model attachment. |
 | `WorkbenchSnapshotCache.cs` | Cached snapshot lifecycle, warmup, refresh, key matching, native-strict cache dimension. |
 
 #### API v1 Route Groups
@@ -124,21 +125,27 @@ API v1 is the stable product contract. It wraps extraction output in consistent 
 | `/api/v1`, `/help`, `/routes`, `/openapi.json`, `/capabilities` | Discoverability and contract metadata. |
 | `/health/live`, `/health/ready`, `/status` | Process/source/snapshot health. |
 | `/snapshot`, `/snapshot/warmup`, `/snapshot/refresh` | Snapshot access and lifecycle. |
+| `/editor-model` | Snapshot-level FormWorks Editor parity projection. |
 | `/scopes`, `/scopes/{scopeId}` | Scope list and expanded scope detail. |
 | `/scopes/{scopeId}/structure` | Structural rule tree alias. |
 | `/scopes/{scopeId}/inventory` | Flat rule inventory alias. |
 | `/scopes/{scopeId}/references` | Relationship/reference alias. |
 | `/scopes/{scopeId}/diagnostics` | Scope diagnostics alias. |
 | `/rules/{nodeId}` | Deep selected-rule packet. |
+| `/rules/{nodeId}/editor-model` | Canonical selected-rule packet using Rule List / Rule / Status Result / Action List / Function vocabulary. |
 | `/rules/{nodeId}/subtree` | Selected rule and descendants. |
+| `/rule-lists`, `/rule-lists/{scopeId}` | Snapshot-wide canonical Rule List and Rule Configuration projections. |
 | `/fwd`, `/fwd/overview` | FWD object overview. |
+| `/fwd/object-graph` | Linked canonical FWD object graph projection. |
 | `/fwd/documents`, `/pages`, `/page-variants`, `/fields`, `/batches` | Core FWD object lists. |
 | `/fwd/processes`, `/fwd/processes/{process}`, `/fwd/processes/{process}/private` | Process inventory and private STC summaries. |
 | `/fwd/processes/drivers` | Heuristic process-private driver findings. |
 | `/fwd/resources` | Resource buckets/details/private config. |
 | `/fwd/functions`, `/fwd/functions/{name}` | AC function catalog with curated semantics, configured status results, observed parameters, relationships, and rule usage. |
 | `/fwd/tables`, `/fwd/tables/inferred` | Table/SelectionList resources and relationship-derived table candidates. |
-| `/fwd/udfs`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates and caller-side usage evidence. |
+| `/fwd/selection-lists` | Canonical SelectionList/table definitions with usage-derived match/plug fields. |
+| `/fwd/udfs`, `/fwd/udfs/canonical`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates, canonical UDF definitions, and caller-side usage evidence. |
+| `/fwd/runtime-impact` | Static runtime/operator-impact projection. |
 | `/fwd/fip` | FIP page variant inspection. |
 | `/diagnostics` | Global snapshot diagnostics. |
 | `/search` | FWD-aware global search. |
@@ -590,7 +597,7 @@ Key scripts:
 | `WorkbenchApiService.cs` | Large route dispatch and payload builder class. | Move heavy query construction into focused services. |
 | `WorkbenchApiServer.cs` | Server, static assets, legacy routes, debug routes, refresh, and harness in one class. | Keep semantic work out of this file; eventually split hosting/static/debug concerns. |
 | Viewer JS | Large single-file desktop app. | Keep root/core sync; split only if packaging can preserve generated viewer simplicity. |
-| Function catalog | Intentionally small and high-value only. | Expand into a real AC function schema catalog. |
+| Function catalog | Seeded high-value catalog with observed-function additions and contract tests. | Continue expanding into a full AC function schema catalog. |
 | UDF model | Currently candidate/usage-oriented. | Add canonical UDF definitions with named field-list parameters, status results, internal rule tree, and caller bindings. |
 | Table model | Currently resource/usage-derived. | Add canonical SelectionList/table definitions, schema, match fields, plug fields, options, persistence, rerun behavior. |
 | Status-result actions | Structural edges exist, labels may be resolved, but action semantics are not yet fully first-class. | Add explicit status result -> action model to rule packets/API/viewer. |

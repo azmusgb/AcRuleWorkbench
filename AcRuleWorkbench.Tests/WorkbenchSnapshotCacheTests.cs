@@ -72,6 +72,35 @@ public sealed class WorkbenchSnapshotCacheTests
         Assert.IsTrue(client.InspectCalls >= 2);
     }
 
+    [TestMethod]
+    public void GetOrBuild_OverlappingDifferentKeys_DoesNotLetOlderBuildReplaceCurrent()
+    {
+        var client = new BlockingClient();
+        var cache = new WorkbenchSnapshotCache(client);
+
+        Task<WorkbenchSnapshot> slowBuild = Task.Run(() => cache.GetOrBuild("C:\\slow.cfd", "AC", requireNativeOk: false));
+        Assert.IsTrue(client.SlowInspectStarted.Wait(5000), "The slow build did not start.");
+
+        try
+        {
+            WorkbenchSnapshot fastSnapshot = cache.GetOrBuild("C:\\fast.cfd", "AC", requireNativeOk: false);
+            Assert.AreEqual("C:\\fast.cfd", fastSnapshot.FwdPath);
+            Assert.AreEqual("C:\\fast.cfd", cache.Current?.FwdPath);
+            Assert.IsTrue(cache.HasCurrent("C:\\fast.cfd", "AC", requireNativeOk: false));
+
+            client.ReleaseSlow();
+            WorkbenchSnapshot slowSnapshot = slowBuild.GetAwaiter().GetResult();
+
+            Assert.AreEqual("C:\\slow.cfd", slowSnapshot.FwdPath);
+            Assert.AreEqual("C:\\fast.cfd", cache.Current?.FwdPath);
+            Assert.IsFalse(cache.HasCurrent("C:\\slow.cfd", "AC", requireNativeOk: false));
+        }
+        finally
+        {
+            client.ReleaseSlow();
+        }
+    }
+
     private sealed class CountingClient : IFormWorksExtractionClient
     {
         private int _buildCounter;
@@ -135,5 +164,52 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options)
             if (_delayMilliseconds > 0)
                 Task.Delay(_delayMilliseconds).GetAwaiter().GetResult();
         }
+    }
+
+    private sealed class BlockingClient : IFormWorksExtractionClient
+    {
+        private readonly ManualResetEventSlim _releaseSlow = new ManualResetEventSlim(false);
+
+        public ManualResetEventSlim SlowInspectStarted { get; } = new ManualResetEventSlim(false);
+
+        public void ReleaseSlow()
+        {
+            _releaseSlow.Set();
+        }
+
+        public ProbeReport Probe() => new ProbeReport();
+
+        public FwdInspectionReport Inspect(FwdInspectionOptions options)
+        {
+            if ((options.Path ?? string.Empty).IndexOf("slow", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                SlowInspectStarted.Set();
+                Assert.IsTrue(_releaseSlow.Wait(10000), "The slow build was not released.");
+            }
+
+            return new FwdInspectionReport { Path = options.Path ?? string.Empty };
+        }
+
+        public OcrInspectionReport InspectOcr(OcrInspectionOptions options) => new OcrInspectionReport { Path = options.Path ?? string.Empty };
+
+        public SmokeReport Smoke(SmokeOptions options) => new SmokeReport();
+
+        public StcTreeReport InspectProcessTree(StcTraversalOptions options) => new StcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public FipInspectionReport InspectFip(FipInspectionOptions options) => new FipInspectionReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "FIP" };
+
+        public AcRuleReport InspectAcRules(AcRuleOptions options) => new AcRuleReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcTreeReport BuildAcTree(AcTreeOptions options) => new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+
+        public AcViewerReport ExportAcViewer(AcViewerOptions options) => new AcViewerReport { FwdPath = options.Path ?? string.Empty, OutputPath = "viewer.html" };
     }
 }

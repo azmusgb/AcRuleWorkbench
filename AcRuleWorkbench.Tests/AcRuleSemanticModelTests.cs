@@ -50,4 +50,39 @@ public sealed class AcRuleSemanticModelTests
         Assert.AreEqual("Option", regex!.TargetType);
         Assert.AreEqual("Regex", regex.ParameterRole);
     }
+
+    [TestMethod]
+    public void FunctionCatalog_DefinesObservedEditorParitySeedFunctions()
+    {
+        string[] expected =
+        {
+            "_IIterateDynamicTableUDF",
+            "_IIterateOnlyLinesUDF",
+            "_IKFI",
+            "_IMatchDocAttrConst",
+            "CheckAmount",
+            "CheckCharSet",
+            "CheckLineCount",
+            "CheckPageNum",
+            "CheckRejects",
+            "CompareAmountFields",
+            "DeleteRegExpr",
+            "DoMathAndFormat",
+            "FilterChars",
+            "GetFieldAttr",
+            "GetToken"
+        };
+
+        var names = AcFunctionCatalog.GetDefinitions().Select(d => d.Name).ToList();
+        foreach (string name in expected)
+            Assert.IsTrue(names.Contains(name), "Missing catalog definition for " + name);
+
+        Assert.IsTrue(AcFunctionCatalog.TryGetDefinition("CheckRejects", out AcFunctionCatalog.FunctionDefinition rejects));
+        Assert.IsTrue(rejects.BehaviorFlags.Contains("ReadsRejectState"));
+        Assert.IsTrue(rejects.RuntimeImpacts.Any(i => i.IndexOf("repair", System.StringComparison.OrdinalIgnoreCase) >= 0));
+
+        Assert.IsTrue(AcFunctionCatalog.TryGetDefinition("_IIterateDynamicTableUDF", out AcFunctionCatalog.FunctionDefinition dynamicTableUdf));
+        Assert.IsTrue(dynamicTableUdf.BehaviorFlags.Contains("CallsUdf"));
+        Assert.IsTrue(dynamicTableUdf.BehaviorFlags.Contains("IteratesTableRows"));
+    }
 }

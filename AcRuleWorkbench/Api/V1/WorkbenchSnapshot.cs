@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using AcRuleWorkbench.Core;
 
 namespace AcRuleWorkbench.Api.V1;
@@ -17,6 +19,7 @@ internal sealed class WorkbenchSnapshot
     public AcTreeReport Tree { get; set; } = new AcTreeReport();
     public AcRelationshipReport Relationships { get; set; } = new AcRelationshipReport();
     public AcDiagnosticsReport Diagnostics { get; set; } = new AcDiagnosticsReport();
+    public FormWorksEditorModel EditorModel { get; set; } = new FormWorksEditorModel();
     public Dictionary<string, ScopeModel> ScopesById { get; set; } = new Dictionary<string, ScopeModel>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, RuleModel> RulesByNodeId { get; set; } = new Dictionary<string, RuleModel>(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, RuleModel> RulesByStructuralKey { get; set; } = new Dictionary<string, RuleModel>(StringComparer.OrdinalIgnoreCase);
@@ -96,7 +99,16 @@ internal static class WorkbenchSnapshotBuilder
         if (string.IsNullOrWhiteSpace(fwdPath)) throw new ArgumentException("FWD/CFD path is required.", nameof(fwdPath));
 
         var started = DateTime.UtcNow;
-        var fwd = client.Inspect(new FwdInspectionOptions { Path = fwdPath, IncludeFields = true, RequireNativeOk = requireNativeOk });
+        var fwd = client.Inspect(new FwdInspectionOptions
+        {
+            Path = fwdPath,
+            IncludeFields = true,
+            IncludeResourceConfigs = true,
+            IncludeResourcePrivateTrees = true,
+            MaxPrivateTreeDepth = 8,
+            MaxPrivateTreeNodes = 5000,
+            RequireNativeOk = requireNativeOk
+        });
         var rules = client.InspectAcRules(new AcRuleOptions { Path = fwdPath, ProcessName = processName, RequireNativeOk = requireNativeOk });
         var tree = client.BuildAcTree(new AcTreeOptions
         {
@@ -115,7 +127,7 @@ internal static class WorkbenchSnapshotBuilder
 
         var snapshot = new WorkbenchSnapshot
         {
-            SnapshotId = "fwd-" + completed.ToString("yyyyMMdd-HHmmss") + "-" + Math.Abs((fwd.Path ?? fwdPath).ToLowerInvariant().GetHashCode()),
+            SnapshotId = BuildSnapshotId(fwd.Path ?? fwdPath, processName, requireNativeOk, completed),
             GeneratedAtUtc = completed,
             BuildDurationMs = (long)(completed - started).TotalMilliseconds,
             RequireNativeOk = requireNativeOk,
@@ -129,6 +141,23 @@ internal static class WorkbenchSnapshotBuilder
 
         IndexSnapshot(snapshot);
         return snapshot;
+    }
+
+    internal static string BuildSnapshotId(string fwdPath, string processName, bool requireNativeOk, DateTime generatedAtUtc)
+    {
+        string material = (fwdPath ?? string.Empty).Trim()
+            + "|"
+            + (string.IsNullOrWhiteSpace(processName) ? "AC" : processName.Trim())
+            + "|"
+            + requireNativeOk.ToString();
+
+        using var sha = SHA256.Create();
+        string digest = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(material)))
+            .Replace("-", string.Empty)
+            .Substring(0, 12)
+            .ToLowerInvariant();
+
+        return "fwd-" + generatedAtUtc.ToString("yyyyMMdd-HHmmss-fffffff") + "-" + digest;
     }
 
     private static void IndexSnapshot(WorkbenchSnapshot snapshot)
@@ -267,6 +296,7 @@ internal static class WorkbenchSnapshotBuilder
         }
 
         ResolveEdgeActionNamesFromFlatInventory(snapshot);
+        snapshot.EditorModel = FormWorksEditorModelBuilder.Build(snapshot);
     }
 
     private static void ResolveEdgeActionNamesFromFlatInventory(WorkbenchSnapshot snapshot)

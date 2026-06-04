@@ -99,6 +99,129 @@ public sealed class ApiContractTests
         Assert.AreEqual("node-000414", body["data"]?["identity"]?["NodeId"]?.Value<string>());
         Assert.AreEqual("db5bf065-618b-44ca-8484-0d12384e7d1a", body["data"]?["identity"]?["RuleGuid"]?.Value<string>());
         Assert.IsNotNull(body["data"]?["fieldResolution"]?["summary"]);
+
+        JObject? editorModel = body["data"]?["editorModel"] as JObject;
+        Assert.IsNotNull(editorModel);
+        Assert.AreEqual("SelectedRulePacket", editorModel!["objectKind"]?.Value<string>());
+        Assert.AreEqual("AC/Pages/DentalADA", editorModel["ruleList"]?["scopeId"]?.Value<string>());
+        Assert.AreEqual("node-000413", editorModel["parentRule"]?["nodeId"]?.Value<string>());
+        Assert.AreEqual("Failed", editorModel["incomingStatusResult"]?["name"]?.Value<string>());
+        Assert.AreEqual("ParentRuleStatusResultOwnsSelectedRule", editorModel["incomingStatusResult"]?["relationship"]?.Value<string>());
+        Assert.AreEqual("Formatf", editorModel["function"]?["name"]?.Value<string>());
+        Assert.IsTrue(editorModel["function"]?["defined"]?.Value<bool>() ?? false);
+        Assert.IsTrue((editorModel["actionLists"] as JArray)?.Any(a => string.Equals((string?)a?["statusResult"]?["name"], "OK", StringComparison.OrdinalIgnoreCase)) ?? false);
+    }
+
+    [TestMethod]
+    public void Dispatch_RuleEditorModel_Returns_SelectedRulePacket_Envelope()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/rules/node-000414/editor-model");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/rules/node-000414/editor-model", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.SelectedRulePacket", body.Value<string>("schema"));
+        Assert.AreEqual("SelectedRulePacket", body["data"]?["objectKind"]?.Value<string>());
+        Assert.AreEqual("StatusResultOwnsActionList", body["data"]?["actionLists"]?[0]?["statusResult"]?["relationship"]?.Value<string>());
+        Assert.AreEqual("node-000415", body["data"]?["actionLists"]?[0]?["children"]?[0]?["nodeId"]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_EditorModel_Returns_SnapshotWide_ParityCounts()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/editor-model?include=ruleLists,runtimeImpacts");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/editor-model", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.EditorModel", body.Value<string>("schema"));
+        Assert.IsTrue(body["data"]?["counts"]?["ruleLists"]?.Value<int>() >= 1);
+        Assert.IsTrue(body["data"]?["counts"]?["ruleConfigurations"]?.Value<int>() >= 3);
+        Assert.IsTrue(body["data"]?["counts"]?["runtimeImpacts"]?.Value<int>() >= 1);
+    }
+
+    [TestMethod]
+    public void Dispatch_RuleLists_Returns_StatusResult_And_ActionList_Model()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/rule-lists/AC/Pages/DentalADA");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/rule-lists/AC/Pages/DentalADA", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.RuleListDetail", body.Value<string>("schema"));
+        JArray configs = (JArray)(body["data"]?["ruleConfigurations"] ?? new JArray());
+        JObject selected = (JObject)configs.First(c => string.Equals((string?)c?["nodeId"], "node-000414", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual("Failed", selected["incomingStatusResult"]?["name"]?.Value<string>());
+        Assert.AreEqual("ParentRuleStatusResultOwnsSubList", selected["incomingStatusResult"]?["relationship"]?.Value<string>());
+        Assert.AreEqual("OK", selected["actionLists"]?[0]?["statusResult"]?["name"]?.Value<string>());
+        Assert.AreEqual("node-000415", selected["actionLists"]?[0]?["childRuleNodeIds"]?[0]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdUdfsCanonical_Returns_CallerBindings_And_FieldListNames()
+    {
+        var service = new WorkbenchApiService(new UdfDetailStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/udfs/canonical");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/udfs/canonical", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.UdfDefinitions", body.Value<string>("schema"));
+        JObject udf = (JObject)((JArray)(body["data"]?["items"] ?? new JArray())).First(i => string.Equals((string?)i?["name"], "CopyIfDestBlank", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(((JArray)(udf["fieldListParameters"] ?? new JArray())).Any(p => string.Equals(p.Value<string>(), "Source", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(udf["callerBindings"] ?? new JArray())).Count >= 1);
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdSelectionLists_Returns_UsageDerived_MatchFields()
+    {
+        var service = new WorkbenchApiService(new TableSemanticStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/selection-lists");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/selection-lists", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.SelectionListDefinitions", body.Value<string>("schema"));
+        JObject table = (JObject)((JArray)(body["data"]?["items"] ?? new JArray())).First(i => string.Equals((string?)i?["name"], "MemberTable", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(table["canonical"]?.Value<bool>() ?? false);
+        Assert.IsTrue(((JArray)(table["matchFields"] ?? new JArray())).Any(f => string.Equals((string?)f?["name"], "MemberId", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(table["usageLinks"] ?? new JArray())).Count >= 1);
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdRuntimeImpact_Returns_StaticOperatorImpact()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/runtime-impact?type=FieldMutation");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/runtime-impact", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.RuntimeImpact", body.Value<string>("schema"));
+        JArray items = (JArray)(body["data"]?["items"] ?? new JArray());
+        Assert.IsTrue(items.Any(i => string.Equals((string?)i?["functionName"], "Formatf", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(items.All(i => string.Equals((string?)i?["notProven"], "Static configuration evidence only; native runtime execution was not simulated.", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -456,8 +579,12 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
                 RuleIndex = 6,
                 RuleGuid = "db5bf065-618b-44ca-8484-0d12384e7d1a",
                 RuleName = "Fix no splitting",
+                FunctionName = "Formatf",
                 DisabledState = AcDisabledStates.DisabledDirect
             });
+            report.Rules[0].Parameters["_ParamList0"] = new List<string> { "SubscriberID_OCR" };
+            report.Rules[0].ActionNames.Add("OK");
+            report.Rules[0].ActionNames.Add("Failed");
             return report;
         }
 
@@ -469,6 +596,25 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
             var report = new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+            var parent = new AcTreeNode
+            {
+                NodeId = 413,
+                ParentNodeId = -1,
+                ActionListIndex = -1,
+                HierarchyLevel = 3,
+                RuleIndexWithinScope = 5,
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                IsRuleNode = true,
+                RuleGuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                RuleName = "Parent decision",
+                FunctionName = "CheckPageNum"
+            };
+            parent.ActionNames.Add("OK");
+            parent.ActionNames.Add("Failed");
+            report.Nodes.Add(parent);
+
             report.Nodes.Add(new AcTreeNode
             {
                 NodeId = 414,
@@ -482,7 +628,47 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
                 IsRuleNode = true,
                 RuleGuid = "db5bf065-618b-44ca-8484-0d12384e7d1a",
                 RuleName = "Fix no splitting",
+                FunctionName = "Formatf",
                 DisabledState = AcDisabledStates.DisabledDirect
+            });
+            report.Nodes[1].Parameters["_ParamList0"] = new List<string> { "SubscriberID_OCR" };
+            report.Nodes[1].ActionNames.Add("OK");
+            report.Nodes[1].ActionNames.Add("Failed");
+
+            report.Nodes.Add(new AcTreeNode
+            {
+                NodeId = 415,
+                ParentNodeId = 414,
+                ActionListIndex = 0,
+                HierarchyLevel = 5,
+                RuleIndexWithinScope = 7,
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                IsRuleNode = true,
+                RuleGuid = "ffffffff-1111-2222-3333-444444444444",
+                RuleName = "Child cleanup",
+                FunctionName = "DeleteSpaces"
+            });
+            report.Edges.Add(new AcTreeEdge
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                FromNodeId = 413,
+                ToNodeId = 414,
+                ActionListIndex = 1,
+                ActionName = "Failed",
+                ActionNameResolved = true,
+                Evidence = "Test parent status result edge."
+            });
+            report.Edges.Add(new AcTreeEdge
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                FromNodeId = 414,
+                ToNodeId = 415,
+                ActionListIndex = 0,
+                ActionName = "OK",
+                ActionNameResolved = true,
+                Evidence = "Test selected rule action-list edge."
             });
             report.RebuildCounts();
             return report;

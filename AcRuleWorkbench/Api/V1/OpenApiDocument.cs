@@ -173,6 +173,22 @@ internal static class OpenApiDocument
             parameters.Add(QueryParameter("includeUnobserved", "When false, omit catalog-only functions not observed in the current snapshot."));
         }
 
+        if (path.EndsWith("/editor-model", StringComparison.OrdinalIgnoreCase))
+            parameters.Add(QueryParameter("include", "Optional sections: objectGraph, ruleLists, udfs, selectionLists, runtimeImpacts."));
+
+        if (path.EndsWith("/fwd/object-graph", StringComparison.OrdinalIgnoreCase))
+        {
+            parameters.Add(QueryParameter("kind", "Optional object kind filter such as Document, Page, Field, Resource, Process, or RuleList."));
+            parameters.Add(QueryParameter("q", "Text filter for object ids and names."));
+        }
+
+        if (path.EndsWith("/fwd/runtime-impact", StringComparison.OrdinalIgnoreCase))
+        {
+            parameters.Add(QueryParameter("type", "Optional impact type such as FieldMutation, OperatorRepair, SelectionListLookup, UdfCall, or RuleFlow."));
+            parameters.Add(QueryParameter("scopeId", "Optional Rule List scope id."));
+            parameters.Add(QueryParameter("q", "Text filter for summary, function, or rule name."));
+        }
+
         return parameters.ToArray();
     }
 
@@ -212,7 +228,7 @@ internal static class OpenApiDocument
         if (path.Contains("/health") || path.EndsWith("/routes") || path.EndsWith("/capabilities") || path.EndsWith("/openapi.json") || path.EndsWith("/status")) return "system";
         if (path.Contains("/snapshot")) return "snapshot";
         if (path.Contains("/scopes")) return "scopes";
-        if (path.Contains("/rules")) return "rules";
+        if (path.Contains("/rules") || path.Contains("/rule-lists")) return "rules";
         if (path.Contains("/fwd")) return "fwd";
         if (path.Contains("/diagnostics")) return "messages";
         if (path.Contains("/search")) return "search";

@@ -39,14 +39,16 @@ let relData = null;
 let treeData = null;
 let fwdData = null;
 
-const embeddedPayload = {
+const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
   relData: "__RELATIONSHIPS_JSON__",
   treeData: "__TREE_JSON__",
 };
 
 function tryParseEmbeddedPayload(raw){
-  if(!raw || raw.startsWith('__')) return null;
+  if(!raw) return null;
+  if(typeof raw==='object') return raw;
+  if(typeof raw!=='string' || raw.startsWith('__')) return null;
   try { return JSON.parse(raw); }
   catch { return null; }
 }
@@ -1636,7 +1638,13 @@ function closeModalRender(){state.modal='';renderModal();renderAll();}
 
 
 /* v26 Lean Inspection overrides: selectable action lists, search operators, contextual help, keyboard tree navigation, snapshot-aware persistence. */
-function snapshotId(){return text(first(treeData.SnapshotId,treeData.snapshotId,rulesData.SnapshotId,rulesData.snapshotId,treeData.GeneratedAtUtc,rulesData.GeneratedAtUtc,'embedded-snapshot')).replace(/[^a-z0-9_.:-]+/gi,'-');}
+function stableSnapshotFallbackId(){
+  const material=[treeData?.FwdPath,rulesData?.FwdPath,treeData?.ProcessName,rulesData?.ProcessName,treeData?.NodeCount,rulesData?.RuleCount].map(text).join('|');
+  let hash=2166136261;
+  for(let i=0;i<material.length;i++){hash^=material.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  return `static-${(hash>>>0).toString(36)}`;
+}
+function snapshotId(){return text(first(treeData.SnapshotId,treeData.snapshotId,rulesData.SnapshotId,rulesData.snapshotId,treeData.GeneratedAtUtc,rulesData.GeneratedAtUtc,stableSnapshotFallbackId())).replace(/[^a-z0-9_.:-]+/gi,'-');}
 function snapshotStoreKey(){return `ac-rule-workbench-v62-1:${snapshotId()}`;}
 function requestedWorkspaceView(){
   try{

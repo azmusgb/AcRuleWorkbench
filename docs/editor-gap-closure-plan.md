@@ -84,15 +84,15 @@ The foundation is strong enough to close the gap by adding canonical semantic la
 
 | Editor capability | Current project surface | Gap | Closure requirement | Priority |
 |---|---|---|---|---|
-| FWD tree/object graph | `FwdInspectionReport`, `/api/v1/fwd/*`, viewer global definitions | Lists exist, but there is no single canonical object graph with stable IDs, parent/child links, object kinds, source handles, and editor-equivalent navigation semantics. | Add `FwdObjectGraph` projection with documents, pages, variants, fields, batches, processes, resources, and private nodes as linked objects. | P0 |
+| FWD tree/object graph | `FwdInspectionReport`, `/api/v1/fwd/*`, `/api/v1/fwd/object-graph`, viewer global definitions | Initial linked object graph exists for documents, pages, variants, fields, batches, processes, resources, and rule lists. Private process/resource nodes and richer editor navigation semantics are still partial. | Expand `FwdObjectGraph` with private nodes, typed source handles, field/page variant identity, and editor-equivalent navigation links. | P0 |
 | Document/page design context | Pages, variants, fields, FIP reports | Field geometry and variant data are present but not unified into a page-design model. | Add page/variant/field design context: page image/variant identity, FormID when available, field containers, geometry, multiline/multiple-instance/OMR indicators, processing links. | P1 |
 | Process configuration | Process names and private STC traversal | Process-private nodes are summaries; AC/DV/Store roles and private config are not canonical. | Add process model with role classification, private node summaries, links to rule scopes/resources, and explicit confidence. | P1 |
-| Rule List model | Structural nodes/edges and flat action names | Rule-list/status-result/action-list semantics exist implicitly through edges and action names but are not first-class API objects. | Add `RuleList`, `RuleConfiguration`, and `StatusResultAction` objects. Parent rule owns status/action labels; child rule knows parent/sub-list context. | P0 |
-| Selected rule inspector | Viewer inspector sections, rule detail API | Rule detail still mixes structural, flat, relationship, and raw evidence; function metadata is shallow. | Return a canonical selected-rule packet: identity, scope, parent, ordinal, function, fields/parameters, attributes, status results/actions, reject messages, references, diagnostics, raw evidence. | P0 |
+| Rule List model | Structural nodes/edges, flat action names, selected-rule `editorModel`, `/api/v1/rule-lists` | Snapshot-wide Rule List and Rule Configuration objects now expose parent Status Result and outgoing Action Lists. Full authoring-grade configuration details and raw source handles are still partial. | Add deeper source handles, reject-message mapping, full parameter schemas, and raw evidence drill-through for every rule configuration. | P0 |
+| Selected rule inspector | Viewer inspector sections, rule detail API, `/api/v1/rules/{nodeId}/editor-model` | Initial canonical selected-rule packet exists, but reject-message semantics, deeper function schemas, and viewer panels still depend on richer canonical data. | Expand the selected-rule packet and UI panels with reject messages, full function schemas, richer field/page context, and raw evidence drill-through. | P0 |
 | Function catalog | `AcFunctionCatalog`, `/api/v1/fwd/functions`, viewer Functions workspace | Seed catalog now includes priority categories, descriptions, status-result seeds, parameter roles, behavior flags, runtime-impact notes, configured ActionNames, observed parameters, and rule usage. It is not yet full AC guide coverage. | Complete the catalog with full parameter/options schemas, defaults, package/DLL, data mutation, geometry, multiline/multiple-instance/OMR behavior, examples, replacement guidance, deprecated flags, and all observed custom functions. | P0 |
-| UDF definitions | `/api/v1/fwd/udfs*`, viewer UDF workspace | UDFs are candidate/usage/inference objects; named field-list parameters and internal rule trees are incomplete. | Add `UdfDefinition`: resource identity, named field-list params, status results, internal rule tree, caller bindings, iteration wrapper usage, diagnostics. | P1 |
-| SelectionList/table definitions | `/api/v1/fwd/tables*`, viewer table workspace | Tables are resource and usage-derived; match/plug fields, column options, persistence, rerun triggers, and keyer behavior are not canonical. | Add `SelectionListDefinition`: source, schema evidence, match fields, plug fields, plug options, persistence, rerun triggers, runtime impact, usage links. | P1 |
-| Runtime keying UX | Docs and relationship evidence | Rejects/table prompts/override/suspend/keyer workflow are not modeled as explicit downstream impact. | Add `RuntimeImpact` metadata derived from function catalog and configuration: reject fields/docs/pages, plug fields, table prompts, keyer selection, override/suspend caveats. | P2 |
+| UDF definitions | `/api/v1/fwd/udfs*`, `/api/v1/fwd/udfs/canonical`, viewer UDF workspace | Canonical UDF candidates now expose resource identity, caller bindings, status-result evidence, and field-list parameter names when available. Internal UDF rule bodies and true resource-interface parsing remain incomplete. | Parse Function resource interfaces/private rule bodies and bind caller slots to named field-list parameters with confidence. | P1 |
+| SelectionList/table definitions | `/api/v1/fwd/tables*`, `/api/v1/fwd/selection-lists`, viewer table workspace | Canonical SelectionList/table candidates now expose source, usage links, usage-derived match fields, plug fields, and runtime caveats. True schema/options/persistence/rerun behavior remain incomplete. | Parse table/SelectionList schema, options, persistence, rerun triggers, plug behavior, and keyer prompt semantics from resource config. | P1 |
+| Runtime keying UX | `/api/v1/fwd/runtime-impact`, docs, relationship evidence | Static runtime/operator-impact projections now exist for field mutation, UDF calls, table lookups, branch flow, and operator repair categories. Override/suspend/keyer choices and AC runtime outcomes are still not proven. | Add richer function-specific impact schemas and optional external runtime/test evidence without claiming native execution. | P2 |
 | AC Rules Tester | Documented only | No test case model, baseline model, WR/OCR diff model, or import/export support. | Add optional external test-evidence model for saved tester cases and WR/OCR diff artifacts. Do not execute AC unless a future runtime harness is intentionally built. | P3 |
 | Field catalog | `FieldCatalogEntry` and static matching | Current field resolution is name/token matching and does not fully represent scope, variant, containers, instances, multiline, or geometry semantics. | Add canonical field IDs, scope/page/variant links, geometry parsing, field type metadata, OMR/subfield links, and evidence confidence. | P1 |
 | Resource model | `ResourceTypeDetail`, `ResourceDetail`, private nodes | Resources are grouped and attributes are captured, but typed resource models are incomplete. | Add typed projections for functions/UDFs, tables, date formats, TCL/custom functions, stores, and private config. | P1 |
@@ -371,15 +371,15 @@ Add canonical Editor-parity endpoints while preserving existing compatibility ro
 |---|---|
 | `GET /api/v1/fwd/object-graph` | Full linked FWD object tree. |
 | `GET /api/v1/fwd/objects/{objectId}` | One canonical FWD object packet. |
-| `GET /api/v1/functions` | Function catalog list. |
-| `GET /api/v1/functions/{name}` | Full function schema and observed usage. |
-| `GET /api/v1/rule-scopes/{scopeId}` | Canonical rule scope. |
-| `GET /api/v1/rule-lists/{listId}` | One rule list/action sub-list. |
+| `GET /api/v1/fwd/functions` | Function catalog list. |
+| `GET /api/v1/fwd/functions/{name}` | Function metadata and observed usage. |
+| `GET /api/v1/scopes/{scopeId}` | Canonical rule scope. |
+| `GET /api/v1/rule-lists/{scopeId}` | One rule list/action sub-list. |
 | `GET /api/v1/rules/{nodeId}` | Preserve and expand existing rule detail. |
-| `GET /api/v1/udfs/{name}` | Canonical UDF definition and usage. |
-| `GET /api/v1/tables/{name}` | Canonical SelectionList/table definition and usage. |
+| `GET /api/v1/fwd/udfs/canonical` | Canonical UDF definition and usage candidates. |
+| `GET /api/v1/fwd/selection-lists` | Canonical SelectionList/table definition and usage candidates. |
 | `GET /api/v1/fields/{fieldId}` | Canonical field packet with usage. |
-| `GET /api/v1/runtime-impact?rule=...` | Derived runtime impact packet. |
+| `GET /api/v1/fwd/runtime-impact?rule=...` | Derived runtime impact packet. |
 
 ### Contract Rules
 
@@ -561,14 +561,14 @@ Exit criteria:
 
 | Priority | Item | Acceptance |
 |---|---|---|
-| P0 | Add canonical rule packet DTOs and builders. | API can return selected rule as Rule List / Rule / Function / Fields / Attributes / Status Results / Actions / Raw. |
-| P0 | Add status-result action model. | Parent rule and child sub-list relationship is explicit and tested. |
+| P0 | Add canonical rule packet DTOs and builders. | Initial API packet is available through `editorModel` and `/rules/{nodeId}/editor-model`; continue expanding raw/reject/function detail coverage. |
+| P0 | Add status-result action model. | Parent rule and child sub-list relationship is explicit and contract-tested for selected-rule packets; promote this to snapshot-wide rule-list models next. |
 | P0 | Expand `AcFunctionCatalog` schema. | Catalog supports categories, parameter roles, statuses, behavior flags, and runtime impact fields. |
-| P0 | Add top observed functions to catalog. | Top 20 functions from current evidence have non-heuristic metadata. |
+| P0 | Add top observed functions to catalog. | Initial observed-function seed set is covered by tests; continue until every observed function has non-heuristic metadata or an explicit unknown/custom marker. |
 | P0 | Add golden tests for canonical selected-rule packets. | Representative scope/rule fixture asserts hierarchy, function, params, actions, diagnostics. |
-| P1 | Add canonical UDF definitions. | UDF API/viewer shows named params/status/internal tree/callers when available. |
-| P1 | Add canonical SelectionList/table definitions. | Table API/viewer separates schema, match/plug fields, options, usage. |
-| P1 | Add FWD object graph. | Documents/pages/variants/fields/processes/resources are linked with stable object IDs. |
+| P1 | Add canonical UDF definitions. | Initial API model shows resource identity, caller bindings, field-list names when available, status results, and explicit body/interface parsing gaps. |
+| P1 | Add canonical SelectionList/table definitions. | Initial API model separates schemaParsed=false, usage-derived match/plug fields, usage links, and runtime caveats. |
+| P1 | Add FWD object graph. | Initial API model links documents/pages/variants/fields/processes/resources/rule lists with stable object IDs; private nodes and richer navigation remain open. |
 | P1 | Add function detail endpoint and viewer panel. | Selecting a function shows schema and observed usage. |
 | P1 | Add field detail endpoint and viewer panel. | Selecting a field shows definition, geometry, scope, and rule usage. |
 | P2 | Add runtime-impact model. | Reject/table/plug/keying impacts are evidence-labeled in rule packets. |

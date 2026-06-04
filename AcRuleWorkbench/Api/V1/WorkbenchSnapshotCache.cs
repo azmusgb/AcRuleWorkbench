@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using AcRuleWorkbench.Core;
 
@@ -8,17 +11,11 @@ internal sealed class WorkbenchSnapshotCache
 {
     private readonly IFormWorksExtractionClient _client;
     private readonly object _gate = new object();
+    private readonly Dictionary<SnapshotCacheKey, SnapshotBuildState> _pendingBuilds = new Dictionary<SnapshotCacheKey, SnapshotBuildState>();
     private WorkbenchSnapshot? _current;
     private Exception? _lastBuildFailure;
-
-    // In-progress build state. Read/write only under _gate.
-    // Using a shared Task lets all concurrent callers join the same build instead of
-    // serialising behind a mutex held for the full ~90 s native extraction.
-    private Task<WorkbenchSnapshot>? _pendingBuild;
-    private string? _pendingFwdPath;
-    private string? _pendingProcessName;
-    private bool _pendingRequireNativeOk;
-    private DateTime _pendingStartedAtUtc;
+    private SnapshotCacheKey? _lastBuildFailureKey;
+    private long _latestBuildGeneration;
 
     public WorkbenchSnapshotCache(IFormWorksExtractionClient client)
     {
@@ -38,7 +35,7 @@ internal sealed class WorkbenchSnapshotCache
     /// <summary>True while a background build task is running.</summary>
     public bool IsBuildPending
     {
-        get { lock (_gate) return _pendingBuild != null && !_pendingBuild.IsCompleted; }
+        get { lock (_gate) return _pendingBuilds.Count > 0; }
     }
 
     /// <summary>UTC timestamp of when the current background build started, or null if no build is running.</summary>
@@ -47,8 +44,41 @@ internal sealed class WorkbenchSnapshotCache
         get
         {
             lock (_gate)
-                return (_pendingBuild != null && !_pendingBuild.IsCompleted) ? _pendingStartedAtUtc : (DateTime?)null;
+                return _pendingBuilds.Count == 0 ? (DateTime?)null : _pendingBuilds.Values.Min(b => b.StartedAtUtc);
         }
+    }
+
+    public WorkbenchSnapshot? GetCurrent(string fwdPath, string processName, bool requireNativeOk)
+    {
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
+        lock (_gate)
+            return Matches(_current, key) ? _current : null;
+    }
+
+    public bool HasCurrent(string fwdPath, string processName, bool requireNativeOk)
+    {
+        return GetCurrent(fwdPath, processName, requireNativeOk) != null;
+    }
+
+    public Exception? GetLastBuildFailure(string fwdPath, string processName, bool requireNativeOk)
+    {
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
+        lock (_gate)
+            return _lastBuildFailureKey.HasValue && _lastBuildFailureKey.Value.Equals(key) ? _lastBuildFailure : null;
+    }
+
+    public bool HasPendingBuild(string fwdPath, string processName, bool requireNativeOk)
+    {
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
+        lock (_gate)
+            return _pendingBuilds.ContainsKey(key);
+    }
+
+    public DateTime? GetPendingBuildStartedAtUtc(string fwdPath, string processName, bool requireNativeOk)
+    {
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
+        lock (_gate)
+            return _pendingBuilds.TryGetValue(key, out SnapshotBuildState? build) ? build.StartedAtUtc : (DateTime?)null;
     }
 
     /// <summary>
@@ -57,15 +87,15 @@ internal sealed class WorkbenchSnapshotCache
     /// </summary>
     public WorkbenchSnapshot GetOrBuild(string fwdPath, string processName, bool requireNativeOk)
     {
-        ValidateInputs(fwdPath, processName);
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
 
         Task<WorkbenchSnapshot> pending;
         lock (_gate)
         {
-            if (Matches(_current, fwdPath, processName, requireNativeOk))
+            if (Matches(_current, key))
                 return _current!;
 
-            pending = GetOrStartBuildTask(fwdPath, processName, requireNativeOk);
+            pending = GetOrStartBuildTask(key);
         }
 
         return pending.GetAwaiter().GetResult();
@@ -74,11 +104,11 @@ internal sealed class WorkbenchSnapshotCache
     /// <summary>Forces a new build regardless of cache state.</summary>
     public WorkbenchSnapshot Rebuild(string fwdPath, string processName, bool requireNativeOk)
     {
-        ValidateInputs(fwdPath, processName);
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
 
         Task<WorkbenchSnapshot> pending;
         lock (_gate)
-            pending = StartBuildTask(fwdPath, processName, requireNativeOk);
+            pending = StartBuildTask(key);
 
         return pending.GetAwaiter().GetResult();
     }
@@ -89,14 +119,14 @@ internal sealed class WorkbenchSnapshotCache
     /// </summary>
     public Task WarmUpAsync(string fwdPath, string processName, bool requireNativeOk)
     {
-        ValidateInputs(fwdPath, processName);
+        SnapshotCacheKey key = BuildKey(fwdPath, processName, requireNativeOk);
 
         lock (_gate)
         {
-            if (Matches(_current, fwdPath, processName, requireNativeOk))
+            if (Matches(_current, key))
                 return Task.CompletedTask;
 
-            return GetOrStartBuildTask(fwdPath, processName, requireNativeOk);
+            return GetOrStartBuildTask(key);
         }
     }
 
@@ -106,72 +136,104 @@ internal sealed class WorkbenchSnapshotCache
         {
             _current = null;
             _lastBuildFailure = null;
+            _lastBuildFailureKey = null;
+            _pendingBuilds.Clear();
         }
     }
 
     // Must be called under _gate. Reuses the current pending task when its parameters match.
-    private Task<WorkbenchSnapshot> GetOrStartBuildTask(string fwdPath, string processName, bool requireNativeOk)
+    private Task<WorkbenchSnapshot> GetOrStartBuildTask(SnapshotCacheKey key)
     {
-        if (_pendingBuild != null
-            && !_pendingBuild.IsCompleted
-            && string.Equals(_pendingFwdPath, fwdPath, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(_pendingProcessName, processName, StringComparison.OrdinalIgnoreCase)
-            && _pendingRequireNativeOk == requireNativeOk)
-        {
-            return _pendingBuild;
-        }
+        if (_pendingBuilds.TryGetValue(key, out SnapshotBuildState? build))
+            return build.Task;
 
-        return StartBuildTask(fwdPath, processName, requireNativeOk);
+        return StartBuildTask(key);
     }
 
     // Must be called under _gate. Always creates a fresh build Task.
-    private Task<WorkbenchSnapshot> StartBuildTask(string fwdPath, string processName, bool requireNativeOk)
+    private Task<WorkbenchSnapshot> StartBuildTask(SnapshotCacheKey key)
     {
-        var task = Task.Run(() =>
+        long generation = ++_latestBuildGeneration;
+        var completion = new TaskCompletionSource<WorkbenchSnapshot>();
+        _pendingBuilds[key] = new SnapshotBuildState(completion.Task, DateTime.UtcNow, generation);
+
+        Task.Run(() =>
         {
             try
             {
-                WorkbenchSnapshot built = WorkbenchSnapshotBuilder.Build(_client, fwdPath, processName, requireNativeOk);
+                WorkbenchSnapshot built = WorkbenchSnapshotBuilder.Build(_client, key.FwdPath, key.ProcessName, key.RequireNativeOk);
                 lock (_gate)
                 {
-                    _current = built;
-                    _lastBuildFailure = null;
+                    if (IsActiveBuild(key, generation) && generation == _latestBuildGeneration)
+                    {
+                        _current = built;
+                        _lastBuildFailure = null;
+                        _lastBuildFailureKey = null;
+                    }
                 }
-                return built;
+                completion.SetResult(built);
             }
             catch (Exception ex)
             {
                 lock (_gate)
-                    _lastBuildFailure = ex;
-                throw;
+                {
+                    if (IsActiveBuild(key, generation) && generation == _latestBuildGeneration)
+                    {
+                        _lastBuildFailure = ex;
+                        _lastBuildFailureKey = key;
+                    }
+                }
+                completion.SetException(ex);
+            }
+            finally
+            {
+                lock (_gate)
+                {
+                    if (IsActiveBuild(key, generation))
+                        _pendingBuilds.Remove(key);
+                }
             }
         });
 
-        _pendingBuild = task;
-        _pendingFwdPath = fwdPath;
-        _pendingProcessName = processName;
-        _pendingRequireNativeOk = requireNativeOk;
-        _pendingStartedAtUtc = DateTime.UtcNow;
-
-        // Clear _pendingBuild when done so IsBuildPending reflects reality.
-        task.ContinueWith(t =>
-        {
-            lock (_gate)
-            {
-                if (ReferenceEquals(_pendingBuild, t))
-                    _pendingBuild = null;
-            }
-        }, TaskScheduler.Default);
-
-        return task;
+        return completion.Task;
     }
 
-    private static bool Matches(WorkbenchSnapshot? snapshot, string fwdPath, string processName, bool requireNativeOk)
+    private bool IsActiveBuild(SnapshotCacheKey key, long generation)
+    {
+        return _pendingBuilds.TryGetValue(key, out SnapshotBuildState? build)
+            && build.Generation == generation;
+    }
+
+    private static bool Matches(WorkbenchSnapshot? snapshot, SnapshotCacheKey key)
     {
         return snapshot != null
-            && string.Equals(snapshot.FwdPath, fwdPath, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(snapshot.Rules.ProcessName, processName, StringComparison.OrdinalIgnoreCase)
-            && snapshot.RequireNativeOk == requireNativeOk;
+            && string.Equals(NormalizeFwdPath(snapshot.FwdPath), key.FwdPath, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(NormalizeProcessName(snapshot.Rules.ProcessName), key.ProcessName, StringComparison.OrdinalIgnoreCase)
+            && snapshot.RequireNativeOk == key.RequireNativeOk;
+    }
+
+    private static SnapshotCacheKey BuildKey(string fwdPath, string processName, bool requireNativeOk)
+    {
+        ValidateInputs(fwdPath, processName);
+        return new SnapshotCacheKey(NormalizeFwdPath(fwdPath), NormalizeProcessName(processName), requireNativeOk);
+    }
+
+    private static string NormalizeFwdPath(string fwdPath)
+    {
+        string trimmed = (fwdPath ?? string.Empty).Trim();
+        try
+        {
+            return Path.GetFullPath(trimmed);
+        }
+        catch
+        {
+            return trimmed;
+        }
+    }
+
+    private static string NormalizeProcessName(string processName)
+    {
+        return string.IsNullOrWhiteSpace(processName) ? "AC" : processName.Trim();
     }
 
     private static void ValidateInputs(string fwdPath, string processName)
@@ -180,5 +242,60 @@ internal sealed class WorkbenchSnapshotCache
             throw new ArgumentException("An FWD/CFD path is required before building a workbench snapshot.", nameof(fwdPath));
         if (string.IsNullOrWhiteSpace(processName))
             throw new ArgumentException("A process name is required before building a workbench snapshot.", nameof(processName));
+    }
+
+    private readonly struct SnapshotCacheKey : IEquatable<SnapshotCacheKey>
+    {
+        public SnapshotCacheKey(string fwdPath, string processName, bool requireNativeOk)
+        {
+            FwdPath = fwdPath;
+            ProcessName = processName;
+            RequireNativeOk = requireNativeOk;
+        }
+
+        public string FwdPath { get; }
+
+        public string ProcessName { get; }
+
+        public bool RequireNativeOk { get; }
+
+        public bool Equals(SnapshotCacheKey other)
+        {
+            return RequireNativeOk == other.RequireNativeOk
+                && string.Equals(FwdPath, other.FwdPath, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ProcessName, other.ProcessName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is SnapshotCacheKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = StringComparer.OrdinalIgnoreCase.GetHashCode(FwdPath);
+                hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(ProcessName);
+                hash = (hash * 397) ^ RequireNativeOk.GetHashCode();
+                return hash;
+            }
+        }
+    }
+
+    private sealed class SnapshotBuildState
+    {
+        public SnapshotBuildState(Task<WorkbenchSnapshot> task, DateTime startedAtUtc, long generation)
+        {
+            Task = task;
+            StartedAtUtc = startedAtUtc;
+            Generation = generation;
+        }
+
+        public Task<WorkbenchSnapshot> Task { get; }
+
+        public DateTime StartedAtUtc { get; }
+
+        public long Generation { get; }
     }
 }

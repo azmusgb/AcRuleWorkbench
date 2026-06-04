@@ -1288,10 +1288,21 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
             ProcessName = string.IsNullOrWhiteSpace(options.ProcessName) ? "AC" : options.ProcessName,
             Term = options.Term,
             Scope = options.Scope,
-            IncludeAttributes = false,
+            IncludeAttributes = true,
+            MaxAttributeValueLength = 500,
+            MaxHierarchyDepth = 256,
+            MaxNodeEntryCount = 100000u,
             MaskSensitiveValues = true,
             RequireNativeOk = options.RequireNativeOk
         });
+
+        DateTime generatedAtUtc = DateTime.UtcNow;
+        string snapshotId = BuildViewerSnapshotId(
+            string.IsNullOrWhiteSpace(rules.FwdPath) ? options.Path ?? string.Empty : rules.FwdPath,
+            rules.ProcessName,
+            options.RequireNativeOk,
+            generatedAtUtc);
+        ApplyViewerSnapshotIdentity(rules, relationships, tree, snapshotId, generatedAtUtc, options.RequireNativeOk);
 
         string outputPath = string.IsNullOrWhiteSpace(options.OutputPath)
             ? Path.GetFullPath("ac-rule-viewer.html")
@@ -2184,7 +2195,8 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
 
     private static string BuildAcViewerHtml(AcRuleReport rules, AcRelationshipReport relationships, AcTreeReport tree)
     {
-        // The viewer embeds the snapshot directly into a self-contained HTML file.
+        // The generated HTML embeds the snapshot payload for file-open scenarios.
+        // CSS/JS are still copied beside the HTML so the editable viewer shell stays external.
         // EscapeHtml prevents raw FWD/STC text from terminating the script block
         // with values such as </script> or from introducing accidental markup.
         var jsonSettings = new JsonSerializerSettings
@@ -2200,13 +2212,77 @@ public sealed class FormWorksExtractionClient : IFormWorksExtractionClient
         string relJsonEscaped = JsonConvert.ToString(relJson);
         string treeJsonEscaped = JsonConvert.ToString(treeJson);
 
-        return LoadAcViewerHtmlTemplate()
+        string html = LoadAcViewerHtmlTemplate()
             .Replace("\"__RULES_JSON__\"", rulesJsonEscaped)
             .Replace("\"__RELATIONSHIPS_JSON__\"", relJsonEscaped)
             .Replace("\"__TREE_JSON__\"", treeJsonEscaped)
             .Replace("__RULES_JSON__", rulesJson)
             .Replace("__RELATIONSHIPS_JSON__", relJson)
             .Replace("__TREE_JSON__", treeJson);
+
+        return InjectAcViewerPayloadScript(html, rulesJsonEscaped, relJsonEscaped, treeJsonEscaped);
+    }
+
+    private static void ApplyViewerSnapshotIdentity(
+        AcRuleReport rules,
+        AcRelationshipReport relationships,
+        AcTreeReport tree,
+        string snapshotId,
+        DateTime generatedAtUtc,
+        bool requireNativeOk)
+    {
+        rules.SnapshotId = snapshotId;
+        rules.GeneratedAtUtc = generatedAtUtc;
+        rules.RequireNativeOk = requireNativeOk;
+
+        relationships.SnapshotId = snapshotId;
+        relationships.GeneratedAtUtc = generatedAtUtc;
+        relationships.RequireNativeOk = requireNativeOk;
+
+        tree.SnapshotId = snapshotId;
+        tree.GeneratedAtUtc = generatedAtUtc;
+        tree.RequireNativeOk = requireNativeOk;
+    }
+
+    private static string BuildViewerSnapshotId(string fwdPath, string processName, bool requireNativeOk, DateTime generatedAtUtc)
+    {
+        string material = (fwdPath ?? string.Empty).Trim()
+            + "|"
+            + (string.IsNullOrWhiteSpace(processName) ? "AC" : processName.Trim())
+            + "|"
+            + requireNativeOk.ToString();
+
+        using var sha = SHA256.Create();
+        string digest = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(material)))
+            .Replace("-", string.Empty)
+            .Substring(0, 12)
+            .ToLowerInvariant();
+
+        return "fwd-" + generatedAtUtc.ToString("yyyyMMdd-HHmmss-fffffff") + "-" + digest;
+    }
+
+    private static string InjectAcViewerPayloadScript(string html, string rulesJsonEscaped, string relJsonEscaped, string treeJsonEscaped)
+    {
+        string payloadScript =
+            "<script>\n" +
+            "window.AC_RULE_VIEWER_PAYLOADS = {\n" +
+            "  rulesData: " + rulesJsonEscaped + ",\n" +
+            "  relData: " + relJsonEscaped + ",\n" +
+            "  treeData: " + treeJsonEscaped + "\n" +
+            "};\n" +
+            "</script>";
+
+        const string scriptMarker = "<script defer src=\"ac-rule-viewer.js";
+        int scriptIndex = html.IndexOf(scriptMarker, StringComparison.OrdinalIgnoreCase);
+        if (scriptIndex >= 0)
+            return html.Insert(scriptIndex, payloadScript + Environment.NewLine);
+
+        const string bodyMarker = "</body>";
+        int bodyIndex = html.LastIndexOf(bodyMarker, StringComparison.OrdinalIgnoreCase);
+        if (bodyIndex >= 0)
+            return html.Insert(bodyIndex, payloadScript + Environment.NewLine);
+
+        return html + Environment.NewLine + payloadScript;
     }
 
     private static string LoadAcViewerHtmlTemplate()
