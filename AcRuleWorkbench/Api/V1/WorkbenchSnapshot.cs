@@ -139,8 +139,222 @@ internal static class WorkbenchSnapshotBuilder
             Diagnostics = diagnostics
         };
 
+        ReconcileFlatInventoryIntoTree(snapshot.Tree, snapshot.Rules);
         IndexSnapshot(snapshot);
         return snapshot;
+    }
+
+    private static void ReconcileFlatInventoryIntoTree(AcTreeReport tree, AcRuleReport rules)
+    {
+        if (tree == null) throw new ArgumentNullException(nameof(tree));
+        if (rules == null) throw new ArgumentNullException(nameof(rules));
+        if (rules.Rules.Count == 0)
+            return;
+
+        int nextNodeId = tree.Nodes.Count == 0 ? 1 : tree.Nodes.Max(n => n.NodeId) + 1;
+        var structuralByScope = tree.Nodes
+            .Where(n => n.IsRuleNode)
+            .GroupBy(n => RuleCorrelation.ScopeId(n), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.OrderBy(n => n.RuleIndexWithinScope).ThenBy(n => n.NodeId).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (IGrouping<string, AcRuleSummary> flatScope in rules.Rules.GroupBy(RuleCorrelation.ScopeId, StringComparer.OrdinalIgnoreCase))
+        {
+            string scopeId = flatScope.Key;
+            List<AcTreeNode> structuralNodes = structuralByScope.TryGetValue(scopeId, out List<AcTreeNode>? existing)
+                ? existing
+                : new List<AcTreeNode>();
+
+            var matchedStructuralNodeIds = new HashSet<int>();
+            var missing = new List<AcRuleSummary>();
+
+            foreach (AcRuleSummary flatRule in flatScope.OrderBy(r => r.RuleIndex))
+            {
+                AcTreeNode? match = FindBestStructuralMatch(flatRule, structuralNodes, matchedStructuralNodeIds);
+                if (match == null)
+                {
+                    missing.Add(flatRule);
+                }
+                else
+                {
+                    matchedStructuralNodeIds.Add(match.NodeId);
+                }
+            }
+
+            if (missing.Count == 0)
+                continue;
+
+            AcTreeNode root = GetOrCreateFallbackRoot(tree, scopeId, missing[0], ref nextNodeId);
+            foreach (AcRuleSummary flatRule in missing)
+            {
+                int nodeId = nextNodeId++;
+                var node = CreateFallbackNode(flatRule, root, nodeId);
+                tree.Nodes.Add(node);
+                structuralNodes.Add(node);
+
+                tree.Edges.Add(new AcTreeEdge
+                {
+                    ScopePath = flatRule.ScopePath,
+                    FromNodeId = root.NodeId,
+                    ToNodeId = node.NodeId,
+                    EdgeKind = "FlatInventoryFallback",
+                    ActionListIndex = -1,
+                    ActionName = null,
+                    ActionNameResolved = false,
+                    Confidence = "Fallback",
+                    Evidence = "Flat AC rule inventory row had no matching decoded structural node. Added as a read-only fallback root entry so the rule remains visible and searchable; parent/action order is not proven by this edge."
+                });
+            }
+
+            string message = $"Added {missing.Count} flat AC inventory rule(s) as fallback structural entries for {scopeId}. These entries close the display/search coverage gap but do not prove parent action-list placement.";
+            tree.Diagnostics.Add(new AcTreeDiagnostic
+            {
+                Severity = "Warning",
+                ScopePath = scopeId,
+                Category = "FlatInventoryFallback",
+                Message = message
+            });
+        }
+
+        tree.RebuildCounts();
+    }
+
+    private static AcTreeNode? FindBestStructuralMatch(AcRuleSummary flatRule, List<AcTreeNode> structuralNodes, HashSet<int> alreadyMatched)
+    {
+        AcTreeNode? sameIndex = structuralNodes
+            .Where(n => !alreadyMatched.Contains(n.NodeId) && n.RuleIndexWithinScope == flatRule.RuleIndex)
+            .FirstOrDefault(n => RulesLikelyMatch(flatRule, n));
+        if (sameIndex != null)
+            return sameIndex;
+
+        AcTreeNode? sameIdentity = structuralNodes
+            .Where(n => !alreadyMatched.Contains(n.NodeId) && SameNormalizedIdentity(flatRule, n))
+            .OrderBy(n => Math.Abs(n.RuleIndexWithinScope - flatRule.RuleIndex))
+            .ThenBy(n => n.NodeId)
+            .FirstOrDefault();
+        if (sameIdentity != null)
+            return sameIdentity;
+
+        return null;
+    }
+
+    private static bool RulesLikelyMatch(AcRuleSummary flatRule, AcTreeNode node)
+    {
+        bool sameGuid = !string.IsNullOrWhiteSpace(flatRule.RuleGuid)
+            && RuleCorrelation.Eq(flatRule.RuleGuid, node.RuleGuid);
+        bool sameFunctionAndName = NormalizedToken(flatRule.FunctionName) == NormalizedToken(node.FunctionName)
+            && NormalizedToken(flatRule.RuleName) == NormalizedToken(node.RuleName);
+        return sameGuid || sameFunctionAndName;
+    }
+
+    private static bool SameNormalizedIdentity(AcRuleSummary flatRule, AcTreeNode node)
+    {
+        if (!string.IsNullOrWhiteSpace(flatRule.RuleGuid) && !RuleCorrelation.Eq(flatRule.RuleGuid, node.RuleGuid))
+            return false;
+
+        return NormalizedToken(flatRule.FunctionName) == NormalizedToken(node.FunctionName)
+            && NormalizedToken(flatRule.RuleName) == NormalizedToken(node.RuleName);
+    }
+
+    private static string NormalizedToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var builder = new StringBuilder(value.Length);
+        bool lastWasSpace = false;
+        foreach (char c in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                builder.Append(c);
+                lastWasSpace = false;
+            }
+            else if (!lastWasSpace)
+            {
+                builder.Append(' ');
+                lastWasSpace = true;
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private static AcTreeNode GetOrCreateFallbackRoot(AcTreeReport tree, string scopeId, AcRuleSummary firstRule, ref int nextNodeId)
+    {
+        AcTreeNode? root = tree.Nodes
+            .Where(n => RuleCorrelation.ScopeId(n) == scopeId && n.ParentNodeId < 0)
+            .OrderBy(n => n.NodeId)
+            .FirstOrDefault();
+        if (root != null)
+            return root;
+
+        root = new AcTreeNode
+        {
+            NodeId = nextNodeId++,
+            ParentNodeId = -1,
+            ActionListIndex = -1,
+            HierarchyLevel = 0,
+            RuleIndexWithinScope = 0,
+            ScopePath = firstRule.ScopePath,
+            ScopeType = firstRule.ScopeType,
+            ScopeName = firstRule.ScopeName,
+            IsRuleNode = false,
+            RuleName = "Root rule list",
+            RuleListPath = "Root",
+            StructuralPath = "Root",
+            DisplayPath = "Root"
+        };
+        root.Attributes["_FallbackRoot"] = "Created because flat inventory exposed rules but no structural root node was decoded for this scope.";
+        tree.Nodes.Add(root);
+        return root;
+    }
+
+    private static AcTreeNode CreateFallbackNode(AcRuleSummary flatRule, AcTreeNode root, int nodeId)
+    {
+        var node = new AcTreeNode
+        {
+            NodeId = nodeId,
+            ParentNodeId = root.NodeId,
+            ActionListIndex = -1,
+            HierarchyLevel = Math.Max(0, root.HierarchyLevel),
+            RuleIndexWithinScope = flatRule.RuleIndex,
+            ScopePath = flatRule.ScopePath,
+            ScopeType = flatRule.ScopeType,
+            ScopeName = flatRule.ScopeName,
+            IsRuleNode = true,
+            RuleGuid = flatRule.RuleGuid,
+            RuleId = flatRule.RuleId,
+            RuleName = flatRule.RuleName,
+            FunctionName = flatRule.FunctionName,
+            FunctionVersion = flatRule.FunctionVersion,
+            Description = flatRule.Description,
+            RuleListPath = "FlatInventoryFallback/" + flatRule.RuleIndex.ToString("000000"),
+            StructuralPath = "FlatInventoryFallback/" + flatRule.RuleIndex.ToString("000000"),
+            DisplayPath = "Flat inventory fallback > " + (string.IsNullOrWhiteSpace(flatRule.RuleName) ? flatRule.FunctionName ?? ("Rule " + flatRule.RuleIndex) : flatRule.RuleName),
+            DisabledState = flatRule.DisabledState,
+            DisabledConfidence = flatRule.DisabledConfidence,
+            DisabledReason = flatRule.DisabledReason
+        };
+
+        node.ActionNames.AddRange(flatRule.ActionNames.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase));
+        node.Sources.AddRange(flatRule.Sources.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase));
+        foreach (KeyValuePair<string, List<string>> parameter in flatRule.Parameters)
+            node.Parameters[parameter.Key] = parameter.Value.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        node.Attributes["_FlatInventoryFallback"] = "true";
+        node.Attributes["_FallbackEvidence"] = "Rule came from AcRuleReport flat inventory and did not have a matching structural node after normalized identity reconciliation.";
+        node.DisabledEvidence.AddRange(flatRule.DisabledEvidence);
+        node.Route.Add(new AcRuleRouteSegment
+        {
+            NodeId = node.NodeId,
+            RuleGuid = node.RuleGuid,
+            RuleName = node.RuleName,
+            FunctionName = node.FunctionName,
+            ActionListIndex = null,
+            ActionName = null
+        });
+
+        return node;
     }
 
     internal static string BuildSnapshotId(string fwdPath, string processName, bool requireNativeOk, DateTime generatedAtUtc)
@@ -254,21 +468,28 @@ internal static class WorkbenchSnapshotBuilder
             string key = RuleCorrelation.StructuralKey(node);
 
             bool hasFlatRule = flatByKey.TryGetValue(key, out AcRuleSummary? flat);
+            bool isFallbackNode = node.Attributes.ContainsKey("_FlatInventoryFallback");
             var model = new RuleModel
             {
                 NodeId = nodeId,
                 ScopeId = scopeId,
                 Node = node,
                 FlatRule = hasFlatRule ? flat : null,
-                Authority = hasFlatRule ? "StructuralTree+FlatInventory" : "StructuralTree",
-                DisabledAuthority = node.DisabledState == AcDisabledStates.DisabledDirect
-                    ? "StructuralDirect"
-                    : node.DisabledState == AcDisabledStates.DisabledInherited
-                        ? "StructuralInherited"
-                        : "Structural"
+                Authority = isFallbackNode
+                    ? "FlatInventoryFallback"
+                    : hasFlatRule
+                        ? "StructuralTree+FlatInventory"
+                        : "StructuralTree",
+                DisabledAuthority = isFallbackNode
+                    ? "FlatInventoryFallback"
+                    : node.DisabledState == AcDisabledStates.DisabledDirect
+                        ? "StructuralDirect"
+                        : node.DisabledState == AcDisabledStates.DisabledInherited
+                            ? "StructuralInherited"
+                            : "Structural"
             };
 
-            if (model.FlatRule != null && node.DisabledState != AcDisabledStates.Enabled)
+            if (!isFallbackNode && model.FlatRule != null && node.DisabledState != AcDisabledStates.Enabled)
             {
                 model.FlatRule.DisabledState = node.DisabledState;
                 model.FlatRule.DisabledConfidence = node.DisabledConfidence;

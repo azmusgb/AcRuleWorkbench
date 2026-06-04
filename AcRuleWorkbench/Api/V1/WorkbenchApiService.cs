@@ -20,6 +20,17 @@ internal sealed class WorkbenchApiService
     private readonly object _processPrivateSummaryCacheGate = new object();
     private readonly Dictionary<string, ProcessPrivateSummaryCacheEntry> _processPrivateSummaryCache = new Dictionary<string, ProcessPrivateSummaryCacheEntry>(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly string[] UdfInventoryResourceTypes =
+    {
+        "Function",
+        "Functions",
+        "UDF",
+        "UDFs",
+        "UserDefinedFunction",
+        "UserDefinedFunctions",
+        "User Defined"
+    };
+
     public WorkbenchApiService(IFormWorksExtractionClient client, WorkbenchApiServerOptions options, WorkbenchSnapshotCache? cache = null)
     {
         if (client == null) throw new ArgumentNullException(nameof(client));
@@ -1977,11 +1988,16 @@ internal sealed class WorkbenchApiService
     private object BuildFwdTablesCanonical(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? q = Get(request, "q");
-        string resourceType = string.IsNullOrWhiteSpace(Get(request, "resourceType")) ? "Table" : Get(request, "resourceType")!;
+        string? resourceTypeFilter = Get(request, "resourceType");
         var rules = BuildRuleRelationshipIndex(snapshot);
 
         var tables = new Dictionary<string, TableVm>(StringComparer.OrdinalIgnoreCase);
-        foreach (ResourceBucket bucket in snapshot.Fwd.Resources.Where(b => RuleCorrelation.Eq(b.Type, resourceType)))
+        IEnumerable<ResourceBucket> tableBuckets = snapshot.Fwd.Resources.Where(b =>
+            string.IsNullOrWhiteSpace(resourceTypeFilter)
+                ? IsTableResourceType(b.Type)
+                : RuleCorrelation.Eq(b.Type, resourceTypeFilter));
+
+        foreach (ResourceBucket bucket in tableBuckets)
         {
             foreach (string name in bucket.Names)
             {
@@ -2059,31 +2075,57 @@ internal sealed class WorkbenchApiService
 
         var items = tables.Values
             .Where(t => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(t.Name, q) || t.Columns.Keys.Any(c => RuleCorrelation.Contains(c, q)))
-            .Select(t => new
+            .Select(t =>
             {
-                name = t.Name,
-                canonical = t.Canonical,
-            source = t.Source,
-            confidence = t.Confidence,
-            resourceType = t.ResourceType,
-                referenceCount = t.ReferenceCount,
-                scopeCount = t.ScopeIds.Count,
-                ruleCount = t.RuleKeys.Count,
-                parsedColumns = new List<object>(),
-                usageDerivedFields = t.Columns.Values
-                    .OrderByDescending(c => c.Hits)
-                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(c => new { name = c.Name, hits = c.Hits, confidence = c.Confidence })
-                    .ToList(),
-                columns = t.Columns.Values
-                    .OrderByDescending(c => c.Hits)
-                    .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(c => new { name = c.Name, hits = c.Hits, confidence = c.Confidence })
-                    .ToList(),
-                schemaParsed = false,
-                columnsAreUsageDerived = true,
-                columnsDeprecatedAlias = true,
-                diagnostics = new[] { "TableSchemaNotParsed", "UsageDerivedFieldsNotSchema" }
+                ResourceDetail? detail = FindResourceDetail(snapshot.Fwd, t.ResourceType, t.Name) ?? FindResourceDetailByName(snapshot.Fwd, t.Name);
+                var parsedColumns = ExtractTableColumnsFromResourceDetail(detail);
+                bool schemaParsed = parsedColumns.Count > 0;
+                var diagnostics = new List<string>();
+                if (!schemaParsed)
+                    diagnostics.Add("TableSchemaNotParsed");
+                if (t.Columns.Count > 0)
+                    diagnostics.Add(schemaParsed ? "UsageDerivedFieldsAlsoAvailable" : "UsageDerivedFieldsNotSchema");
+                if (detail == null)
+                    diagnostics.Add("ResourceDetailsUnavailable");
+
+                return new
+                {
+                    name = t.Name,
+                    canonical = t.Canonical,
+                    source = t.Source,
+                    confidence = schemaParsed ? "High" : t.Confidence,
+                    resourceType = t.ResourceType,
+                    referenceCount = t.ReferenceCount,
+                    scopeCount = t.ScopeIds.Count,
+                    ruleCount = t.RuleKeys.Count,
+                    parsedColumns = parsedColumns
+                        .OrderByDescending(c => c.Hits)
+                        .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(c => new { name = c.Name, hits = c.Hits, confidence = c.Confidence })
+                        .ToList(),
+                    usageDerivedFields = t.Columns.Values
+                        .OrderByDescending(c => c.Hits)
+                        .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(c => new { name = c.Name, hits = c.Hits, confidence = c.Confidence })
+                        .ToList(),
+                    columns = (schemaParsed ? parsedColumns : t.Columns.Values.ToList())
+                        .OrderByDescending(c => c.Hits)
+                        .ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                        .Select(c => new { name = c.Name, hits = c.Hits, confidence = c.Confidence })
+                        .ToList(),
+                    schemaParsed,
+                    columnsAreUsageDerived = !schemaParsed,
+                    columnsDeprecatedAlias = !schemaParsed,
+                    rawResourceDetails = detail == null ? null : new
+                    {
+                        category = detail.Category,
+                        fullConfig = detail.FullAttributes,
+                        publicConfig = detail.PublicAttributes,
+                        privateTree = detail.PrivateTree,
+                        warnings = detail.Warnings
+                    },
+                    diagnostics
+                };
             })
             .OrderByDescending(t => t.referenceCount)
             .ThenBy(t => t.name, StringComparer.OrdinalIgnoreCase)
@@ -2093,13 +2135,113 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            diagnostics = new[] { "TableSchemaNotParsed", "UsageDerivedFieldsNotSchema" },
+            diagnostics = items.SelectMany(i => i.diagnostics).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             links = new
             {
                 inferred = "/api/v1/fwd/tables/inferred"
             }
         };
     }
+
+    private static bool IsTableResourceType(string? value)
+    {
+        string text = value ?? string.Empty;
+        return RuleCorrelation.Eq(text, "Table")
+            || RuleCorrelation.Eq(text, "Tables")
+            || RuleCorrelation.Eq(text, "SelectionList")
+            || RuleCorrelation.Eq(text, "SelectionLists")
+            || RuleCorrelation.Eq(text, "Selection List")
+            || RuleCorrelation.Contains(text, "table")
+            || RuleCorrelation.Contains(text, "selection")
+            || RuleCorrelation.Contains(text, "lookup");
+    }
+
+    private static List<TableColumnVm> ExtractTableColumnsFromResourceDetail(ResourceDetail? detail)
+    {
+        var columns = new Dictionary<string, TableColumnVm>(StringComparer.OrdinalIgnoreCase);
+        if (detail == null)
+            return columns.Values.ToList();
+
+        void Add(string? candidate, string confidence)
+        {
+            string value = (candidate ?? string.Empty).Trim().Trim('"', '\'', '{', '}', '[', ']');
+            if (!LooksLikeColumnIdentifier(value))
+                return;
+
+            if (!columns.TryGetValue(value, out TableColumnVm? column))
+            {
+                column = new TableColumnVm { Name = value, Confidence = confidence, Hits = 1 };
+                columns[value] = column;
+            }
+            else
+            {
+                column.Hits++;
+                if (confidence == "High")
+                    column.Confidence = "High";
+            }
+        }
+
+        void AddSplit(string? raw, string confidence)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return;
+
+            foreach (string part in Regex.Split(raw, @"[,;|\r\n\t]+"))
+                Add(part, confidence);
+        }
+
+        foreach (ResourceAttrEntry attr in detail.FullAttributes.Concat(detail.PublicAttributes))
+        {
+            string key = attr.Key ?? string.Empty;
+            string value = attr.Value ?? string.Empty;
+
+            if (Regex.IsMatch(key, "key\\s*fields?|match\\s*fields?|plug\\s*fields?|output\\s*fields?|columns?|fields?", RegexOptions.IgnoreCase))
+                AddSplit(value, "High");
+
+            if (Regex.IsMatch(key, @"(^|[._-])(Field|Column)\d*(Name)?$", RegexOptions.IgnoreCase))
+                Add(string.IsNullOrWhiteSpace(value) ? key : value, "High");
+        }
+
+        if (detail.PrivateTree != null)
+            ExtractTableColumnsFromPrivateTree(detail.PrivateTree, Add, AddSplit, inColumnRegion: false);
+
+        return columns.Values.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static void ExtractTableColumnsFromPrivateTree(ResourcePrivateNode node, Action<string?, string> add, Action<string?, string> addSplit, bool inColumnRegion)
+    {
+        string name = node.Name ?? string.Empty;
+        bool columnRegion = inColumnRegion || Regex.IsMatch(name, "columns?|fields?|schema|tableinfo", RegexOptions.IgnoreCase);
+
+        if (columnRegion)
+        {
+            add(name, "Medium");
+            if (!string.IsNullOrWhiteSpace(node.ValuePreview))
+                addSplit(node.ValuePreview, "Medium");
+        }
+
+        foreach (ResourcePrivateNode child in node.Children)
+            ExtractTableColumnsFromPrivateTree(child, add, addSplit, columnRegion);
+    }
+
+    private static bool LooksLikeColumnIdentifier(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string v = value.Trim();
+        if (v.Length < 2 || v.Length > 80)
+            return false;
+        if (Regex.IsMatch(v, "^(True|False|Yes|No|None|Null|Unknown|Table|Field|Fields|Column|Columns|Schema|Config|Info)$", RegexOptions.IgnoreCase))
+            return false;
+        if (Regex.IsMatch(v, "^[+-]?\\d+(\\.\\d+)?$"))
+            return false;
+        if (v.IndexOfAny(new[] { '/', '\\', ':', '{', '}', '[', ']', '"', '\'' }) >= 0)
+            return false;
+
+        return Regex.IsMatch(v, "^[A-Za-z][A-Za-z0-9_ .-]*$", RegexOptions.CultureInvariant);
+    }
+
 
     // Relationship-derived table candidates are emitted separately and never treated as canonical inventory.
     private object BuildFwdTablesInferred(WorkbenchSnapshot snapshot, HttpListenerRequest request)
@@ -2367,20 +2509,6 @@ internal sealed class WorkbenchApiService
     private object BuildFwdUdfsCanonical(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? q = Get(request, "q");
-        string[] udfTypes = new[] { "Function", "UDF", "UserDefinedFunction", "User Defined" };
-        bool includeDetails = GetBool(request, "includeDetails", false);
-        bool includePrivate = GetBool(request, "includePrivate", false);
-        FwdInspectionReport? detailed = includeDetails
-            ? _client.Inspect(new FwdInspectionOptions
-            {
-                Path = GetFwdPath(request),
-                IncludeFields = false,
-                IncludeResourceConfigs = true,
-                IncludeResourcePrivateTrees = includePrivate,
-                RequireNativeOk = GetBool(request, "requireNativeOk", false),
-                ResourceTypes = udfTypes
-            })
-            : null;
 
         var usedByTarget = snapshot.Relationships.Relationships
             .Where(r => !string.IsNullOrWhiteSpace(r.Target))
@@ -2393,7 +2521,7 @@ internal sealed class WorkbenchApiService
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
 
         var items = snapshot.Fwd.Resources
-            .Where(b => udfTypes.Any(t => RuleCorrelation.Eq(t, b.Type)))
+            .Where(b => UdfInventoryResourceTypes.Any(t => RuleCorrelation.Eq(t, b.Type)))
             .SelectMany(b => b.Names.Select(n => new { type = b.Type, name = (n ?? string.Empty).Trim() }))
             .Where(x => !string.IsNullOrWhiteSpace(x.name))
             .Where(x => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(x.name, q))
@@ -2402,7 +2530,8 @@ internal sealed class WorkbenchApiService
                 int byTarget = usedByTarget.TryGetValue(x.name, out List<AcRuleRelationship>? refs) ? refs.Count : 0;
                 int byFunction = rulesByFunction.TryGetValue(x.name, out List<AcRuleSummary>? rules) ? rules.Count : 0;
                 List<AcRuleSummary> matchedRules = rulesByFunction.TryGetValue(x.name, out rules) ? rules : new List<AcRuleSummary>();
-                ResourceDetail? rawDetails = FindResourceDetail(detailed, x.type, x.name);
+                ResourceDetail? rawDetails = FindResourceDetail(snapshot.Fwd, x.type, x.name) ?? FindResourceDetailByName(snapshot.Fwd, x.name);
+                List<AcTreeNode> internalNodes = FindParsedUdfNodes(snapshot, x.name);
                 var definitionParameterNames = ExtractUdfInterfaceParameterNames(rawDetails);
                 var callerParameterNames = matchedRules
                     .SelectMany(r => r.Parameters.Keys)
@@ -2426,15 +2555,29 @@ internal sealed class WorkbenchApiService
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                bool definitionParsed = parameterNames.Count > 0 || rawDetails?.FullAttributes.Count > 0 || rawDetails?.PublicAttributes.Count > 0;
+                bool bodyParsed = internalNodes.Count > 0;
+                var diagnostics = new List<string>();
+                if (!definitionParsed)
+                    diagnostics.Add("UdfDefinitionNotParsed");
+                if (!bodyParsed)
+                    diagnostics.Add("UdfBodyNotParsed");
+                if (rawDetails == null)
+                    diagnostics.Add("ResourceDetailsUnavailable");
+                if (rawDetails?.PrivateTree == null)
+                    diagnostics.Add("ResourcePrivateTreeUnavailable");
+                if (byTarget > 0 && byFunction == 0)
+                    diagnostics.Add("RelationshipOnlyMatch");
+
                 return new
                 {
                     name = x.name,
                     resourceType = x.type,
                     source = "CanonicalFwdResource",
                     classification = ClassifyFunctionResourceCandidate(x.type, rawDetails),
-                    confidence = UdfCandidateConfidence(x.type, rawDetails),
-                    definitionParsed = false,
-                    bodyParsed = false,
+                    confidence = bodyParsed || rawDetails?.PrivateTree != null ? "High" : UdfCandidateConfidence(x.type, rawDetails),
+                    definitionParsed,
+                    bodyParsed,
                     hasResourceDetails = rawDetails != null,
                     hasPrivateTree = rawDetails?.PrivateTree != null,
                     usedByRuleCount = Math.Max(byTarget, byFunction),
@@ -2442,14 +2585,19 @@ internal sealed class WorkbenchApiService
                     callerParameterSlots = callerParameterNames,
                     ruleNames,
                     scopeIds,
-                    diagnostics = new List<string>
-                    {
-                        "UdfDefinitionNotParsed",
-                        "UdfBodyNotParsed",
-                        rawDetails == null && includeDetails ? "ResourceDetailsUnavailable" : string.Empty,
-                        rawDetails?.PrivateTree == null && includePrivate ? "ResourcePrivateTreeUnavailable" : string.Empty,
-                        byTarget > 0 && byFunction == 0 ? "RelationshipOnlyMatch" : string.Empty
-                    }.Where(v => !string.IsNullOrWhiteSpace(v)).ToList(),
+                    internalRuleCount = internalNodes.Count,
+                    internalRulePreview = internalNodes
+                        .Take(100)
+                        .Select(n => new
+                        {
+                            scopeId = RuleCorrelation.ScopeId(n.ScopePath, n.ScopeType, n.ScopeName),
+                            nodeId = RuleCorrelation.NodeId(n),
+                            ruleName = n.RuleName,
+                            functionName = n.FunctionName,
+                            displayPath = n.DisplayPath
+                        })
+                        .ToList(),
+                    diagnostics,
                     rawResourceDetails = rawDetails == null ? null : new
                     {
                         category = rawDetails.Category,
@@ -2473,39 +2621,27 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            caveat = "Rows are function-resource candidates plus caller-side usage. A row is not a confirmed UDF until its Function resource interface and private rule body are parsed.",
-            diagnostics = new[] { "UdfDefinitionNotParsed", "UdfBodyNotParsed" }
+            caveat = "Rows combine FWD function/UDF resources, decoded resource metadata/private tree previews, parsed internal rule bodies when exposed by FormWorks, and caller-side usage.",
+            diagnostics = items.SelectMany(i => i.diagnostics).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
         };
     }
 
     // Function/UDF usage detail with explicit separation between definition fields and caller rules.
     private object BuildFwdUdfDetail(WorkbenchSnapshot snapshot, HttpListenerRequest request, string udfName)
     {
-        string[] udfTypes = new[] { "Function", "UDF", "UserDefinedFunction", "User Defined" };
         string name = (udfName ?? string.Empty).Trim();
 
         var canonicalHits = snapshot.Fwd.Resources
-            .Where(b => udfTypes.Any(t => RuleCorrelation.Eq(t, b.Type)))
+            .Where(b => UdfInventoryResourceTypes.Any(t => RuleCorrelation.Eq(t, b.Type)))
             .SelectMany(b => b.Names.Select(n => new { type = b.Type, name = (n ?? string.Empty).Trim() }))
             .Where(x => !string.IsNullOrWhiteSpace(x.name) && RuleCorrelation.Eq(x.name, name))
             .ToList();
 
-        bool includeDetails = GetBool(request, "includeDetails", true);
-        bool includePrivate = GetBool(request, "includePrivate", false);
-        FwdInspectionReport? detailed = includeDetails
-            ? _client.Inspect(new FwdInspectionOptions
-            {
-                Path = GetFwdPath(request),
-                IncludeFields = false,
-                IncludeResourceConfigs = true,
-                IncludeResourcePrivateTrees = includePrivate,
-                RequireNativeOk = GetBool(request, "requireNativeOk", false),
-                ResourceTypes = canonicalHits.Select(x => x.type).DefaultIfEmpty("Function").Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-            })
-            : null;
         ResourceDetail? primaryDetails = canonicalHits
-            .Select(h => FindResourceDetail(detailed, h.type, h.name))
-            .FirstOrDefault(d => d != null);
+            .Select(h => FindResourceDetail(snapshot.Fwd, h.type, h.name))
+            .FirstOrDefault(d => d != null) ?? FindResourceDetailByName(snapshot.Fwd, name);
+
+        List<AcTreeNode> internalNodes = FindParsedUdfNodes(snapshot, name);
 
         var directCallers = snapshot.Rules.Rules
             .Where(r => RuleCorrelation.Eq(r.FunctionName, name))
@@ -2566,12 +2702,12 @@ internal sealed class WorkbenchApiService
             })
             .ToList();
 
-        if (!canonicalHits.Any() && !directCallers.Any() && !relationshipCalls.Any())
+        if (!canonicalHits.Any() && !directCallers.Any() && !relationshipCalls.Any() && internalNodes.Count == 0)
             return new
             {
                 name,
                 found = false,
-                warnings = new[] { "UDF/function was not found in canonical resources, rule callers, or relationship evidence." }
+                warnings = new[] { "UDF/function was not found in canonical resources, rule callers, parsed private rules, or relationship evidence." }
             };
 
         var definitionParameterNames = ExtractUdfInterfaceParameterNames(primaryDetails);
@@ -2590,33 +2726,37 @@ internal sealed class WorkbenchApiService
             .SelectMany(r => snapshot.Rules.Rules
                 .Where(x => RuleCorrelation.Eq(x.RuleGuid, r.ruleGuid) || (x.RuleIndex == r.ruleIndex && RuleCorrelation.ScopeId(x.ScopePath, x.ScopeType, x.ScopeName) == r.scopeId))
                 .SelectMany(x => x.ActionNames))
+            .Concat(internalNodes.SelectMany(n => n.ActionNames))
             .Where(a => !string.IsNullOrWhiteSpace(a))
             .Select(a => a.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(a => a, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        bool definitionParsed = parameterNames.Count > 0 || primaryDetails?.FullAttributes.Count > 0 || primaryDetails?.PublicAttributes.Count > 0;
+        bool bodyParsed = internalNodes.Count > 0;
+
         return new
         {
             name,
             found = true,
-            resourceType = canonicalHits.Select(x => x.type).FirstOrDefault() ?? "Function",
+            resourceType = canonicalHits.Select(x => x.type).FirstOrDefault() ?? (internalNodes.Count > 0 ? "ParsedFunctionPrivateRules" : "Function"),
             classification = canonicalHits.Any()
-                ? (canonicalHits.Any(h => RuleCorrelation.Eq(h.type, "Function") || RuleCorrelation.Eq(h.type, "User Defined")) ? "FunctionResource" : "CandidateUdf")
-                : (directCallers.Any() ? "RuleUsageOnly" : "RegexOnly"),
-            functionKind = canonicalHits.Any() ? "UserDefinedCandidate" : "InferredFromRuleUsage",
-            source = canonicalHits.Any() ? "FwdResource" : "RuleUsage",
-            confidence = canonicalHits.Any() ? UdfCandidateConfidence(canonicalHits.First().type, primaryDetails) : "Low",
-            definitionParsed = false,
-            bodyParsed = false,
+                ? (canonicalHits.Any(h => RuleCorrelation.Eq(h.type, "Function") || RuleCorrelation.Eq(h.type, "Functions") || RuleCorrelation.Eq(h.type, "User Defined")) ? "FunctionResource" : "CandidateUdf")
+                : (internalNodes.Count > 0 ? "ParsedPrivateRuleTree" : directCallers.Any() ? "RuleUsageOnly" : "RegexOnly"),
+            functionKind = canonicalHits.Any() || internalNodes.Count > 0 ? "UserDefinedCandidate" : "InferredFromRuleUsage",
+            source = canonicalHits.Any() ? "FwdResource" : internalNodes.Count > 0 ? "ParsedPrivateRuleTree" : "RuleUsage",
+            confidence = bodyParsed || primaryDetails?.PrivateTree != null ? "High" : canonicalHits.Any() ? UdfCandidateConfidence(canonicalHits.First().type, primaryDetails) : "Low",
+            definitionParsed,
+            bodyParsed,
             hasResourceDetails = primaryDetails != null,
             hasPrivateTree = primaryDetails?.PrivateTree != null,
             fieldListCount = parameterNames.Count,
             statusResultCount = statusResults.Count,
             definition = new
             {
-                parsedFrom = primaryDetails == null ? "CallerUsageCorrelation" : "FwdResourceMetadataPlusCallerUsage",
-                authority = "NotParsedDefinition",
+                parsedFrom = bodyParsed ? "ParsedFunctionPrivateRuleTree" : primaryDetails == null ? "CallerUsageCorrelation" : "FwdResourceMetadataPlusCallerUsage",
+                authority = bodyParsed ? "ParsedPrivateRuleBody" : definitionParsed ? "ResourceMetadata" : "UsageDerived",
                 fieldLists = parameterNames.Select(p => new
                 {
                     name = p,
@@ -2624,11 +2764,23 @@ internal sealed class WorkbenchApiService
                     cardinality = "Unknown"
                 }).ToList(),
                 statusResults,
-                ruleBody = (object?)null,
+                ruleBody = internalNodes
+                    .Take(250)
+                    .Select(n => new
+                    {
+                        scopeId = RuleCorrelation.ScopeId(n.ScopePath, n.ScopeType, n.ScopeName),
+                        nodeId = RuleCorrelation.NodeId(n),
+                        ruleName = n.RuleName,
+                        functionName = n.FunctionName,
+                        actionNames = n.ActionNames,
+                        displayPath = n.DisplayPath,
+                        parameters = n.Parameters
+                    })
+                    .ToList(),
                 notes = new[]
                 {
                     "Field lists come from the UDF interface when available; caller slots are only used as a fallback.",
-                    "Internal UDF rule body is not parsed in this endpoint."
+                    bodyParsed ? "Internal UDF rule body was parsed from the Function/UDF private resource payload exposed by FormWorks." : "Internal UDF rule body was not exposed as parseable bytes by the native FormWorks API."
                 }
             },
             usage = new
@@ -2649,10 +2801,10 @@ internal sealed class WorkbenchApiService
             {
                 warnings = new List<string>
                 {
-                    "UdfDefinitionNotParsed",
-                    "UdfBodyNotParsed",
-                    primaryDetails == null && includeDetails ? "ResourceDetailsUnavailable" : string.Empty,
-                    primaryDetails?.PrivateTree == null && includePrivate ? "ResourcePrivateTreeUnavailable" : string.Empty,
+                    definitionParsed ? string.Empty : "UdfDefinitionNotParsed",
+                    bodyParsed ? string.Empty : "UdfBodyNotParsed",
+                    primaryDetails == null ? "ResourceDetailsUnavailable" : string.Empty,
+                    primaryDetails?.PrivateTree == null ? "ResourcePrivateTreeUnavailable" : string.Empty,
                     canonicalHits.Any() ? string.Empty : "NonCanonicalRuleUsageOnly",
                     parameterNames.Count == 0 ? "FieldListsNotParsedOrUnavailable" : string.Empty,
                     statusResults.Count == 0 ? "StatusResultsNotParsedOrUnavailable" : string.Empty,
@@ -2666,9 +2818,27 @@ internal sealed class WorkbenchApiService
                 inferredList = "/api/v1/fwd/udfs/inferred",
                 self = "/api/v1/fwd/udfs/" + UrlEncode(name)
             },
-            caveat = "This endpoint exposes Function-resource metadata plus caller-side usage correlation. It does not yet parse the private-STC UDF interface or internal rule body."
+            caveat = bodyParsed
+                ? "This endpoint includes parsed private-rule-body evidence when the native FormWorks resource payload exposes rule bytes."
+                : "This endpoint includes metadata, private tree previews, and caller-side usage. Some native Function/UDF resources may not expose parseable rule bytes through the available API."
         };
     }
+
+    private static List<AcTreeNode> FindParsedUdfNodes(WorkbenchSnapshot snapshot, string udfName)
+    {
+        string name = (udfName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return new List<AcTreeNode>();
+
+        return snapshot.Tree.Nodes
+            .Where(n => n.IsRuleNode)
+            .Where(n => RuleCorrelation.Eq(n.ScopeType, "UDF") || RuleCorrelation.Contains(n.ScopePath, "AC/UDFs/"))
+            .Where(n => RuleCorrelation.Eq(n.ScopeName, name) || RuleCorrelation.Contains(n.ScopePath, "AC/UDFs/" + name))
+            .OrderBy(n => n.RuleIndexWithinScope)
+            .ThenBy(n => n.NodeId)
+            .ToList();
+    }
+
 
     // Weak-signal UDF candidates from function-name patterns, emitted separately from canonical resources.
     private object BuildFwdUdfsInferred(WorkbenchSnapshot snapshot, HttpListenerRequest request)
@@ -2677,7 +2847,7 @@ internal sealed class WorkbenchApiService
         bool includeCanonical = GetBool(request, "includeCanonical", false);
 
         var canonicalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (ResourceBucket bucket in snapshot.Fwd.Resources.Where(b => RuleCorrelation.Eq(b.Type, "UDF") || RuleCorrelation.Eq(b.Type, "UserDefinedFunction") || RuleCorrelation.Eq(b.Type, "Function")))
+        foreach (ResourceBucket bucket in snapshot.Fwd.Resources.Where(b => UdfInventoryResourceTypes.Any(t => RuleCorrelation.Eq(t, b.Type))))
         {
             foreach (string name in bucket.Names)
             {
@@ -2730,15 +2900,26 @@ internal sealed class WorkbenchApiService
             .FirstOrDefault(r => RuleCorrelation.Eq(r.Name, resourceName));
     }
 
+    private static ResourceDetail? FindResourceDetailByName(FwdInspectionReport? report, string resourceName)
+    {
+        if (report == null || string.IsNullOrWhiteSpace(resourceName))
+            return null;
+
+        return report.ResourceTypeDetails
+            .SelectMany(t => t.Resources)
+            .FirstOrDefault(r => RuleCorrelation.Eq(r.Name, resourceName));
+    }
+
+
     private static string ClassifyFunctionResourceCandidate(string resourceType, ResourceDetail? details)
     {
         if (details != null && (LooksLikeUdfDefinition(details.FullAttributes) || LooksLikeUdfDefinition(details.PublicAttributes) || LooksLikeUdfPrivateTree(details.PrivateTree)))
             return "CandidateUdf";
 
-        if (RuleCorrelation.Eq(resourceType, "UDF") || RuleCorrelation.Eq(resourceType, "UserDefinedFunction") || RuleCorrelation.Eq(resourceType, "User Defined"))
+        if (RuleCorrelation.Eq(resourceType, "UDF") || RuleCorrelation.Eq(resourceType, "UDFs") || RuleCorrelation.Eq(resourceType, "UserDefinedFunction") || RuleCorrelation.Eq(resourceType, "UserDefinedFunctions") || RuleCorrelation.Eq(resourceType, "User Defined"))
             return "CandidateUdf";
 
-        if (RuleCorrelation.Eq(resourceType, "Function"))
+        if (RuleCorrelation.Eq(resourceType, "Function") || RuleCorrelation.Eq(resourceType, "Functions"))
             return "FunctionResource";
 
         return "FunctionLikeResource";
@@ -2749,10 +2930,10 @@ internal sealed class WorkbenchApiService
         if (details != null && (LooksLikeUdfDefinition(details.FullAttributes) || LooksLikeUdfDefinition(details.PublicAttributes) || LooksLikeUdfPrivateTree(details.PrivateTree)))
             return "Medium";
 
-        if (RuleCorrelation.Eq(resourceType, "UDF") || RuleCorrelation.Eq(resourceType, "UserDefinedFunction") || RuleCorrelation.Eq(resourceType, "User Defined"))
+        if (RuleCorrelation.Eq(resourceType, "UDF") || RuleCorrelation.Eq(resourceType, "UDFs") || RuleCorrelation.Eq(resourceType, "UserDefinedFunction") || RuleCorrelation.Eq(resourceType, "UserDefinedFunctions") || RuleCorrelation.Eq(resourceType, "User Defined"))
             return "Medium";
 
-        if (RuleCorrelation.Eq(resourceType, "Function"))
+        if (RuleCorrelation.Eq(resourceType, "Function") || RuleCorrelation.Eq(resourceType, "Functions"))
             return "Low";
 
         return "Low";
@@ -3122,12 +3303,17 @@ internal sealed class WorkbenchApiService
             Message = d.Message
         }));
 
+        bool selectedIsFallback = rule.Node.Attributes.ContainsKey("_FlatInventoryFallback");
         packet.Evidence.Add(new SelectedEvidenceProjection
         {
-            Source = "AcTreeReport.Nodes",
-            Authority = "Hierarchy, selected rule identity, configured branch ownership, and disabled inheritance",
-            Confidence = "High",
-            Caveat = "Static structural tree evidence does not prove the rule executed at runtime."
+            Source = selectedIsFallback ? "AcRuleReport.Rules + FlatInventoryFallback" : "AcTreeReport.Nodes",
+            Authority = selectedIsFallback
+                ? "Search/display completeness for a flat inventory row that had no decoded structural placement"
+                : "Hierarchy, selected rule identity, configured branch ownership, and disabled inheritance",
+            Confidence = selectedIsFallback ? "Fallback" : "High",
+            Caveat = selectedIsFallback
+                ? "This fallback node preserves the rule for review, but parent rule, action list placement, and route order are not proven by the fallback edge."
+                : "Static structural tree evidence does not prove the rule executed at runtime."
         });
 
         if (rule.FlatRule != null)
@@ -3137,7 +3323,7 @@ internal sealed class WorkbenchApiService
                 Source = "AcRuleReport.Rules",
                 Authority = "Flat inventory reconciliation, configured action names, and parameter tokens",
                 Confidence = "High",
-                Caveat = "Flat inventory confirms presence/searchability; structural tree remains authoritative for order and hierarchy."
+                Caveat = selectedIsFallback ? "Flat inventory is the authority for this fallback node; structural parent/action placement remains unresolved." : "Flat inventory confirms presence/searchability; structural tree remains authoritative for order and hierarchy."
             });
         }
 

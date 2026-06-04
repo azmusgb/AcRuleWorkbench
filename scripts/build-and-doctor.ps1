@@ -383,4 +383,5 @@ Write-Ok "Build/output doctor completed."
 
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Cyan
-Write-Host ".\scripts\start-workbench.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting"
+Write-Host ".\run-workbench.cmd"
+Write-Host "or: .\scripts\start-workbench.cmd -FwdPath .\fwd.cfd -Port 8787 -KillExisting"

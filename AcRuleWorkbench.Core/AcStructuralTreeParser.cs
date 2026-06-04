@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace AcRuleWorkbench.Core;
 
@@ -45,8 +46,46 @@ internal sealed class AcStructuralTreeParser
         try
         {
             _ruleCounter = 0;
-            var stream = new UnpackStream(data);
-            DumpRuleTree(stream, scope);
+            var stream = new RuleByteReader(data);
+            int parsedRootCount = 0;
+
+            // Some FWD process-private nodes contain more than one packed rule-list payload
+            // concatenated in the same STC object. Earlier versions parsed only the first root
+            // tree, which made large Page/Document scopes look structurally incomplete while the
+            // flat token inventory still found the later rules. Keep parsing until the payload is
+            // exhausted, but only suppress a trailing parse failure when at least one complete
+            // root tree has already been decoded.
+            while (stream.HasRemainingPayload)
+            {
+                int startOffset = stream.Offset;
+                try
+                {
+                    DumpRuleTree(stream, scope);
+                    parsedRootCount++;
+                    stream.SkipTrailingNullPadding();
+                }
+                catch when (parsedRootCount > 0)
+                {
+                    stream.Offset = startOffset;
+                    break;
+                }
+            }
+
+            if (parsedRootCount == 0)
+                throw new InvalidDataException("No packed structural AC rule-list root was decoded.");
+
+            if (stream.HasRemainingPayload)
+            {
+                string message = $"Structural parser stopped with {stream.Remaining} unread byte(s) in {scope.ScopePath}. Remaining bytes are retained as diagnostic evidence; flat inventory reconciliation will preserve searchable rules.";
+                scope.Warnings.Add(message);
+                _report.Diagnostics.Add(new AcTreeDiagnostic
+                {
+                    Severity = "Warning",
+                    ScopePath = scope.ScopePath,
+                    Category = "StructuralTrailingPayload",
+                    Message = message
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -71,7 +110,7 @@ internal sealed class AcStructuralTreeParser
         }
     }
 
-    private void DumpRuleTree(UnpackStream ups, AcTreeScopeReport scope)
+    private void DumpRuleTree(RuleByteReader ups, AcTreeScopeReport scope)
     {
         int rootNodeId = ++_nodeCounter;
         AcTreeNode root = ReadAttrNode(ups, scope, hierarchyLevel: 0, parentNodeId: -1, actionListIndex: -1, nodeId: rootNodeId);
@@ -84,7 +123,7 @@ internal sealed class AcStructuralTreeParser
         LoadList(ups, scope, hierarchyLevel: 0, parentNodeId: rootNodeId, actionListIndex: -1);
     }
 
-    private void LoadActionList(UnpackStream ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId)
+    private void LoadActionList(RuleByteReader ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId)
     {
         GuardDepth(hierarchyLevel, scope.ScopePath);
         uint subListCount = ReadCountWithGuard(ups, "Action sub-list", hierarchyLevel, scope.ScopePath);
@@ -93,7 +132,7 @@ internal sealed class AcStructuralTreeParser
             LoadList(ups, scope, hierarchyLevel + 1, parentNodeId, i);
     }
 
-    private void LoadList(UnpackStream ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId, int actionListIndex)
+    private void LoadList(RuleByteReader ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId, int actionListIndex)
     {
         GuardDepth(hierarchyLevel, scope.ScopePath);
         uint ruleCount = ReadCountWithGuard(ups, "Rule", hierarchyLevel, scope.ScopePath);
@@ -145,9 +184,9 @@ internal sealed class AcStructuralTreeParser
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private AcTreeNode ReadAttrNode(UnpackStream ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId, int actionListIndex, int nodeId)
+    private AcTreeNode ReadAttrNode(RuleByteReader ups, AcTreeScopeReport scope, int hierarchyLevel, int parentNodeId, int actionListIndex, int nodeId)
     {
-        uint length = ups.ReadIntelUInt();
+        uint length = ups.ReadUInt32();
         if (length > _options.MaxAttrListPayloadBytes)
         {
             throw new InvalidDataException($"Attribute list length {length} exceeds safety limit {_options.MaxAttrListPayloadBytes} at node {nodeId}.");
@@ -365,7 +404,24 @@ internal sealed class AcStructuralTreeParser
         if (string.IsNullOrWhiteSpace(value))
             yield break;
 
-        string listText = StripOuterBraces(value.Trim());
+        string listText = StripOuterBraces(value.Trim()).Replace("\\\"", "\"").Trim();
+
+        // AttrList.Print commonly returns FormWorks status/action names as:
+        //     Yes\",\"No
+        // after scalar unescaping. That is not a normal quoted CSV string because
+        // the first and last quotes are stripped by the native printer. Split that
+        // shape before falling back to the generic FormWorks-list tokenizer.
+        if (listText.IndexOf("\",\"", StringComparison.Ordinal) >= 0)
+        {
+            foreach (string item in Regex.Split(listText, "\\\"\\s*,\\s*\\\""))
+            {
+                string normalized = NormalizeScalarValue(item);
+                if (!string.IsNullOrWhiteSpace(normalized))
+                    yield return normalized;
+            }
+            yield break;
+        }
+
         foreach (string item in TokenizeFormWorksList(listText))
         {
             string normalized = NormalizeScalarValue(item);
@@ -604,9 +660,9 @@ internal sealed class AcStructuralTreeParser
             throw new InvalidDataException($"Hierarchy depth {hierarchyLevel} exceeds safety limit {limit} in {scopePath}.");
     }
 
-    private uint ReadCountWithGuard(UnpackStream ups, string label, int hierarchyLevel, string scopePath)
+    private uint ReadCountWithGuard(RuleByteReader ups, string label, int hierarchyLevel, string scopePath)
     {
-        uint count = ups.ReadIntelUInt();
+        uint count = ups.ReadUInt32();
         uint limit = _options.MaxNodeEntryCount == 0 ? 100000u : _options.MaxNodeEntryCount;
         if (count > limit)
         {
@@ -615,4 +671,65 @@ internal sealed class AcStructuralTreeParser
 
         return count;
     }
+
+
+    private sealed class RuleByteReader
+    {
+        private readonly byte[] _data;
+
+        public RuleByteReader(byte[] data)
+        {
+            _data = data ?? Array.Empty<byte>();
+        }
+
+        public int Offset { get; set; }
+
+        public int Remaining => Math.Max(0, _data.Length - Offset);
+
+        public bool HasRemainingPayload
+        {
+            get
+            {
+                int i = Offset;
+                while (i < _data.Length && _data[i] == 0)
+                    i++;
+                return _data.Length - i >= 4;
+            }
+        }
+
+        public uint ReadUInt32()
+        {
+            EnsureAvailable(4);
+            uint value = 0;
+            for (int i = 0; i < 4; i++)
+                value += (uint)_data[Offset + i] << (8 * i);
+            Offset += 4;
+            return value;
+        }
+
+        public byte[] ReadBytes(int length)
+        {
+            if (length < 0)
+                throw new InvalidDataException("Negative byte length requested from AC structural payload.");
+
+            EnsureAvailable(length);
+            byte[] result = new byte[length];
+            Buffer.BlockCopy(_data, Offset, result, 0, length);
+            Offset += length;
+            return result;
+        }
+
+        public void SkipTrailingNullPadding()
+        {
+            while (Offset < _data.Length && _data[Offset] == 0)
+                Offset++;
+        }
+
+        private void EnsureAvailable(int length)
+        {
+            if (length < 0 || Offset + length > _data.Length)
+                throw new EndOfStreamException($"AC structural payload ended at offset {Offset}; requested {length} byte(s), remaining {Remaining}.");
+        }
+    }
+
 }

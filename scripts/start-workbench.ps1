@@ -1,7 +1,6 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$FwdPath,
+    [string]$FwdPath = "",
 
     [int]$Port = 8787,
 
@@ -14,8 +13,14 @@ param(
 
     [switch]$KillExisting,
     [switch]$NoBuild,
+    [switch]$Clean,
+    [switch]$NoBrowser,
     [switch]$CopyNativeToOutput,
     [switch]$SkipViewerRefresh,
+    [switch]$NoAutoPort,
+
+    [ValidateRange(1, 200)]
+    [int]$PortSearchLimit = 25,
 
     [ValidateSet("Pascal", "Kebab", "None")]
     [string]$ArgumentStyle = "Pascal",
@@ -47,7 +52,7 @@ function Resolve-RepoRoot {
     return (Resolve-Path -LiteralPath (Join-Path $scriptDir "..")).Path
 }
 
-function Stop-ListenersOnPort {
+function Get-ListeningProcessIdsOnPort {
     param([Parameter(Mandatory = $true)][int]$Port)
 
     $pids = @()
@@ -62,19 +67,101 @@ function Stop-ListenersOnPort {
         foreach ($line in $lines) {
             $parts = @($line.Line -split "\s+" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
             if ($parts.Count -ge 5) {
-                $pids += [int]$parts[$parts.Count - 1]
+                $parsedPid = 0
+                if ([int]::TryParse($parts[$parts.Count - 1], [ref]$parsedPid)) {
+                    $pids += $parsedPid
+                }
             }
         }
     }
 
-    $pids = @($pids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+    return @($pids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
+}
+
+function Get-ProcessLabel {
+    param([Parameter(Mandatory = $true)][int]$ProcessId)
+
+    try {
+        $process = Get-Process -Id $ProcessId -ErrorAction Stop
+        return "$($process.ProcessName) PID $ProcessId"
+    }
+    catch {
+        return "PID $ProcessId"
+    }
+}
+
+function Get-PortUsageSummary {
+    param([Parameter(Mandatory = $true)][int]$Port)
+
+    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
+    if ($pids.Count -eq 0) {
+        return "no active TCP listener was detected"
+    }
+
+    $labels = @()
+    foreach ($pidValue in $pids) {
+        $labels += (Get-ProcessLabel -ProcessId $pidValue)
+    }
+
+    return ($labels -join ", ")
+}
+
+function Test-LocalPortAvailable {
+    param(
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$HostName
+    )
+
+    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
+    if ($pids.Count -gt 0) {
+        return $false
+    }
+
+    $ipAddress = [System.Net.IPAddress]::Loopback
+    if (-not [string]::IsNullOrWhiteSpace($HostName) -and $HostName -ne "localhost") {
+        [System.Net.IPAddress]$parsedAddress = $null
+        if ([System.Net.IPAddress]::TryParse($HostName, [ref]$parsedAddress)) {
+            $ipAddress = $parsedAddress
+        }
+    }
+
+    $listener = $null
+    try {
+        $listener = New-Object System.Net.Sockets.TcpListener($ipAddress, $Port)
+        $listener.Start()
+        return $true
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($null -ne $listener) {
+            $listener.Stop()
+        }
+    }
+}
+
+function Stop-ListenersOnPort {
+    param([Parameter(Mandatory = $true)][int]$Port)
+
+    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
 
     if ($pids.Count -eq 0) {
         Write-Ok "No existing listener on port $Port"
-        return
+        return @()
     }
 
     foreach ($pidValue in $pids) {
+        if ($pidValue -eq 4) {
+            Write-Warning "Port $Port is owned by HTTP.sys/System PID 4. It cannot be stopped by this script."
+            continue
+        }
+
+        if ($pidValue -eq $PID) {
+            Write-Warning "Port $Port appears to be owned by the current PowerShell process PID $PID. It will not be stopped."
+            continue
+        }
+
         try {
             $process = Get-Process -Id $pidValue -ErrorAction Stop
             Write-Warning "Stopping listener on port ${Port}: $($process.ProcessName) PID $pidValue"
@@ -84,6 +171,50 @@ function Stop-ListenersOnPort {
             Write-Warning "Could not stop PID $pidValue on port ${Port}: $($_.Exception.Message)"
         }
     }
+
+    Start-Sleep -Milliseconds 300
+    return @(Get-ListeningProcessIdsOnPort -Port $Port)
+}
+
+function Resolve-ApiPort {
+    param(
+        [Parameter(Mandatory = $true)][int]$RequestedPort,
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][bool]$KillExisting,
+        [Parameter(Mandatory = $true)][bool]$AutoPort,
+        [Parameter(Mandatory = $true)][int]$SearchLimit
+    )
+
+    if ($KillExisting) {
+        Write-Section "Kill existing listener"
+        [void](Stop-ListenersOnPort -Port $RequestedPort)
+    }
+    else {
+        Write-Section "Port check"
+    }
+
+    if (Test-LocalPortAvailable -Port $RequestedPort -HostName $HostName) {
+        Write-Ok "Port $RequestedPort is available."
+        return $RequestedPort
+    }
+
+    $usage = Get-PortUsageSummary -Port $RequestedPort
+
+    if (-not $AutoPort) {
+        throw "Port $RequestedPort is not available ($usage). Use -Port with another value, or omit -NoAutoPort so the runner can choose the next open port."
+    }
+
+    Write-Warning "Port $RequestedPort is not available ($usage). Looking for the next open local port."
+
+    $lastCandidate = $RequestedPort + $SearchLimit
+    for ($candidate = $RequestedPort + 1; $candidate -le $lastCandidate; $candidate++) {
+        if (Test-LocalPortAvailable -Port $candidate -HostName $HostName) {
+            Write-Warning "Using port $candidate instead of $RequestedPort."
+            return $candidate
+        }
+    }
+
+    throw "Could not find an available port from $($RequestedPort + 1) through $lastCandidate. Re-run with -Port <openPort> or close the service using port $RequestedPort."
 }
 
 function Find-WorkbenchExe {
@@ -172,6 +303,10 @@ function Resolve-FwdFilePath {
 }
 
 $repoRoot = Resolve-RepoRoot
+if ([string]::IsNullOrWhiteSpace($FwdPath)) {
+    $FwdPath = Join-Path $repoRoot "fwd.cfd"
+}
+
 $scriptDir = Join-Path $repoRoot "scripts"
 $managedLibDir = Join-Path $repoRoot "lib"
 $nativeLibDir = Join-Path $repoRoot "rri_bin"
@@ -197,6 +332,7 @@ Write-Section "Start AC Rule Workbench"
 Write-Host "Repo root : $repoRoot"
 Write-Host "FWD path  : $FwdPath"
 Write-Host "Port      : $Port"
+Write-Host "Auto port : $(-not [bool]$NoAutoPort)"
 Write-Host "Config    : $Configuration"
 Write-Host "Platform  : $Platform"
 
@@ -205,9 +341,17 @@ $resolvedFwdPath = Resolve-FwdFilePath -Path $FwdPath
 Test-RuntimeFolder -Directory $managedLibDir -RequiredDlls $expectedManagedDlls -Label "Managed DLL folder"
 Test-RuntimeFolder -Directory $nativeLibDir -RequiredDlls $expectedNativeDlls -Label "Native DLL folder"
 
-if ($KillExisting) {
-    Write-Section "Kill existing listener"
-    Stop-ListenersOnPort -Port $Port
+$requestedPort = $Port
+$Port = Resolve-ApiPort `
+    -RequestedPort $requestedPort `
+    -HostName $HostName `
+    -KillExisting ([bool]$KillExisting) `
+    -AutoPort (-not [bool]$NoAutoPort) `
+    -SearchLimit $PortSearchLimit
+
+if ($Port -ne $requestedPort) {
+    Write-Host "Requested : http://$HostName`:$requestedPort/" -ForegroundColor DarkGray
+    Write-Host "Selected  : http://$HostName`:$Port/" -ForegroundColor Yellow
 }
 
 if (-not $NoBuild) {
@@ -226,6 +370,10 @@ if (-not $NoBuild) {
         "-Platform", $Platform,
         "-FwdPath", $resolvedFwdPath
     )
+
+    if ($Clean) {
+        $buildArgs += "-Clean"
+    }
 
     if ($CopyNativeToOutput) {
         $buildArgs += "-CopyNativeToOutput"
@@ -325,6 +473,10 @@ switch ($ArgumentStyle) {
     }
 }
 
+if (-not $NoBrowser) {
+    $appArgs += "--open"
+}
+
 if ($ExtraArgs.Count -gt 0) {
     $appArgs += $ExtraArgs
 }
@@ -333,6 +485,7 @@ Write-Section "Launch"
 Write-Host "Executable : $($workbenchExe.FullName)"
 Write-Host "Working dir: $exeDir"
 Write-Host "Health     : http://$HostName`:$Port/api/v1/health/live"
+Write-Host "Viewer     : http://$HostName`:$Port/viewer?ui=readonly-editor-v62-10&nocache=1"
 Write-Host "Default FWD: $resolvedFwdPath"
 Write-Host "Viewer file: $viewerOutputPath"
 Write-Host ""

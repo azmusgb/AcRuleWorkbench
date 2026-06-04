@@ -4,6 +4,34 @@ AC Rule Workbench is a local, read-only FW Editor companion for FormWorks / Docu
 
 FW Editor remains the system of record for authoring, editing, testing, and saving FWD changes. AC Rule Workbench does not write to the FWD and does not simulate AC runtime execution.
 
+
+## Fast local testing
+
+For fresh ZIP extracts or repeated UI testing, use the batch wrapper from the repository root:
+
+```cmd
+.\run-workbench.cmd
+```
+
+The wrapper invokes PowerShell with a process-only execution-policy bypass, unblocks downloaded files, verifies the local `fwd.cfd`, prepares FormWorks/DCM dependencies when needed, builds/doctors the x86 harness, stops a normal existing listener on port `8787`, automatically falls back to the next open local port when `8787` is owned by HTTP.sys/System, refreshes the viewer, and launches the local API/viewer.
+
+Common options:
+
+```cmd
+.\run-workbench.cmd -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787
+.\run-workbench.cmd -Clean -ForceSetup
+.\run-workbench.cmd -SkipBuild
+.\run-workbench.cmd -NoBrowser
+.\run-workbench.cmd -NoAutoPort        # fail instead of auto-selecting another port
+```
+
+Use the `.cmd` wrappers for local testing. Running `.ps1` files directly can still be blocked by Windows execution policy or downloaded-file zone markers.
+
+### Port conflicts
+
+If port `8787` is already held by HTTP.sys/System PID 4, the runner now leaves it alone and automatically starts the workbench on the next open port, usually `8788`. The console prints the selected viewer URL. Use `-NoAutoPort` only when you want the run to fail instead of falling back.
+
+
 The current product model is documented in depth in [FormWorks Editor And AC Function Reference](docs/formworks-editor-ac-reference-guide.md). Treat that guide as the baseline for future UI, extraction, API, and documentation decisions: FormWorks Editor is the authoring IDE over the FWD/STC model; AC rules are ordered rule-list trees; status results own action lists/sub-lists; UDFs are reusable rule-list functions with named field-list parameters; and table/SelectionList configuration connects static AC rules to KE/WebKey operator workflows.
 
 ## Product boundary
