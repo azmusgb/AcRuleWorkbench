@@ -1,4 +1,4 @@
-﻿{
+{
   "openapi": "3.0.3",
   "info": {
     "title": "AC Rule Workbench API",
@@ -903,7 +903,7 @@
     "/editor-model": {
       "get": {
         "operationId": "GETEditorModel",
-        "summary": "Snapshot-level canonical FormWorks Editor parity model: object graph, rule lists, UDFs, SelectionLists, and runtime impacts.",
+        "summary": "Snapshot-level canonical FormWorks Editor parity model: object graph, rule lists, UDFs, SelectionLists, page designs, fields, and runtime impacts.",
         "tags": [
           "system"
         ],
@@ -2417,6 +2417,84 @@
         }
       }
     },
+    "/fwd/page-designs": {
+      "get": {
+        "operationId": "GETFwdPageDesigns",
+        "summary": "Canonical page/variant/field design packets with geometry, field roles, rule references, and FIP inspection links.",
+        "tags": [
+          "fwd"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiEnvelope"
+                },
+                "examples": null
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                },
+                "examples": null
+              }
+            }
+          },
+          "404": {
+            "description": "Resource not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                },
+                "examples": null
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                },
+                "examples": null
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                },
+                "examples": null
+              }
+            }
+          },
+          "500": {
+            "description": "Server failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorEnvelope"
+                },
+                "examples": null
+              }
+            }
+          }
+        }
+      }
+    },
     "/fwd/page-variants": {
       "get": {
         "operationId": "GETFwdPageVariants",
@@ -2498,7 +2576,7 @@
     "/fwd/fields": {
       "get": {
         "operationId": "GETFwdFields",
-        "summary": "FWD fields. Supports ?scopeType=...\u0026scopeName=...",
+        "summary": "FWD fields with page-design context when available. Supports ?scopeType=...&scopeName=...",
         "tags": [
           "fwd"
         ],
@@ -3064,7 +3142,7 @@
     "/fwd/functions": {
       "get": {
         "operationId": "GETFwdFunctions",
-        "summary": "AC function catalog with curated semantics plus observed rule usage. Supports ?q=...\u0026includeUnobserved=false.",
+        "summary": "AC function catalog with curated semantics plus observed rule usage. Supports ?q=...&includeUnobserved=false.",
         "tags": [
           "fwd"
         ],
@@ -3561,7 +3639,7 @@
     "/fwd/udfs/canonical": {
       "get": {
         "operationId": "GETFwdUdfsCanonical",
-        "summary": "Canonical UDF definitions with resource evidence, private body candidates, caller bindings, and status-result evidence where available.",
+        "summary": "Canonical UDF definitions with promoted internal rule-list bodies, resource evidence, caller bindings, and status-result evidence where available.",
         "tags": [
           "fwd"
         ],
@@ -3911,7 +3989,7 @@
     "/fwd/fip": {
       "get": {
         "operationId": "GETFwdFip",
-        "summary": "FIP variant inspection summary. Supports ?page=...\u0026variant=...",
+        "summary": "FIP variant inspection summary. Supports ?page=...&variant=...",
         "tags": [
           "fwd"
         ],

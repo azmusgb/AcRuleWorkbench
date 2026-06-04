@@ -147,7 +147,7 @@ async function loadFwdApiData(){
   const snapshotMode=(()=>{const mode=new URLSearchParams(window.location.search).get('snapshotMode');return mode==='live'?'live':'snapshot';})();
   const timeoutMs=45000;
   const endpoints=[
-    ['editorModel','editor-model?include=ruleLists,objectGraph,udfs,selectionLists,runtimeImpacts'],
+    ['editorModel','editor-model?include=ruleLists,objectGraph,udfs,selectionLists,pageDesigns,runtimeImpacts'],
     ['overview','fwd/overview'],
     ['documents','fwd/documents'],
     ['pages','fwd/pages'],
@@ -163,6 +163,7 @@ async function loadFwdApiData(){
     ['udfs','fwd/udfs'],
     ['canonicalUdfs','fwd/udfs/canonical'],
     ['runtimeImpact','fwd/runtime-impact'],
+    ['pageDesigns','fwd/page-designs'],
     ['pageVariants','fwd/page-variants'],
     ['fields','fwd/fields']
   ];
@@ -218,6 +219,7 @@ async function loadFwdApiData(){
     udfs:hydrated.udfs,
     canonicalUdfs:hydrated.canonicalUdfs,
     runtimeImpact:hydrated.runtimeImpact,
+    pageDesigns:hydrated.pageDesigns,
     pageVariants:hydrated.pageVariants,
     fields:hydrated.fields
   };
@@ -2390,14 +2392,37 @@ function parentRuleActionListBlock(n){
 
 function fieldCatalogRowsForScope(scopeId){
   const items=list(first(model.fwd?.fields?.items,[]));
-  if(!items.length)return [];
   const parts=text(scopeId).split('/').filter(Boolean);
   const scopeName=text(parts[parts.length-1]);
   const rawType=text(parts[parts.length-2]);
   const scopeType=rawType.endsWith('s')?rawType.slice(0,-1):rawType;
+  if(!items.length){
+    const design=pageDesignForScope(scopeId);
+    return design?[{scopeType:'Page',scopeName:design.page,fields:list(design.fields).map(f=>({name:f.name,type:f.fieldType,geometry:f.geometry,design:f}))}]:[];
+  }
   const exact=items.filter(i=>lower(i.scopeName)===lower(scopeName)&&lower(i.scopeType)===lower(scopeType));
   if(exact.length)return exact;
   return items.filter(i=>lower(i.scopeName)===lower(scopeName));
+}
+function pageDesignRows(){
+  return list(first(model.fwd?.pageDesigns?.items,model.fwd?.editorModel?.pageDesigns,[]));
+}
+function pageDesignForScope(scopeId){
+  const parts=text(scopeId).split('/').filter(Boolean);
+  const scopeName=text(parts[parts.length-1]);
+  if(!scopeName)return null;
+  return pageDesignRows().find(p=>lower(p.page)===lower(scopeName))||null;
+}
+function pageDesignContextHtml(design){
+  if(!design)return `<div class="notice"><div class="notice-icon">i</div><div><b>Page design context.</b> No page design packet is available for this scope.</div></div>`;
+  const variants=list(design.variants);
+  const fields=list(design.fields);
+  const links=list(design.processingLinks);
+  const variantRows=variants.slice(0,8).map(v=>`<div class="mini-row"><span><b>${esc(text(v.name))}</b>${v.formId?`<small class="mono">${esc(text(v.formId))}</small>`:''}</span><span>${esc(text(v.source||'Fwd.PageVariants'))}</span></div>`).join('');
+  const fieldRows=fields.slice(0,12).map(f=>`<div class="mini-row"><span><b>${esc(text(f.name))}</b><small>${esc(text(f.fieldType||'unknown'))}</small></span><span class="mono">${esc(text(f.geometry||''))}</span></div>`).join('');
+  const flags=[...new Set(fields.flatMap(f=>list(f.roleFlags).map(text)).filter(Boolean))].slice(0,12);
+  const linkRows=links.slice(0,4).map(l=>`<div class="mini-row"><span><b>${esc(text(l.kind))}</b></span><span class="mono">${esc(text(l.url||l.target))}</span></div>`).join('');
+  return `<div class="kv">${kv('Page',design.page||'')}${kv('Variants',fmt(variants.length))}${kv('Fields',fmt(fields.length))}${kv('Confidence',design.confidence||'')}</div>${variantRows?`<div class="table-columns-head">Variants / Form IDs</div><div class="mini-list">${variantRows}</div>`:''}${fieldRows?`<div class="table-columns-head">Fields</div><div class="mini-list">${fieldRows}</div>`:''}${flags.length?`<div class="table-columns-head">Field roles</div>${functionTokenStripHtml(flags,'blue')}`:''}${linkRows?`<div class="table-columns-head">Processing links</div><div class="mini-list">${linkRows}</div>`:''}`;
 }
 function looksLikeFieldParameterName(name){const key=lower(name);return key.includes('field')||key.includes('column')||key.includes('attr')||key.includes('paramlist')||key.includes('source')||key.includes('dest');}
 function tokenizeFieldCandidates(raw){const source=text(raw).trim();if(!source)return [];const tokens=source.split(/[^A-Za-z0-9_]+/).map(x=>x.trim()).filter(Boolean);const out=[];const seen=new Set();tokens.forEach(token=>{if(token.length<2)return;if(/^\d+$/.test(token))return;const t=token.toLowerCase();if(seen.has(t))return;seen.add(t);out.push(token);});return out;}
@@ -2459,6 +2484,7 @@ function renderFieldResolutionCatalog(){
   const index=getScopeFieldResolutionIndex(state.scopeId);
   const rows=filteredScopeFieldResolutionRows(index);
   const summary=index.summary;
+  const pageDesign=pageDesignForScope(state.scopeId);
   const buttons=`<div class="scope-kind-filter" role="toolbar" aria-label="Field resolution filters"><button class="chip-btn ${state.fieldResolutionFilter==='unresolved'?'active':''}" type="button" data-field-filter="unresolved">Unresolved</button><button class="chip-btn ${state.fieldResolutionFilter==='resolved'?'active':''}" type="button" data-field-filter="resolved">Resolved</button><button class="chip-btn ${state.fieldResolutionFilter==='all'?'active':''}" type="button" data-field-filter="all">All</button></div>`;
   const listHtml=rows.slice(0,4000).map(r=>`<button class="data-row compact" type="button" data-node="${esc(r.nodeId)}"><div><div class="data-title">${esc(r.referencedField)} <span class="badge ${r.fieldExists?'green':'amber'}">${r.fieldExists?'resolved':'unresolved'}</span></div><div class="data-sub">${esc(r.ruleName)} · ${esc(r.functionName||'no function')} · ${esc(r.parameterName)} = ${esc(r.parameterValue)}</div></div><div>${r.matchCount?`<span class="badge blue">${fmt(r.matchCount)} matches</span>`:''}</div><div class="mono">${esc(r.nodeId)}</div></button>`).join('');
   const hero=workspaceHeroHtml({
@@ -2473,7 +2499,7 @@ function renderFieldResolutionCatalog(){
     ]
   });
   const notice=`<div class="notice"><div class="notice-icon">i</div><div><b>Field catalog match.</b> This view shows field-like rule parameters across the current scope and whether each one matches the extracted FWD field catalog.</div></div>`;
-  const body=`<div class="field-workspace-grid"><section class="workspace-card workspace-card-primary"><div class="workspace-card-head"><div><h4>References</h4><p>Filtered field-like parameters across the current scope.</p></div>${buttons}</div><div class="table-list mt-8">${listHtml||emptyHtml('No field-resolution rows match','Adjust filter or search.')}</div>${rows.length>4000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 4,000 rows for browser performance. Use search to narrow down.</div></div>':''}</section><aside class="workspace-side-stack">${workspaceSectionHtml('How to read this',notice,{caption:'Resolution compares observed rule parameters to extracted FWD fields.'})}</aside></div>`;
+  const body=`<div class="field-workspace-grid"><section class="workspace-card workspace-card-primary"><div class="workspace-card-head"><div><h4>References</h4><p>Filtered field-like parameters across the current scope.</p></div>${buttons}</div><div class="table-list mt-8">${listHtml||emptyHtml('No field-resolution rows match','Adjust filter or search.')}</div>${rows.length>4000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 4,000 rows for browser performance. Use search to narrow down.</div></div>':''}</section><aside class="workspace-side-stack">${workspaceSectionHtml('Page Design',pageDesignContextHtml(pageDesign),{caption:'Variants, field geometry, roles, and processing links from the canonical page design packet.'})}${workspaceSectionHtml('How to read this',notice,{caption:'Resolution compares observed rule parameters to extracted FWD fields.'})}</aside></div>`;
   $('content').innerHTML=workspacePageHtml('fields',hero,body,{split:true});
 }
 function routingGroupsHtml(n){const groups=outgoingGroups(n);const names=Object.keys(groups);if(!names.length)return '<div class="muted">No structural child action lists.</div>';return names.map(name=>`<div class="panel my-8 p-10"><div class="split-row"><b>${esc(name)}</b><span class="badge blue">${fmt(groups[name].length)} children</span></div><div class="mini-list mt-8">${groups[name].map(e=>{const child=model.nodesById.get(e.to);return `<button class="quick-card" type="button" data-node="${esc(e.to)}"><b>${esc(child?.title||e.to)}</b><span>${esc(child?.fn||'no function')}</span></button>`}).join('')}</div></div>`).join('');}

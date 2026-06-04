@@ -27,6 +27,9 @@ internal sealed class FormWorksEditorModel
     [JsonProperty("selectionListDefinitions")]
     public List<EditorSelectionListDefinitionModel> SelectionListDefinitions { get; } = new();
 
+    [JsonProperty("pageDesigns")]
+    public List<EditorPageDesignModel> PageDesigns { get; } = new();
+
     [JsonProperty("runtimeImpacts")]
     public List<EditorRuntimeImpactModel> RuntimeImpacts { get; } = new();
 
@@ -366,11 +369,71 @@ internal sealed class EditorUdfInternalTreeModel
     [JsonProperty("parsed")]
     public bool Parsed { get; set; }
 
+    [JsonProperty("parseState")]
+    public string ParseState { get; set; } = "Unavailable";
+
+    [JsonProperty("internalRuleList")]
+    public EditorUdfInternalRuleListModel InternalRuleList { get; set; } = new();
+
     [JsonProperty("candidateRuleNodes")]
     public List<EditorPrivateTreeHitModel> CandidateRuleNodes { get; } = new();
 
     [JsonProperty("diagnostics")]
     public List<string> Diagnostics { get; } = new();
+}
+
+internal sealed class EditorUdfInternalRuleListModel
+{
+    [JsonProperty("ruleListId")]
+    public string RuleListId { get; set; } = string.Empty;
+
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = "Unavailable";
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "Low";
+
+    [JsonProperty("rules")]
+    public List<EditorUdfInternalRuleModel> Rules { get; } = new();
+
+    [JsonProperty("statusResults")]
+    public List<string> StatusResults { get; } = new();
+}
+
+internal sealed class EditorUdfInternalRuleModel
+{
+    [JsonProperty("nodeId")]
+    public string NodeId { get; set; } = string.Empty;
+
+    [JsonProperty("ordinal")]
+    public int Ordinal { get; set; }
+
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("functionName")]
+    public string? FunctionName { get; set; }
+
+    [JsonProperty("path")]
+    public string Path { get; set; } = string.Empty;
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = "ResourcePrivateTree";
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "Medium";
+
+    [JsonProperty("textPreview")]
+    public string? TextPreview { get; set; }
+
+    [JsonProperty("parameters")]
+    public Dictionary<string, List<string>> Parameters { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    [JsonProperty("statusResults")]
+    public List<string> StatusResults { get; } = new();
 }
 
 internal sealed class EditorResourceEvidenceModel
@@ -544,6 +607,120 @@ internal sealed class EditorSelectionListUsageModel
     public string RelationshipKind { get; set; } = string.Empty;
 }
 
+internal sealed class EditorPageDesignModel
+{
+    [JsonProperty("page")]
+    public string Page { get; set; } = string.Empty;
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = "Fwd.Page";
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "Medium";
+
+    [JsonProperty("variants")]
+    public List<EditorPageVariantDesignModel> Variants { get; } = new();
+
+    [JsonProperty("fields")]
+    public List<EditorFieldDesignModel> Fields { get; } = new();
+
+    [JsonProperty("ruleListLinks")]
+    public List<EditorPageProcessingLinkModel> RuleListLinks { get; } = new();
+
+    [JsonProperty("processingLinks")]
+    public List<EditorPageProcessingLinkModel> ProcessingLinks { get; } = new();
+
+    [JsonProperty("diagnostics")]
+    public List<string> Diagnostics { get; } = new();
+}
+
+internal sealed class EditorPageVariantDesignModel
+{
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("formId")]
+    public string? FormId { get; set; }
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = "Fwd.PageVariants";
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "High";
+
+    [JsonProperty("links")]
+    public List<EditorPageProcessingLinkModel> Links { get; } = new();
+}
+
+internal sealed class EditorFieldDesignModel
+{
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("fieldType")]
+    public string? FieldType { get; set; }
+
+    [JsonProperty("containerKind")]
+    public string ContainerKind { get; set; } = "Page";
+
+    [JsonProperty("containerName")]
+    public string ContainerName { get; set; } = string.Empty;
+
+    [JsonProperty("geometry")]
+    public string? Geometry { get; set; }
+
+    [JsonProperty("rect")]
+    public EditorFieldRectModel? Rect { get; set; }
+
+    [JsonProperty("subfieldCount")]
+    public int SubfieldCount { get; set; }
+
+    [JsonProperty("roleFlags")]
+    public List<string> RoleFlags { get; } = new();
+
+    [JsonProperty("relatedRules")]
+    public List<EditorPageProcessingLinkModel> RelatedRules { get; } = new();
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = "Fwd.Fields";
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "High";
+}
+
+internal sealed class EditorFieldRectModel
+{
+    [JsonProperty("x")]
+    public int X { get; set; }
+
+    [JsonProperty("y")]
+    public int Y { get; set; }
+
+    [JsonProperty("width")]
+    public int Width { get; set; }
+
+    [JsonProperty("height")]
+    public int Height { get; set; }
+}
+
+internal sealed class EditorPageProcessingLinkModel
+{
+    [JsonProperty("kind")]
+    public string Kind { get; set; } = string.Empty;
+
+    [JsonProperty("target")]
+    public string Target { get; set; } = string.Empty;
+
+    [JsonProperty("url")]
+    public string? Url { get; set; }
+
+    [JsonProperty("source")]
+    public string Source { get; set; } = string.Empty;
+
+    [JsonProperty("confidence")]
+    public string Confidence { get; set; } = "Medium";
+}
+
 internal sealed class EditorRuntimeImpactModel
 {
     [JsonProperty("impactId")]
@@ -603,11 +780,12 @@ internal static class FormWorksEditorModelBuilder
         model.RuleLists.AddRange(BuildRuleLists(snapshot));
         model.UdfDefinitions.AddRange(BuildUdfDefinitions(snapshot));
         model.SelectionListDefinitions.AddRange(BuildSelectionListDefinitions(snapshot));
+        model.PageDesigns.AddRange(BuildPageDesigns(snapshot));
         model.RuntimeImpacts.AddRange(BuildRuntimeImpacts(snapshot, model.SelectionListDefinitions));
         model.Diagnostics.AddRange(BuildDiagnostics(model));
         model.NotProven.Add("The workbench does not write to FWD configuration.");
         model.NotProven.Add("Native AC runtime execution and AC Rules Tester outcomes are not simulated.");
-        model.NotProven.Add("UDF bodies and SelectionList schemas are exposed as canonical candidates until private resource payloads are fully parsed.");
+        model.NotProven.Add("Native page rendering and FIP dropout/OMR execution are linked evidence; they are not simulated inside the static editor model.");
         return model;
     }
 
@@ -922,9 +1100,6 @@ internal static class FormWorksEditorModelBuilder
                 definition.FieldListParameters.Add(parameter);
             foreach (string status in ExtractStatusResultNames(definition.ResourceEvidence))
                 definition.StatusResults.Add(status);
-            foreach (EditorPrivateTreeHitModel hit in definition.ResourceEvidence.PrivateTreeHits.Where(h => h.Role == "RuleNode" || h.Role == "RuleBody"))
-                definition.InternalRuleTree.CandidateRuleNodes.Add(hit);
-            definition.InternalRuleTree.Parsed = definition.InternalRuleTree.CandidateRuleNodes.Count > 0;
 
             var callers = FindUdfCallers(snapshot, resource.Key).ToList();
             foreach (EditorUdfCallerBindingModel caller in callers)
@@ -939,6 +1114,7 @@ internal static class FormWorksEditorModelBuilder
                     definition.StatusResults.Add(status);
 
             AddUdfParameterBindings(definition);
+            BuildUdfInternalRuleTree(snapshot, definition, resource.Key);
 
             definition.DefinitionParsed = definition.ResourceEvidence.AttributeHits.Any(h => h.Role == "FieldListParameter" || h.Role == "StatusResult")
                 || definition.ResourceEvidence.PrivateTreeHits.Any(h => h.Role == "FieldListParameter" || h.Role == "StatusResult");
@@ -946,7 +1122,7 @@ internal static class FormWorksEditorModelBuilder
             if (!definition.DefinitionParsed)
                 definition.Diagnostics.Add("UdfDefinitionNotParsed");
             if (!definition.BodyParsed)
-                definition.Diagnostics.Add("UdfBodyNotParsed");
+                definition.Diagnostics.Add(definition.InternalRuleTree.ParseState == "Opaque" ? "UdfBodyOpaque" : "UdfBodyUnavailable");
             if (definition.FieldListParameters.Count == 0)
                 definition.Diagnostics.Add("NamedFieldListParametersUnavailable");
             if (detail == null)
@@ -954,6 +1130,119 @@ internal static class FormWorksEditorModelBuilder
 
             yield return definition;
         }
+    }
+
+    private static void BuildUdfInternalRuleTree(WorkbenchSnapshot snapshot, EditorUdfDefinitionModel definition, string udfName)
+    {
+        definition.InternalRuleTree.InternalRuleList.RuleListId = "UDF/" + SafeId(udfName);
+        definition.InternalRuleTree.InternalRuleList.Name = udfName;
+
+        List<AcTreeNode> parsedNodes = FindParsedUdfNodes(snapshot, udfName);
+        if (parsedNodes.Count > 0)
+        {
+            definition.InternalRuleTree.ParseState = "Parsed";
+            definition.InternalRuleTree.Parsed = true;
+            definition.InternalRuleTree.InternalRuleList.Source = "AcTreeReport.UdfScope";
+            definition.InternalRuleTree.InternalRuleList.Confidence = "High";
+            foreach (AcTreeNode node in parsedNodes)
+            {
+                var rule = new EditorUdfInternalRuleModel
+                {
+                    NodeId = RuleCorrelation.NodeId(node),
+                    Ordinal = node.RuleIndexWithinScope,
+                    Name = string.IsNullOrWhiteSpace(node.RuleName) ? "Rule " + node.RuleIndexWithinScope.ToString() : node.RuleName!,
+                    FunctionName = node.FunctionName,
+                    Path = node.DisplayPath,
+                    Source = "AcTreeReport.Nodes",
+                    Confidence = "High",
+                    TextPreview = node.DisplayPath
+                };
+                CopyDictionary(node.Parameters, rule.Parameters);
+                foreach (string status in Distinct(node.ActionNames))
+                    rule.StatusResults.Add(status);
+                definition.InternalRuleTree.InternalRuleList.Rules.Add(rule);
+            }
+        }
+
+        foreach (EditorPrivateTreeHitModel hit in definition.ResourceEvidence.PrivateTreeHits.Where(h => h.Role == "RuleNode" || h.Role == "RuleBody"))
+            definition.InternalRuleTree.CandidateRuleNodes.Add(hit);
+
+        if (!definition.InternalRuleTree.InternalRuleList.Rules.Any() && definition.InternalRuleTree.CandidateRuleNodes.Count > 0)
+        {
+            definition.InternalRuleTree.ParseState = "PartiallyParsed";
+            definition.InternalRuleTree.Parsed = true;
+            definition.InternalRuleTree.InternalRuleList.Source = "ResourcePrivateTree";
+            definition.InternalRuleTree.InternalRuleList.Confidence = "Medium";
+            int ordinal = 0;
+            foreach (EditorPrivateTreeHitModel hit in definition.InternalRuleTree.CandidateRuleNodes)
+            {
+                var rule = new EditorUdfInternalRuleModel
+                {
+                    NodeId = "udf-private-" + (++ordinal).ToString("000000"),
+                    Ordinal = ordinal,
+                    Name = string.IsNullOrWhiteSpace(hit.Name) ? "Private body node " + ordinal.ToString() : hit.Name,
+                    FunctionName = InferFunctionNameFromPrivateBody(hit),
+                    Path = hit.Path,
+                    Source = "ResourcePrivateTree",
+                    Confidence = hit.Role == "RuleBody" ? "Medium" : hit.Confidence,
+                    TextPreview = hit.ValuePreview
+                };
+                foreach (string token in ExtractNamesFromText(hit.ValuePreview))
+                {
+                    if (!definition.FieldListParameters.Contains(token, StringComparer.OrdinalIgnoreCase))
+                        continue;
+                    if (!rule.Parameters.TryGetValue("FieldList", out List<string>? values))
+                    {
+                        values = new List<string>();
+                        rule.Parameters["FieldList"] = values;
+                    }
+                    if (!values.Contains(token, StringComparer.OrdinalIgnoreCase))
+                        values.Add(token);
+                }
+                definition.InternalRuleTree.InternalRuleList.Rules.Add(rule);
+            }
+        }
+
+        foreach (string status in Distinct(definition.StatusResults))
+            definition.InternalRuleTree.InternalRuleList.StatusResults.Add(status);
+
+        if (definition.InternalRuleTree.Parsed)
+            return;
+
+        if (definition.ResourceEvidence.HasPrivateTree)
+        {
+            definition.InternalRuleTree.ParseState = "Opaque";
+            definition.InternalRuleTree.Diagnostics.Add("PrivateTreePresentButNoRuleBodySignals");
+        }
+        else
+        {
+            definition.InternalRuleTree.ParseState = "Unavailable";
+            definition.InternalRuleTree.Diagnostics.Add("PrivateTreeUnavailable");
+        }
+    }
+
+    private static string? InferFunctionNameFromPrivateBody(EditorPrivateTreeHitModel hit)
+    {
+        string text = (hit.Name + " " + hit.ValuePreview).Trim();
+        Match match = Regex.Match(text, @"\b[A-Za-z_][A-Za-z0-9_]*\s*\(");
+        if (match.Success)
+            return match.Value.Trim().TrimEnd('(').Trim();
+        return hit.Role == "RuleBody" ? "PrivateRuleBody" : null;
+    }
+
+    private static List<AcTreeNode> FindParsedUdfNodes(WorkbenchSnapshot snapshot, string udfName)
+    {
+        string name = (udfName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return new List<AcTreeNode>();
+
+        return snapshot.Tree.Nodes
+            .Where(n => n.IsRuleNode)
+            .Where(n => RuleCorrelation.Eq(n.ScopeType, "UDF") || RuleCorrelation.Contains(n.ScopePath, "AC/UDFs/"))
+            .Where(n => RuleCorrelation.Eq(n.ScopeName, name) || RuleCorrelation.Contains(n.ScopePath, "AC/UDFs/" + name))
+            .OrderBy(n => n.RuleIndexWithinScope)
+            .ThenBy(n => n.NodeId)
+            .ToList();
     }
 
     private static EditorResourceEvidenceModel BuildResourceEvidence(ResourceDetail? detail, string resourceKind)
@@ -1209,6 +1498,183 @@ internal static class FormWorksEditorModelBuilder
         return names.Values.OrderByDescending(t => t.UsageLinks.Count).ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase);
     }
 
+    private static IEnumerable<EditorPageDesignModel> BuildPageDesigns(WorkbenchSnapshot snapshot)
+    {
+        var variantsByPage = snapshot.Fwd.PageVariants
+            .GroupBy(v => v.Page ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.SelectMany(v => v.Variants).Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var fieldsByPage = snapshot.Fwd.Fields
+            .Where(f => RuleCorrelation.Eq(f.ScopeType, "Page"))
+            .GroupBy(f => f.ScopeName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.SelectMany(f => f.Fields).Where(f => !string.IsNullOrWhiteSpace(f.Name)).OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase).ToList(), StringComparer.OrdinalIgnoreCase);
+
+        IEnumerable<string?> pageSources = snapshot.Fwd.Pages
+            .Concat(snapshot.Fwd.PageVariants.Select(v => v.Page))
+            .Concat(snapshot.Fwd.Fields.Where(f => RuleCorrelation.Eq(f.ScopeType, "Page")).Select(f => f.ScopeName))
+            .Concat(snapshot.ScopesById.Values.Where(s => RuleCorrelation.Eq(s.Kind, "Page")).Select(s => s.Name));
+
+        foreach (string page in Distinct(pageSources).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+        {
+            variantsByPage.TryGetValue(page, out List<string>? variants);
+            fieldsByPage.TryGetValue(page, out List<FieldSummary>? fields);
+            variants ??= new List<string>();
+            fields ??= new List<FieldSummary>();
+
+            var design = new EditorPageDesignModel
+            {
+                Page = page,
+                Source = "Fwd.Pages+Fwd.PageVariants+Fwd.Fields",
+                Confidence = fields.Count > 0 ? "High" : variants.Count > 0 ? "Medium" : "Low"
+            };
+
+            foreach (string variant in variants)
+            {
+                var variantModel = new EditorPageVariantDesignModel
+                {
+                    Name = variant,
+                    FormId = InferFormId(page, variant),
+                    Source = "Fwd.PageVariants",
+                    Confidence = "High"
+                };
+                variantModel.Links.Add(new EditorPageProcessingLinkModel
+                {
+                    Kind = "FipVariantInspection",
+                    Target = page + "/" + variant,
+                    Url = "/api/v1/fwd/fip?page=" + UrlComponent(page) + "&variant=" + UrlComponent(variant),
+                    Source = "FipInspectionRoute",
+                    Confidence = "Medium"
+                });
+                design.Variants.Add(variantModel);
+            }
+
+            ScopeModel? pageScope = snapshot.ScopesById.Values.FirstOrDefault(s => RuleCorrelation.Eq(s.Kind, "Page") && RuleCorrelation.Eq(s.Name, page));
+            if (pageScope != null)
+            {
+                design.RuleListLinks.Add(new EditorPageProcessingLinkModel
+                {
+                    Kind = "AcRuleList",
+                    Target = pageScope.ScopeId,
+                    Url = "/api/v1/rule-lists/" + UrlComponent(pageScope.ScopeId),
+                    Source = "AcTreeReport.Scope",
+                    Confidence = "High"
+                });
+            }
+
+            foreach (FieldSummary field in fields)
+                design.Fields.Add(BuildFieldDesign(snapshot, page, field));
+
+            design.ProcessingLinks.Add(new EditorPageProcessingLinkModel
+            {
+                Kind = "FieldCatalog",
+                Target = page,
+                Url = "/api/v1/fwd/fields?scopeType=Page&scopeName=" + UrlComponent(page),
+                Source = "Fwd.Fields",
+                Confidence = fields.Count > 0 ? "High" : "Low"
+            });
+            design.ProcessingLinks.Add(new EditorPageProcessingLinkModel
+            {
+                Kind = "FipPageInspection",
+                Target = page,
+                Url = "/api/v1/fwd/fip?page=" + UrlComponent(page),
+                Source = "FipInspectionRoute",
+                Confidence = "Medium"
+            });
+
+            if (variants.Count == 0)
+                design.Diagnostics.Add("PageVariantsUnavailable");
+            if (fields.Count == 0)
+                design.Diagnostics.Add("PageFieldsUnavailable");
+            if (pageScope == null)
+                design.Diagnostics.Add("PageRuleListUnavailable");
+
+            yield return design;
+        }
+    }
+
+    private static EditorFieldDesignModel BuildFieldDesign(WorkbenchSnapshot snapshot, string page, FieldSummary field)
+    {
+        var model = new EditorFieldDesignModel
+        {
+            Name = field.Name,
+            FieldType = field.Type,
+            ContainerKind = "Page",
+            ContainerName = page,
+            Geometry = field.Geometry,
+            SubfieldCount = field.SubfieldCount,
+            Source = "Fwd.Fields",
+            Confidence = string.IsNullOrWhiteSpace(field.Geometry) ? "Medium" : "High"
+        };
+
+        if (TryParseGeometry(field.Geometry, out EditorFieldRectModel? rect))
+            model.Rect = rect;
+
+        foreach (string flag in InferFieldRoleFlags(field, model.Rect))
+            model.RoleFlags.Add(flag);
+
+        foreach (RuleModel rule in FindRulesReferencingField(snapshot, page, field.Name).Take(50))
+        {
+            model.RelatedRules.Add(new EditorPageProcessingLinkModel
+            {
+                Kind = "AcRuleReference",
+                Target = rule.NodeId,
+                Url = "/api/v1/rules/" + UrlComponent(rule.NodeId),
+                Source = "RuleFieldResolution",
+                Confidence = rule.FieldResolutions.Any(r => RuleCorrelation.Eq(r.ReferencedField, field.Name) && r.FieldExists) ? "High" : "Medium"
+            });
+        }
+
+        if (model.RelatedRules.Count > 0 && !model.RoleFlags.Contains("RuleReferenced", StringComparer.OrdinalIgnoreCase))
+            model.RoleFlags.Add("RuleReferenced");
+
+        return model;
+    }
+
+    private static IEnumerable<RuleModel> FindRulesReferencingField(WorkbenchSnapshot snapshot, string page, string fieldName)
+    {
+        return snapshot.RulesByNodeId.Values
+            .Where(r => RuleCorrelation.Eq(r.Node.ScopeType, "Page") && RuleCorrelation.Eq(r.Node.ScopeName, page))
+            .Where(r => r.FieldResolutions.Any(f => RuleCorrelation.Eq(f.ReferencedField, fieldName)))
+            .OrderBy(r => r.Node.RuleIndexWithinScope)
+            .ThenBy(r => r.NodeId);
+    }
+
+    private static IEnumerable<string> InferFieldRoleFlags(FieldSummary field, EditorFieldRectModel? rect)
+    {
+        string probe = ((field.Name ?? string.Empty) + " " + (field.Type ?? string.Empty)).ToLowerInvariant();
+        if (rect != null)
+            yield return "GeometryAvailable";
+        if (field.SubfieldCount > 0)
+            yield return "SubfieldsConfigured";
+        if (probe.Contains("omr") || probe.Contains("checkbox") || probe.Contains("check box") || probe.Contains("oval"))
+            yield return "OmrOrCheckbox";
+        if (probe.Contains("line") || probe.Contains("multiline") || probe.Contains("grid") || probe.Contains("row"))
+            yield return "MultilineOrGrid";
+        if (probe.Contains("amount") || probe.Contains("total") || probe.Contains("charge") || probe.Contains("paid"))
+            yield return "AmountField";
+        if (probe.Contains("date"))
+            yield return "DateField";
+        if (probe.Contains("id") || probe.Contains("member") || probe.Contains("subscriber") || probe.Contains("patient"))
+            yield return "IdentifierField";
+        if (!string.IsNullOrWhiteSpace(field.Type))
+            yield return "Type:" + field.Type;
+    }
+
+    private static string? InferFormId(string page, string variant)
+    {
+        if (string.IsNullOrWhiteSpace(variant))
+            return null;
+
+        Match match = Regex.Match(variant, @"(?:form\s*id|formid|form)[\s:_-]*([A-Za-z0-9_.-]+)", RegexOptions.IgnoreCase);
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        if (!RuleCorrelation.Eq(page, variant) && Regex.IsMatch(variant, @"^[A-Za-z0-9_.-]{2,40}$"))
+            return variant;
+
+        return null;
+    }
+
     private static IEnumerable<EditorRuntimeImpactModel> BuildRuntimeImpacts(WorkbenchSnapshot snapshot, IEnumerable<EditorSelectionListDefinitionModel> selectionLists)
     {
         int ordinal = 0;
@@ -1282,9 +1748,17 @@ internal static class FormWorksEditorModelBuilder
     private static IEnumerable<string> BuildDiagnostics(FormWorksEditorModel model)
     {
         if (model.UdfDefinitions.Any(u => !u.DefinitionParsed))
-            yield return "UdfDefinitionBodiesNotParsed";
+            yield return "UdfInterfacesNotParsed";
+        if (model.UdfDefinitions.Any(u => u.InternalRuleTree.ParseState == "Opaque"))
+            yield return "UdfPrivateBodiesOpaque";
+        if (model.UdfDefinitions.Any(u => u.InternalRuleTree.ParseState == "Unavailable"))
+            yield return "UdfPrivateBodiesUnavailable";
         if (model.SelectionListDefinitions.Any(t => !t.SchemaParsed))
             yield return "SelectionListSchemasNotParsed";
+        if (model.PageDesigns.Any(p => p.Fields.Count == 0))
+            yield return "PageDesignFieldsUnavailable";
+        if (model.PageDesigns.Any(p => p.Variants.Count == 0))
+            yield return "PageDesignVariantsUnavailable";
         yield return "RuntimeImpactsAreStaticConfigurationEvidence";
     }
 
@@ -1617,4 +2091,32 @@ internal static class FormWorksEditorModelBuilder
     private static string ObjectId(string kind, string name) => kind.ToLowerInvariant() + ":" + SafeId(name);
 
     private static string SafeId(string? value) => RuleCorrelation.SafeId(value ?? "unknown").ToLowerInvariant();
+
+    private static string UrlComponent(string? value) => Uri.EscapeDataString(value ?? string.Empty);
+
+    private static bool TryParseGeometry(string? geometry, out EditorFieldRectModel? rect)
+    {
+        rect = null;
+        if (string.IsNullOrWhiteSpace(geometry))
+            return false;
+
+        string[] numbers = new string((geometry ?? string.Empty).Select(c => (char.IsDigit(c) || c == '-') ? c : ' ').ToArray())
+            .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (numbers.Length < 4)
+            return false;
+
+        if (!int.TryParse(numbers[0], out int x)) return false;
+        if (!int.TryParse(numbers[1], out int y)) return false;
+        if (!int.TryParse(numbers[2], out int width)) return false;
+        if (!int.TryParse(numbers[3], out int height)) return false;
+
+        rect = new EditorFieldRectModel
+        {
+            X = x,
+            Y = y,
+            Width = width,
+            Height = height
+        };
+        return true;
+    }
 }

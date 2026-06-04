@@ -200,6 +200,10 @@ public sealed class ApiContractTests
             string.Equals((string?)p?["parameterName"], "Source", StringComparison.OrdinalIgnoreCase) &&
             string.Equals((string?)p?["callerValue"], "SubscriberID_OCR", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(((JArray)(udf["internalRuleTree"]?["candidateRuleNodes"] ?? new JArray())).Any(n => string.Equals((string?)n?["role"], "RuleBody", StringComparison.OrdinalIgnoreCase)));
+        Assert.AreEqual("PartiallyParsed", udf["internalRuleTree"]?["parseState"]?.Value<string>());
+        Assert.IsTrue(((JArray)(udf["internalRuleTree"]?["internalRuleList"]?["rules"] ?? new JArray())).Any(n =>
+            string.Equals((string?)n?["name"], "UdfRuleBody", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals((string?)n?["source"], "ResourcePrivateTree", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -292,6 +296,31 @@ public sealed class ApiContractTests
         Assert.IsNotNull(items);
         Assert.IsTrue(items!.Any(i => string.Equals((string?)i?["referencedField"], "SubscriberID_OCR", StringComparison.OrdinalIgnoreCase) && (i?["fieldExists"]?.Value<bool>() ?? false)));
         Assert.IsTrue(items.Any(i => string.Equals((string?)i?["referencedField"], "UnknownField999", StringComparison.OrdinalIgnoreCase) && !(i?["fieldExists"]?.Value<bool>() ?? true)));
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdPageDesigns_Returns_Variants_Fields_And_RuleLinks()
+    {
+        var service = new WorkbenchApiService(new FieldResolutionStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/page-designs?page=DentalADA");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/page-designs", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.PageDesigns", body.Value<string>("schema"));
+
+        JObject page = (JObject)((JArray)(body["data"]?["items"] ?? new JArray())).First();
+        Assert.AreEqual("DentalADA", page["page"]?.Value<string>());
+        Assert.IsTrue(((JArray)(page["variants"] ?? new JArray())).Any(v => string.Equals((string?)v?["formId"], "ADA2024", StringComparison.OrdinalIgnoreCase)));
+
+        JObject field = (JObject)((JArray)(page["fields"] ?? new JArray())).First(f => string.Equals((string?)f?["name"], "SubscriberID_OCR", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(10, field["rect"]?["x"]?.Value<int>());
+        Assert.AreEqual(120, field["rect"]?["width"]?.Value<int>());
+        Assert.IsTrue(((JArray)(field["roleFlags"] ?? new JArray())).Any(f => string.Equals(f.Value<string>(), "GeometryAvailable", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(field["relatedRules"] ?? new JArray())).Any(r => string.Equals((string?)r?["target"], "node-000001", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -400,6 +429,9 @@ public sealed class ApiContractTests
         Assert.AreEqual("AcWorkbench.FwdUdfDetail", body.Value<string>("schema"));
         Assert.AreEqual("CopyIfDestBlank", body["data"]?["name"]?.Value<string>());
         Assert.IsTrue(body["data"]?["fieldListCount"]?.Value<int>() >= 1);
+        Assert.AreEqual("PartiallyParsed", body["data"]?["bodyParseState"]?.Value<string>());
+        Assert.IsTrue((body["data"]?["definition"]?["ruleBody"] as JArray)?.Count >= 1);
+        Assert.IsTrue((body["data"]?["definition"]?["internalRuleList"]?["rules"] as JArray)?.Count >= 1);
         Assert.IsTrue((body["data"]?["usage"]?["directCallers"] as JArray)?.Count >= 1);
     }
 
@@ -1082,12 +1114,19 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public FwdInspectionReport Inspect(FwdInspectionOptions options)
         {
             var report = new FwdInspectionReport { Path = options.Path ?? "C:\\default.cfd" };
+            report.Pages.Add("DentalADA");
+            report.PageVariants.Add(new PageVariantBucket
+            {
+                Page = "DentalADA",
+                Variants = { "FormID_ADA2024" }
+            });
             var bucket = new FieldBucket { ScopeType = "Page", ScopeName = "DentalADA" };
             bucket.Fields.Add(new FieldSummary
             {
                 Name = "SubscriberID_OCR",
                 Type = "Text",
-                Geometry = "10,20,120,18"
+                Geometry = "10,20,120,18",
+                SubfieldCount = 0
             });
             report.Fields.Add(bucket);
             return report;

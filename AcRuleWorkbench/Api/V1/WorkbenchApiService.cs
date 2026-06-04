@@ -664,12 +664,15 @@ internal sealed class WorkbenchApiService
                 ruleConfigurations = snapshot.EditorModel.RuleLists.Sum(r => r.RuleConfigurations.Count),
                 udfDefinitions = snapshot.EditorModel.UdfDefinitions.Count,
                 selectionListDefinitions = snapshot.EditorModel.SelectionListDefinitions.Count,
+                pageDesigns = snapshot.EditorModel.PageDesigns.Count,
+                pageDesignFields = snapshot.EditorModel.PageDesigns.Sum(p => p.Fields.Count),
                 runtimeImpacts = snapshot.EditorModel.RuntimeImpacts.Count
             },
             objectGraph = includeAll || sections.Contains("objectGraph") ? snapshot.EditorModel.ObjectGraph : null,
             ruleLists = includeAll || sections.Contains("ruleLists") ? snapshot.EditorModel.RuleLists : null,
             udfDefinitions = includeAll || sections.Contains("udfs") || sections.Contains("udfDefinitions") ? snapshot.EditorModel.UdfDefinitions : null,
             selectionListDefinitions = includeAll || sections.Contains("selectionLists") || sections.Contains("tables") ? snapshot.EditorModel.SelectionListDefinitions : null,
+            pageDesigns = includeAll || sections.Contains("pageDesigns") || sections.Contains("pages") || sections.Contains("fields") ? snapshot.EditorModel.PageDesigns : null,
             runtimeImpacts = includeAll || sections.Contains("runtimeImpacts") || sections.Contains("runtime") ? snapshot.EditorModel.RuntimeImpacts : null,
             diagnostics = snapshot.EditorModel.Diagnostics,
             notProven = snapshot.EditorModel.NotProven
@@ -1139,6 +1142,9 @@ internal sealed class WorkbenchApiService
         if (parts.Length == 3 && parts[1].Equals("udfs", StringComparison.OrdinalIgnoreCase) && parts[2].Equals("inferred", StringComparison.OrdinalIgnoreCase))
             return Ok(request, "AcWorkbench.FwdUdfsInferred", BuildFwdUdfsInferred(snapshot, request));
 
+        if (parts.Length == 2 && parts[1].Equals("page-designs", StringComparison.OrdinalIgnoreCase))
+            return Ok(request, "AcWorkbench.PageDesigns", BuildPageDesigns(snapshot, request));
+
         if (parts.Length == 2 && parts[1].Equals("page-variants", StringComparison.OrdinalIgnoreCase))
             return Ok(request, "AcWorkbench.FwdPageVariants", BuildFwdPageVariants(snapshot, request));
 
@@ -1190,6 +1196,7 @@ internal sealed class WorkbenchApiService
                 || section.Equals("tables", StringComparison.OrdinalIgnoreCase)
                 || section.Equals("selection-lists", StringComparison.OrdinalIgnoreCase)
                 || section.Equals("udfs", StringComparison.OrdinalIgnoreCase)
+                || section.Equals("page-designs", StringComparison.OrdinalIgnoreCase)
                 || section.Equals("page-variants", StringComparison.OrdinalIgnoreCase)
                 || section.Equals("fields", StringComparison.OrdinalIgnoreCase)
                 || section.Equals("runtime-impact", StringComparison.OrdinalIgnoreCase)
@@ -1330,7 +1337,7 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            caveat = "UDF definitions include resource-interface, private-tree, and caller-binding evidence when available. Candidate fields remain diagnostic-marked when native resource payloads are opaque.",
+            caveat = "UDF definitions expose named field-list interfaces, caller bindings, status results, and an internal Rule List projection. internalRuleTree.parseState distinguishes parsed, partially parsed, opaque, and unavailable native payloads.",
             diagnostics = snapshot.EditorModel.Diagnostics.Where(d => RuleCorrelation.Contains(d, "Udf")).ToList()
         };
     }
@@ -2022,6 +2029,39 @@ internal sealed class WorkbenchApiService
 
 
 
+    private object BuildPageDesigns(WorkbenchSnapshot snapshot, HttpListenerRequest request)
+    {
+        string? page = Get(request, "page");
+        string? q = Get(request, "q");
+
+        var items = snapshot.EditorModel.PageDesigns
+            .Where(p => string.IsNullOrWhiteSpace(page) || RuleCorrelation.Eq(p.Page, page))
+            .Where(p => string.IsNullOrWhiteSpace(q)
+                || RuleCorrelation.Contains(p.Page, q)
+                || p.Variants.Any(v => RuleCorrelation.Contains(v.Name, q) || RuleCorrelation.Contains(v.FormId, q))
+                || p.Fields.Any(f => RuleCorrelation.Contains(f.Name, q) || RuleCorrelation.Contains(f.FieldType, q) || RuleCorrelation.Contains(f.Geometry, q)))
+            .OrderBy(p => p.Page, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new
+        {
+            page,
+            count = items.Count,
+            fieldCount = items.Sum(i => i.Fields.Count),
+            variantCount = items.Sum(i => i.Variants.Count),
+            items,
+            evidence = new[]
+            {
+                "Fwd.Pages",
+                "Fwd.PageVariants",
+                "Fwd.Fields",
+                "RuleFieldResolution",
+                "FipInspectionRoute"
+            },
+            caveat = "Page designs are static FormWorks configuration packets. FIP dropout and OMR details are linked through /api/v1/fwd/fip and are not runtime execution proof."
+        };
+    }
+
     private object BuildFwdPageVariants(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? page = Get(request, "page");
@@ -2589,6 +2629,7 @@ internal sealed class WorkbenchApiService
                 int byFunction = rulesByFunction.TryGetValue(x.name, out List<AcRuleSummary>? rules) ? rules.Count : 0;
                 List<AcRuleSummary> matchedRules = rulesByFunction.TryGetValue(x.name, out rules) ? rules : new List<AcRuleSummary>();
                 ResourceDetail? rawDetails = FindResourceDetail(snapshot.Fwd, x.type, x.name) ?? FindResourceDetailByName(snapshot.Fwd, x.name);
+                EditorUdfDefinitionModel? canonicalDefinition = snapshot.EditorModel.UdfDefinitions.FirstOrDefault(u => RuleCorrelation.Eq(u.Name, x.name));
                 List<AcTreeNode> internalNodes = FindParsedUdfNodes(snapshot, x.name);
                 var definitionParameterNames = ExtractUdfInterfaceParameterNames(rawDetails);
                 var callerParameterNames = matchedRules
@@ -2614,12 +2655,12 @@ internal sealed class WorkbenchApiService
                     .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                     .ToList();
                 bool definitionParsed = parameterNames.Count > 0 || rawDetails?.FullAttributes.Count > 0 || rawDetails?.PublicAttributes.Count > 0;
-                bool bodyParsed = internalNodes.Count > 0;
+                bool bodyParsed = internalNodes.Count > 0 || canonicalDefinition?.InternalRuleTree.Parsed == true;
                 var diagnostics = new List<string>();
                 if (!definitionParsed)
                     diagnostics.Add("UdfDefinitionNotParsed");
                 if (!bodyParsed)
-                    diagnostics.Add("UdfBodyNotParsed");
+                    diagnostics.Add(canonicalDefinition?.InternalRuleTree.ParseState == "Opaque" ? "UdfBodyOpaque" : "UdfBodyUnavailable");
                 if (rawDetails == null)
                     diagnostics.Add("ResourceDetailsUnavailable");
                 if (rawDetails?.PrivateTree == null)
@@ -2636,6 +2677,7 @@ internal sealed class WorkbenchApiService
                     confidence = bodyParsed || rawDetails?.PrivateTree != null ? "High" : UdfCandidateConfidence(x.type, rawDetails),
                     definitionParsed,
                     bodyParsed,
+                    bodyParseState = canonicalDefinition?.InternalRuleTree.ParseState ?? (internalNodes.Count > 0 ? "Parsed" : rawDetails?.PrivateTree != null ? "Opaque" : "Unavailable"),
                     hasResourceDetails = rawDetails != null,
                     hasPrivateTree = rawDetails?.PrivateTree != null,
                     usedByRuleCount = Math.Max(byTarget, byFunction),
@@ -2643,8 +2685,20 @@ internal sealed class WorkbenchApiService
                     callerParameterSlots = callerParameterNames,
                     ruleNames,
                     scopeIds,
-                    internalRuleCount = internalNodes.Count,
-                    internalRulePreview = internalNodes
+                    internalRuleCount = canonicalDefinition?.InternalRuleTree.InternalRuleList.Rules.Count ?? internalNodes.Count,
+                    internalRulePreview = canonicalDefinition?.InternalRuleTree.InternalRuleList.Rules
+                        .Take(100)
+                        .Select(n => new
+                        {
+                            nodeId = n.NodeId,
+                            ruleName = n.Name,
+                            functionName = n.FunctionName,
+                            displayPath = n.Path,
+                            source = n.Source,
+                            confidence = n.Confidence
+                        })
+                        .Cast<object>()
+                        .ToList() ?? internalNodes
                         .Take(100)
                         .Select(n => new
                         {
@@ -2652,8 +2706,11 @@ internal sealed class WorkbenchApiService
                             nodeId = RuleCorrelation.NodeId(n),
                             ruleName = n.RuleName,
                             functionName = n.FunctionName,
-                            displayPath = n.DisplayPath
+                            displayPath = n.DisplayPath,
+                            source = "AcTreeReport.Nodes",
+                            confidence = "High"
                         })
+                        .Cast<object>()
                         .ToList(),
                     diagnostics,
                     rawResourceDetails = rawDetails == null ? null : new
@@ -2699,6 +2756,7 @@ internal sealed class WorkbenchApiService
             .Select(h => FindResourceDetail(snapshot.Fwd, h.type, h.name))
             .FirstOrDefault(d => d != null) ?? FindResourceDetailByName(snapshot.Fwd, name);
 
+        EditorUdfDefinitionModel? canonicalDefinition = snapshot.EditorModel.UdfDefinitions.FirstOrDefault(u => RuleCorrelation.Eq(u.Name, name));
         List<AcTreeNode> internalNodes = FindParsedUdfNodes(snapshot, name);
 
         var directCallers = snapshot.Rules.Rules
@@ -2774,6 +2832,7 @@ internal sealed class WorkbenchApiService
             ?? internalNodes.Select(n => n.FunctionName).FirstOrDefault(n => RuleCorrelation.Eq(n, name));
         if (!string.IsNullOrWhiteSpace(canonicalName))
             name = canonicalName!;
+        canonicalDefinition = snapshot.EditorModel.UdfDefinitions.FirstOrDefault(u => RuleCorrelation.Eq(u.Name, name)) ?? canonicalDefinition;
 
         var definitionParameterNames = ExtractUdfInterfaceParameterNames(primaryDetails);
         var callerParameterNames = directCallers
@@ -2792,6 +2851,8 @@ internal sealed class WorkbenchApiService
                 .Where(x => RuleCorrelation.Eq(x.RuleGuid, r.ruleGuid) || (x.RuleIndex == r.ruleIndex && RuleCorrelation.ScopeId(x.ScopePath, x.ScopeType, x.ScopeName) == r.scopeId))
                 .SelectMany(x => x.ActionNames))
             .Concat(internalNodes.SelectMany(n => n.ActionNames))
+            .Concat(canonicalDefinition?.StatusResults ?? Enumerable.Empty<string>())
+            .Concat(canonicalDefinition?.InternalRuleTree.InternalRuleList.StatusResults ?? Enumerable.Empty<string>())
             .Where(a => !string.IsNullOrWhiteSpace(a))
             .Select(a => a.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -2799,7 +2860,40 @@ internal sealed class WorkbenchApiService
             .ToList();
 
         bool definitionParsed = parameterNames.Count > 0 || primaryDetails?.FullAttributes.Count > 0 || primaryDetails?.PublicAttributes.Count > 0;
-        bool bodyParsed = internalNodes.Count > 0;
+        bool bodyParsed = internalNodes.Count > 0 || canonicalDefinition?.InternalRuleTree.Parsed == true;
+        string bodyParseState = canonicalDefinition?.InternalRuleTree.ParseState ?? (internalNodes.Count > 0 ? "Parsed" : primaryDetails?.PrivateTree != null ? "Opaque" : "Unavailable");
+        List<object> ruleBody = canonicalDefinition?.InternalRuleTree.InternalRuleList.Rules
+            .Take(250)
+            .Select(n => new
+            {
+                nodeId = n.NodeId,
+                ruleName = n.Name,
+                functionName = n.FunctionName,
+                actionNames = n.StatusResults,
+                displayPath = n.Path,
+                parameters = n.Parameters,
+                source = n.Source,
+                confidence = n.Confidence,
+                textPreview = n.TextPreview
+            })
+            .Cast<object>()
+            .ToList() ?? internalNodes
+            .Take(250)
+            .Select(n => new
+            {
+                scopeId = RuleCorrelation.ScopeId(n.ScopePath, n.ScopeType, n.ScopeName),
+                nodeId = RuleCorrelation.NodeId(n),
+                ruleName = n.RuleName,
+                functionName = n.FunctionName,
+                actionNames = n.ActionNames,
+                displayPath = n.DisplayPath,
+                parameters = n.Parameters,
+                source = "AcTreeReport.Nodes",
+                confidence = "High",
+                textPreview = n.DisplayPath
+            })
+            .Cast<object>()
+            .ToList();
 
         return new
         {
@@ -2814,6 +2908,7 @@ internal sealed class WorkbenchApiService
             confidence = bodyParsed || primaryDetails?.PrivateTree != null ? "High" : canonicalHits.Any() ? UdfCandidateConfidence(canonicalHits.First().type, primaryDetails) : "Low",
             definitionParsed,
             bodyParsed,
+            bodyParseState,
             hasResourceDetails = primaryDetails != null,
             hasPrivateTree = primaryDetails?.PrivateTree != null,
             fieldListCount = parameterNames.Count,
@@ -2829,23 +2924,12 @@ internal sealed class WorkbenchApiService
                     cardinality = "Unknown"
                 }).ToList(),
                 statusResults,
-                ruleBody = internalNodes
-                    .Take(250)
-                    .Select(n => new
-                    {
-                        scopeId = RuleCorrelation.ScopeId(n.ScopePath, n.ScopeType, n.ScopeName),
-                        nodeId = RuleCorrelation.NodeId(n),
-                        ruleName = n.RuleName,
-                        functionName = n.FunctionName,
-                        actionNames = n.ActionNames,
-                        displayPath = n.DisplayPath,
-                        parameters = n.Parameters
-                    })
-                    .ToList(),
+                ruleBody,
+                internalRuleList = canonicalDefinition?.InternalRuleTree.InternalRuleList,
                 notes = new[]
                 {
                     "Field lists come from the UDF interface when available; caller slots are only used as a fallback.",
-                    bodyParsed ? "Internal UDF rule body was parsed from the Function/UDF private resource payload exposed by FormWorks." : "Internal UDF rule body was not exposed as parseable bytes by the native FormWorks API."
+                    bodyParseState == "Parsed" ? "Internal UDF rule body was parsed from decoded UDF rule nodes." : bodyParseState == "PartiallyParsed" ? "Internal UDF rule body was promoted from private-tree rule-body evidence." : bodyParseState == "Opaque" ? "Native private-tree payload was present but did not expose rule-body signals." : "Internal UDF rule body was not exposed by the available native FormWorks API."
                 }
             },
             usage = new
@@ -2867,7 +2951,7 @@ internal sealed class WorkbenchApiService
                 warnings = new List<string>
                 {
                     definitionParsed ? string.Empty : "UdfDefinitionNotParsed",
-                    bodyParsed ? string.Empty : "UdfBodyNotParsed",
+                    bodyParsed ? string.Empty : bodyParseState == "Opaque" ? "UdfBodyOpaque" : "UdfBodyUnavailable",
                     primaryDetails == null ? "ResourceDetailsUnavailable" : string.Empty,
                     primaryDetails?.PrivateTree == null ? "ResourcePrivateTreeUnavailable" : string.Empty,
                     canonicalHits.Any() ? string.Empty : "NonCanonicalRuleUsageOnly",
@@ -2884,8 +2968,8 @@ internal sealed class WorkbenchApiService
                 self = "/api/v1/fwd/udfs/" + UrlEncode(name)
             },
             caveat = bodyParsed
-                ? "This endpoint includes parsed private-rule-body evidence when the native FormWorks resource payload exposes rule bytes."
-                : "This endpoint includes metadata, private tree previews, and caller-side usage. Some native Function/UDF resources may not expose parseable rule bytes through the available API."
+                ? "This endpoint includes an internal UDF Rule List projection from decoded UDF nodes or promoted private-tree rule-body evidence."
+                : "This endpoint includes metadata, private tree previews, and caller-side usage. bodyParseState explains whether native body evidence is opaque or unavailable."
         };
     }
 
@@ -3084,6 +3168,7 @@ internal sealed class WorkbenchApiService
         string? scopeType = Get(request, "scopeType");
         string? scopeName = Get(request, "scopeName");
         string? q = Get(request, "q");
+        var pageDesignsByName = snapshot.EditorModel.PageDesigns.ToDictionary(p => p.Page, StringComparer.OrdinalIgnoreCase);
 
         var items = snapshot.Fwd.Fields
             .Where(f => string.IsNullOrWhiteSpace(scopeType) || RuleCorrelation.Eq(f.ScopeType, scopeType))
@@ -3102,7 +3187,10 @@ internal sealed class WorkbenchApiService
                         name = x.Name,
                         type = x.Type,
                         geometry = x.Geometry,
-                        subfieldCount = x.SubfieldCount
+                        subfieldCount = x.SubfieldCount,
+                        design = RuleCorrelation.Eq(f.ScopeType, "Page") && pageDesignsByName.TryGetValue(f.ScopeName, out EditorPageDesignModel? pageDesign)
+                            ? pageDesign.Fields.FirstOrDefault(d => RuleCorrelation.Eq(d.Name, x.Name))
+                            : null
                     })
                     .ToList()
             })

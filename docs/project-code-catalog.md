@@ -144,13 +144,14 @@ API v1 is the stable product contract. It wraps extraction output in consistent 
 | `/fwd/functions`, `/fwd/functions/{name}` | AC function catalog with curated semantics, configured status results, observed parameters, relationships, and rule usage. |
 | `/fwd/tables`, `/fwd/tables/inferred` | Table/SelectionList resources and relationship-derived table candidates. |
 | `/fwd/selection-lists` | Canonical SelectionList/table definitions with resource-evidence match fields, plug fields, parsed option roles, usage links, and usage-derived fallback fields. |
-| `/fwd/udfs`, `/fwd/udfs/canonical`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates, canonical UDF definitions, resource evidence, private body candidate nodes, and caller-side field-list bindings. |
+| `/fwd/udfs`, `/fwd/udfs/canonical`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates, canonical UDF definitions, promoted internal Rule List projections, resource evidence, and caller-side field-list bindings. |
+| `/fwd/page-designs` | Canonical page/variant/field design packets with FormID inference, parsed geometry, field role flags, rule references, and FIP inspection links. |
 | `/fwd/runtime-impact` | Static runtime/operator-impact projection with behavior flags, configured statuses, parameters, relationship targets, and SelectionList options where applicable. |
 | `/fwd/fip` | FIP page variant inspection. |
 | `/diagnostics` | Global snapshot diagnostics. |
 | `/search` | FWD-aware global search. |
 
-The routes now expose the first canonical Editor-model layer for Rule Lists, selected Rules, UDFs, SelectionLists, object graph, and runtime impact. Remaining gaps are primarily deeper typed parsers for opaque native private payloads, complete function-specific schemas, and page/field design context.
+The routes now expose the canonical Editor-model layer for Rule Lists, selected Rules, UDFs, SelectionLists, page designs, object graph, and runtime impact. Remaining semantic gaps are primarily complete function-specific schemas and deeper typed process/resource projections where native payload shapes still need proof.
 
 ### `AcRuleWorkbench.Core`
 
@@ -195,7 +196,7 @@ Core owns extraction, report DTOs, rule parsing, relationship derivation, viewer
 - resource dependency edges
 - warnings
 
-Current field metadata includes name, type, geometry string, and subfield count. It does not yet provide a full Editor-grade page/field design model with containers, page image context, variant-level FormID semantics, field role metadata, or field-level AC/DV linkage.
+Current field metadata includes name, type, geometry string, and subfield count. The API now promotes this into canonical page-design packets with page containers, variant/FormID identity when inferable, parsed rectangles, field role flags, related AC rule links, and FIP inspection links for dropout/OMR evidence.
 
 #### AC Flat Rule Model
 
@@ -598,10 +599,10 @@ Key scripts:
 | `WorkbenchApiServer.cs` | Server, static assets, legacy routes, debug routes, refresh, and harness in one class. | Keep semantic work out of this file; eventually split hosting/static/debug concerns. |
 | Viewer JS | Large single-file desktop app. | Keep root/core sync; split only if packaging can preserve generated viewer simplicity. |
 | Function catalog | Seeded high-value catalog with observed-function additions and contract tests. | Continue expanding into a full AC function schema catalog. |
-| UDF model | Currently candidate/usage-oriented. | Add canonical UDF definitions with named field-list parameters, status results, internal rule tree, and caller bindings. |
+| UDF model | Canonical definitions now include named field-list parameters, status results, caller bindings, and an internal Rule List projection from decoded UDF nodes or promoted private-tree body evidence. | Replace remaining opaque-payload diagnostics only when new native payload shapes expose typed rule bytes. |
 | Table model | Currently resource/usage-derived. | Add canonical SelectionList/table definitions, schema, match fields, plug fields, options, persistence, rerun behavior. |
 | Status-result actions | Structural edges exist, labels may be resolved, but action semantics are not yet fully first-class. | Add explicit status result -> action model to rule packets/API/viewer. |
-| Field resolution | Static token matching against field catalog. | Add field scope, field container, geometry, multiline, multiple-instance, OMR, and page-variant context. |
+| Field resolution | Static token matching now links to canonical page-design field packets with container, geometry, role flags, variants, and related AC rule links. | Continue adding typed native field attributes as more FormWorks field config shapes are proven. |
 | Runtime UX | Documented as downstream impact, not modeled deeply. | Add runtime impact metadata without pretending to execute AC. |
 
 ## Editor-Parity Implication
