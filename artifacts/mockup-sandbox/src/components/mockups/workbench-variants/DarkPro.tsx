@@ -1,365 +1,469 @@
 import React, { useState } from 'react';
-import { Search, ChevronRight, Settings, HelpCircle, Bell, Box, Terminal, Activity, Menu, Maximize2, Moon, ArrowRight, Code, Database, FileText } from 'lucide-react';
+import { Search, ChevronRight, HelpCircle, Moon, ArrowRight, Code, Database, FileText, Layers, GitBranch, Hash, AlertTriangle, CheckCircle, Copy, X } from 'lucide-react';
+
+const C = {
+  bg:        '#0d1117',
+  panel:     '#161b22',
+  surface:   '#1c2230',
+  surface2:  '#21283a',
+  accent:    '#2dd4bf',
+  accentDim: 'rgba(45,212,191,0.10)',
+  accentGlow:'rgba(45,212,191,0.25)',
+  text:      '#e2e8f0',
+  text2:     '#94a3b8',
+  text3:     '#4b5563',
+  border:    '#2a3348',
+  border2:   '#1e2636',
+  warn:      '#f59e0b',
+  good:      '#34d399',
+  bad:       '#f87171',
+  info:      '#60a5fa',
+  tagPage:   { bg: 'rgba(96,165,250,0.12)', text: '#60a5fa' },
+  tagUdf:    { bg: 'rgba(167,139,250,0.12)', text: '#a78bfa' },
+  tagDoc:    { bg: 'rgba(52,211,153,0.12)', text: '#34d399' },
+};
+
+const MONO = "'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace";
+const SANS = "Inter, ui-sans-serif, system-ui, sans-serif";
+
+const scopes = [
+  { name: 'PAGE_INVOICE_HEADER', type: 'page', rules: 4 },
+  { name: 'PAGE_LINE_ITEMS',     type: 'page', rules: 7 },
+  { name: 'PAGE_FOOTER',         type: 'page', rules: 2 },
+  { name: 'DOC_CAPTURE_MAIN',    type: 'doc',  rules: 11 },
+  { name: 'UDF_VENDOR_LOOKUP',   type: 'udf',  rules: 3 },
+  { name: 'UDF_TAX_CALC',        type: 'udf',  rules: 2 },
+];
+
+const rules = [
+  { name: 'ExtractInvoiceDate', fn: 'MatchField',   field: 'invoice_date',   status: 'active', params: 3 },
+  { name: 'ExtractVendorName',  fn: 'RegexCapture', field: 'vendor_name',    status: 'active', params: 2 },
+  { name: 'ValidateTotal',      fn: 'NumericCheck', field: 'total_amount',   status: 'warn',   params: 4 },
+  { name: 'CaptureLineRef',     fn: 'MatchField',   field: 'line_reference', status: 'active', params: 2 },
+];
+
+function TypeChip({ type }: { type: string }) {
+  const style = type === 'page' ? C.tagPage : type === 'udf' ? C.tagUdf : C.tagDoc;
+  return (
+    <span style={{
+      fontFamily: MONO, fontSize: 9, fontWeight: 700,
+      letterSpacing: '0.08em', textTransform: 'uppercase',
+      padding: '1px 5px', borderRadius: 3,
+      backgroundColor: style.bg, color: style.text,
+    }}>
+      {type}
+    </span>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const color = status === 'active' ? C.good : status === 'warn' ? C.warn : C.bad;
+  return (
+    <span style={{
+      display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+      backgroundColor: color, boxShadow: `0 0 6px ${color}`, flexShrink: 0,
+    }} />
+  );
+}
 
 export function DarkPro() {
-  const [activeScope] = useState("PAGE_INVOICE_HEADER");
-  const [activeRule] = useState("ExtractInvoiceDate");
-  const [activeTab] = useState("Details");
+  const [activeScope, setActiveScope] = useState('PAGE_INVOICE_HEADER');
+  const [activeRule,  setActiveRule]  = useState('ExtractInvoiceDate');
+  const [activeTab,   setActiveTab]   = useState('Rules');
+  const [inspTab,     setInspTab]     = useState('Details');
 
-  const scopes = [
-    { name: "PAGE_INVOICE_HEADER", type: "page" },
-    { name: "PAGE_LINE_ITEMS", type: "page" },
-    { name: "PAGE_FOOTER", type: "page" },
-    { name: "DOC_CAPTURE_MAIN", type: "doc" },
-    { name: "UDF_VENDOR_LOOKUP", type: "udf" },
-    { name: "UDF_TAX_CALC", type: "udf" },
-  ];
-
-  const rules = [
-    { name: "ExtractInvoiceDate", type: "rule", status: "active" },
-    { name: "ExtractVendorName", type: "rule", status: "active" },
-    { name: "ValidateTotal", type: "rule", status: "warning" },
-    { name: "CaptureLineRef", type: "rule", status: "active" },
-  ];
-
-  const colors = {
-    bg: '#0f1117',
-    panel: '#161b22',
-    surface: '#1f2937',
-    accent: '#14b8a6',
-    accentDim: 'rgba(20, 184, 166, 0.1)',
-    text: '#e2e8f0',
-    textMuted: '#94a3b8',
-    border: '#2d3748',
-    warning: '#eab308'
-  };
+  const selectedRule = rules.find(r => r.name === activeRule) ?? rules[0];
 
   return (
-    <div 
-      className="w-screen h-screen flex flex-col overflow-hidden selection:bg-teal-500/30"
-      style={{ 
-        backgroundColor: colors.bg, 
-        color: colors.text,
-        fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" 
-      }}
-    >
-      <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-        
-        ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: ${colors.bg};
-        }
-        ::-webkit-scrollbar-thumb {
-          background: ${colors.border};
-          border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: ${colors.textMuted};
-        }
-      `}} />
+    <div style={{
+      width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', backgroundColor: C.bg, color: C.text,
+      fontFamily: SANS, fontSize: 13,
+    }}>
+      {/* font + scrollbar */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        ::-webkit-scrollbar{width:6px;height:6px}
+        ::-webkit-scrollbar-track{background:transparent}
+        ::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px}
+        ::-webkit-scrollbar-thumb:hover{background:${C.text3}}
+        button{background:none;border:none;cursor:pointer;color:inherit}
+        input{background:none;border:none;outline:none;color:inherit;width:100%}
+      `}</style>
 
-      {/* Topbar */}
-      <header 
-        className="h-[72px] shrink-0 flex items-center justify-between px-6 border-b z-10"
-        style={{ 
-          backgroundColor: colors.panel, 
-          borderColor: colors.border,
-          boxShadow: `0 1px 15px rgba(20, 184, 166, 0.05)`
-        }}
-      >
-        <div className="flex items-center gap-4 w-[280px]">
-          <div 
-            className="w-8 h-8 rounded-md flex items-center justify-center border"
-            style={{ backgroundColor: colors.accentDim, borderColor: `${colors.accent}40`, color: colors.accent }}
-          >
-            <Terminal size={18} />
+      {/* ── TOP BAR ─────────────────────────────── */}
+      <header style={{
+        height: 56, flexShrink: 0, display: 'flex', alignItems: 'center',
+        padding: '0 20px', borderBottom: `1px solid ${C.border}`,
+        backgroundColor: C.panel, gap: 16, zIndex: 10,
+      }}>
+        {/* Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: 260, flexShrink: 0 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: C.accentDim, border: `1px solid ${C.accentGlow}`,
+          }}>
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 700, color: C.accent }}>AC</span>
           </div>
           <div>
-            <h1 className="font-bold text-sm tracking-tight">AC Rule Workbench</h1>
-            <div className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: colors.textMuted }}>
-              v3.7.0-beta
+            <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: '-0.01em' }}>AC Rule Workbench</div>
+            <div style={{ fontFamily: MONO, fontSize: 9, color: C.text2, letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 1 }}>
+              fwd.cfd · read-only
             </div>
           </div>
         </div>
 
-        <div className="flex-1 max-w-2xl px-8">
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={16} style={{ color: colors.textMuted }} />
-            </div>
-            <input 
-              type="text" 
-              placeholder="Search rules, scopes, or UDFs... (Ctrl+K)" 
-              className="w-full h-10 pl-10 pr-4 rounded-md outline-none transition-all text-sm"
-              style={{ 
-                backgroundColor: colors.bg, 
-                border: `1px solid ${colors.border}`,
-                color: colors.text
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = colors.accent;
-                e.target.style.boxShadow = `0 0 0 1px ${colors.accent}`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = colors.border;
-                e.target.style.boxShadow = 'none';
-              }}
+        {/* Search */}
+        <div style={{ flex: 1, maxWidth: 560 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            backgroundColor: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 6, padding: '0 12px', height: 34,
+          }}>
+            <Search size={13} color={C.text3} />
+            <input
+              type="text"
+              placeholder="Search rules, scopes, UDFs, fields…"
+              style={{ flex: 1, fontFamily: SANS, fontSize: 13, color: C.text }}
             />
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-              <span className="text-[10px] px-1.5 py-0.5 rounded border" style={{ borderColor: colors.border, color: colors.textMuted }}>⌘K</span>
-            </div>
+            <span style={{
+              fontFamily: MONO, fontSize: 10, color: C.text3,
+              border: `1px solid ${C.border}`, borderRadius: 3, padding: '1px 5px',
+            }}>/</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 w-[280px] justify-end">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs" style={{ borderColor: colors.border, backgroundColor: colors.bg }}>
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.accent, boxShadow: `0 0 8px ${colors.accent}` }}></div>
-            <span style={{ color: colors.textMuted }}>Engine Ready</span>
+        {/* Right actions */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            border: `1px solid ${C.border}`, borderRadius: 20,
+            padding: '4px 10px', fontSize: 11,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: C.accent, boxShadow: `0 0 8px ${C.accent}`, display: 'inline-block' }} />
+            <span style={{ color: C.text2, fontFamily: MONO }}>Ready</span>
           </div>
-          
-          <div className="h-6 w-px" style={{ backgroundColor: colors.border }}></div>
-          
-          <button className="p-2 rounded hover:bg-opacity-80 transition-colors" style={{ color: colors.textMuted }}>
-            <Bell size={18} />
-          </button>
-          <button className="p-2 rounded hover:bg-opacity-80 transition-colors" style={{ color: colors.textMuted }}>
-            <HelpCircle size={18} />
-          </button>
-          <button className="p-2 rounded hover:bg-opacity-80 transition-colors" style={{ color: colors.textMuted }}>
-            <Settings size={18} />
-          </button>
+          <button style={{ padding: 7, borderRadius: 6, color: C.text2 }}><Moon size={15} /></button>
+          <button style={{ padding: 7, borderRadius: 6, color: C.text2 }}><HelpCircle size={15} /></button>
         </div>
       </header>
 
-      {/* Main Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        
-        {/* Left Nav */}
-        <aside 
-          className="w-[312px] shrink-0 border-r flex flex-col"
-          style={{ backgroundColor: colors.panel, borderColor: colors.border }}
-        >
-          <div className="p-4 border-b" style={{ borderColor: colors.border }}>
-            <div className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: colors.textMuted }}>
+      {/* ── BODY ────────────────────────────────── */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+        {/* ── LEFT NAV ─── */}
+        <aside style={{
+          width: 272, flexShrink: 0,
+          backgroundColor: C.panel, borderRight: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}>
+          {/* Global nav */}
+          <div style={{ padding: '12px 12px 10px', borderBottom: `1px solid ${C.border2}` }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.text3, marginBottom: 6, paddingLeft: 4 }}>
               Global
             </div>
-            <div className="space-y-1">
-              <button className="w-full flex items-center gap-3 px-2 py-2 rounded text-sm hover:bg-opacity-50 transition-colors" style={{ backgroundColor: colors.surface }}>
-                <Database size={16} style={{ color: colors.textMuted }} />
-                <span>All Rule Scopes</span>
-              </button>
-              <button className="w-full flex items-center gap-3 px-2 py-2 rounded text-sm hover:bg-opacity-50 transition-colors">
-                <Box size={16} style={{ color: colors.textMuted }} />
-                <span>Global UDFs</span>
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="text-[10px] font-bold uppercase tracking-wider mb-3 flex items-center justify-between" style={{ color: colors.textMuted }}>
-              <span>Scopes (6)</span>
-              <Menu size={12} />
-            </div>
-            
-            <div className="space-y-1 border-l ml-2" style={{ borderColor: colors.border }}>
-              {scopes.map(scope => (
-                <button 
-                  key={scope.name}
-                  className="w-full flex items-center gap-2 pl-3 pr-2 py-1.5 text-xs text-left relative group transition-colors"
-                  style={{ 
-                    color: scope.name === activeScope ? colors.accent : colors.textMuted,
-                  }}
-                >
-                  <div 
-                    className="absolute left-[-1px] top-0 bottom-0 w-[2px] transition-all"
-                    style={{ 
-                      backgroundColor: scope.name === activeScope ? colors.accent : 'transparent',
-                      opacity: scope.name === activeScope ? 1 : 0 
-                    }}
-                  />
-                  {scope.type === 'page' ? <FileText size={14} /> : scope.type === 'udf' ? <Code size={14} /> : <Box size={14} />}
-                  <span className="truncate">{scope.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 flex flex-col min-w-0" style={{ backgroundColor: colors.bg }}>
-          {/* Breadcrumbs */}
-          <div className="h-12 border-b flex items-center px-6 text-sm" style={{ borderColor: colors.border }}>
-            <span style={{ color: colors.textMuted }}>Scopes</span>
-            <ChevronRight size={14} className="mx-2" style={{ color: colors.textMuted }} />
-            <span style={{ color: colors.accent }}>{activeScope}</span>
-          </div>
-          
-          {/* Content area */}
-          <div className="flex-1 p-6 overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-bold mb-1">{activeScope}</h2>
-                <p className="text-sm" style={{ color: colors.textMuted }}>4 active rules configured for this scope</p>
-              </div>
-              <div className="flex gap-2">
-                <button className="px-3 py-1.5 rounded text-xs border hover:bg-opacity-80 transition-colors" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
-                  Export JSON
-                </button>
-              </div>
-            </div>
-
-            <div className="border rounded-md overflow-hidden" style={{ borderColor: colors.border, backgroundColor: colors.panel }}>
-              <div className="grid grid-cols-12 gap-4 p-3 border-b text-xs font-bold uppercase tracking-wider" style={{ borderColor: colors.border, color: colors.textMuted, backgroundColor: colors.surface }}>
-                <div className="col-span-5">Rule Name</div>
-                <div className="col-span-3">Type</div>
-                <div className="col-span-3">Status</div>
-                <div className="col-span-1"></div>
-              </div>
-              
-              <div className="divide-y" style={{ borderColor: colors.border }}>
-                {rules.map(rule => (
-                  <div 
-                    key={rule.name}
-                    className="grid grid-cols-12 gap-4 p-3 items-center text-sm cursor-pointer hover:bg-opacity-50 transition-colors"
-                    style={{ 
-                      backgroundColor: rule.name === activeRule ? colors.surface : 'transparent',
-                      borderLeft: rule.name === activeRule ? \`2px solid \${colors.accent}\` : '2px solid transparent'
-                    }}
-                  >
-                    <div className="col-span-5 font-medium flex items-center gap-2" style={{ color: rule.name === activeRule ? colors.text : colors.textMuted }}>
-                      <Activity size={14} />
-                      {rule.name}
-                    </div>
-                    <div className="col-span-3">
-                      <span className="px-2 py-1 rounded text-[10px] uppercase border" style={{ borderColor: colors.border, color: colors.textMuted }}>
-                        Extraction
-                      </span>
-                    </div>
-                    <div className="col-span-3 flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: rule.status === 'active' ? colors.accent : colors.warning }}></div>
-                      <span className="capitalize text-xs" style={{ color: colors.textMuted }}>{rule.status}</span>
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                      <ChevronRight size={16} style={{ color: colors.textMuted }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            {/* Raw JSON View snippet */}
-            <div className="mt-8 border rounded-md" style={{ borderColor: colors.border }}>
-              <div className="p-3 border-b flex items-center gap-2 text-xs" style={{ borderColor: colors.border, backgroundColor: colors.surface, color: colors.textMuted }}>
-                <Code size={14} />
-                <span>Raw Configuration</span>
-              </div>
-              <div className="p-4 text-xs whitespace-pre font-mono overflow-x-auto" style={{ color: colors.textMuted, backgroundColor: '#0a0c10' }}>
-{`{
-  "scope": "PAGE_INVOICE_HEADER",
-  "rules": [
-    {
-      "id": "rule_1",
-      "name": "ExtractInvoiceDate",
-      "type": "extraction",
-      "target": "invoice_date"
-    }
-  ]
-}`}
-              </div>
-            </div>
-          </div>
-        </main>
-
-        {/* Right Inspector */}
-        <aside 
-          className="w-[372px] shrink-0 border-l flex flex-col"
-          style={{ backgroundColor: colors.panel, borderColor: colors.border }}
-        >
-          <div className="h-12 border-b flex items-center justify-between px-4" style={{ borderColor: colors.border }}>
-            <span className="font-bold text-sm">Inspector</span>
-            <Maximize2 size={14} style={{ color: colors.textMuted }} className="cursor-pointer hover:text-white" />
-          </div>
-          
-          <div className="p-4 border-b" style={{ borderColor: colors.border }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-8 h-8 rounded flex items-center justify-center border" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
-                <Activity size={16} style={{ color: colors.accent }} />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm">{activeRule}</h3>
-                <div className="text-[10px] uppercase tracking-wider" style={{ color: colors.textMuted }}>Extraction Rule</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex px-4 border-b text-xs" style={{ borderColor: colors.border }}>
-            {['Details', 'Parameters', 'History'].map(tab => (
-              <button 
-                key={tab}
-                className="py-3 px-4 relative transition-colors"
-                style={{ 
-                  color: activeTab === tab ? colors.accent : colors.textMuted,
-                  fontWeight: activeTab === tab ? 700 : 400
-                }}
-              >
-                {tab}
-                {activeTab === tab && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5" style={{ backgroundColor: colors.accent }} />
-                )}
+            {[
+              { icon: <Layers size={13} />, label: 'All Scopes', count: 6 },
+              { icon: <GitBranch size={13} />, label: 'Global UDFs', count: 5 },
+              { icon: <Database size={13} />, label: 'Tables', count: 3 },
+            ].map(item => (
+              <button key={item.label} style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 8px', borderRadius: 5, fontSize: 12,
+                color: C.text2, textAlign: 'left', marginBottom: 1,
+              }}>
+                <span style={{ color: C.text3 }}>{item.icon}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: C.text3 }}>{item.count}</span>
               </button>
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-6">
-            
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.textMuted }}>Function</div>
-              <div className="p-3 rounded border text-sm font-medium flex items-center justify-between" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
-                <span style={{ color: colors.accent }}>MatchField</span>
-                <ArrowRight size={14} style={{ color: colors.textMuted }} />
+          {/* Scope list */}
+          <div style={{ flex: 1, overflow: 'auto', padding: '10px 12px' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.text3, marginBottom: 8, paddingLeft: 4 }}>
+              Scopes
+            </div>
+            {scopes.map(scope => {
+              const active = scope.name === activeScope;
+              return (
+                <button
+                  key={scope.name}
+                  onClick={() => setActiveScope(scope.name)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 8px', borderRadius: 5, marginBottom: 1,
+                    backgroundColor: active ? C.accentDim : 'transparent',
+                    borderLeft: active ? `2px solid ${C.accent}` : '2px solid transparent',
+                    textAlign: 'left',
+                  }}
+                >
+                  <span style={{ color: active ? C.accent : C.text3 }}>
+                    {scope.type === 'udf' ? <Code size={13} /> : scope.type === 'doc' ? <Hash size={13} /> : <FileText size={13} />}
+                  </span>
+                  <span style={{ flex: 1, fontFamily: MONO, fontSize: 11, color: active ? C.text : C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {scope.name}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <TypeChip type={scope.type} />
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: C.text3 }}>{scope.rules}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* ── MAIN ─── */}
+        <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', backgroundColor: C.bg }}>
+          {/* Scope heading */}
+          <div style={{ padding: '14px 20px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <span style={{ fontSize: 10, color: C.text3 }}>Scopes</span>
+                  <ChevronRight size={12} color={C.text3} />
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: C.accent }}>{activeScope}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <h2 style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: C.text }}>{activeScope}</h2>
+                  <TypeChip type={scopes.find(s=>s.name===activeScope)?.type ?? 'page'} />
+                </div>
+                <div style={{ fontSize: 11, color: C.text2, marginTop: 4 }}>4 rules · 2 UDF refs · last modified 3 days ago</div>
               </div>
+              <button style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+                borderRadius: 5, border: `1px solid ${C.border}`, fontSize: 11, color: C.text2,
+              }}>
+                <Copy size={12} /> Copy JSON
+              </button>
+            </div>
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: 0 }}>
+              {['Rules', 'UDF Refs', 'Tables', 'Raw'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  style={{
+                    padding: '8px 14px', fontSize: 12, fontWeight: activeTab === tab ? 600 : 400,
+                    color: activeTab === tab ? C.accent : C.text2,
+                    borderBottom: `2px solid ${activeTab === tab ? C.accent : 'transparent'}`,
+                    marginBottom: -1,
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Rule list */}
+          <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+            {/* Table header */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: '1fr 140px 100px 80px',
+              padding: '6px 12px', marginBottom: 4,
+              fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+              textTransform: 'uppercase', color: C.text3,
+            }}>
+              <div>Rule</div>
+              <div>Function</div>
+              <div>Field</div>
+              <div>Status</div>
             </div>
 
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.textMuted }}>Target Field</div>
-              <div className="p-3 rounded border text-sm" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <Database size={14} style={{ color: colors.textMuted }} />
-                  <span>invoice_date</span>
-                </div>
-                <div className="text-[10px]" style={{ color: colors.textMuted }}>Type: String / Format: Date</div>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {rules.map(rule => {
+                const active = rule.name === activeRule;
+                return (
+                  <button
+                    key={rule.name}
+                    onClick={() => setActiveRule(rule.name)}
+                    style={{
+                      display: 'grid', gridTemplateColumns: '1fr 140px 100px 80px',
+                      alignItems: 'center', padding: '10px 12px',
+                      borderRadius: 7, textAlign: 'left',
+                      backgroundColor: active ? C.surface : C.surface2 + '60',
+                      border: `1px solid ${active ? C.accentGlow : C.border2}`,
+                      borderLeft: `3px solid ${active ? C.accent : 'transparent'}`,
+                      boxShadow: active ? `0 0 0 1px ${C.accentGlow}` : 'none',
+                      transition: 'all 0.1s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 600, color: active ? C.text : C.text2 }}>
+                        {rule.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: C.text3 }}>{rule.params} params</span>
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: active ? C.accent : C.text2 }}>
+                      {rule.fn}
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: C.text2 }}>
+                      {rule.field}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <StatusDot status={rule.status} />
+                      <span style={{ fontSize: 11, color: C.text2, textTransform: 'capitalize' }}>
+                        {rule.status === 'active' ? 'Active' : 'Warning'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: colors.textMuted }}>Attributes</div>
-              <div className="rounded border overflow-hidden" style={{ borderColor: colors.border }}>
-                <div className="grid grid-cols-3 p-2 border-b text-xs font-bold" style={{ borderColor: colors.border, backgroundColor: colors.surface }}>
-                  <div className="col-span-1" style={{ color: colors.textMuted }}>Key</div>
-                  <div className="col-span-2" style={{ color: colors.textMuted }}>Value</div>
+            {/* Raw config preview */}
+            <div style={{ marginTop: 20, borderRadius: 7, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                backgroundColor: C.surface, borderBottom: `1px solid ${C.border}`,
+                fontSize: 11, color: C.text2,
+              }}>
+                <Code size={12} color={C.text3} />
+                <span>Raw FWD configuration snippet</span>
+                <button style={{ marginLeft: 'auto', color: C.text3 }}><Copy size={11} /></button>
+              </div>
+              <pre style={{
+                padding: '12px 14px', fontFamily: MONO, fontSize: 11,
+                lineHeight: 1.7, color: C.text2, backgroundColor: '#080c12',
+                overflowX: 'auto', margin: 0,
+              }}>{`{
+  "scope": "PAGE_INVOICE_HEADER",
+  "rules": [
+    {
+      "id": "rule_001",
+      "name": "ExtractInvoiceDate",
+      "function": "MatchField",
+      "target": "invoice_date",
+      "attributes": {
+        "regex": "\\d{2}/\\d{2}/\\d{4}",
+        "ignoreCase": true
+      }
+    }
+  ]
+}`}</pre>
+            </div>
+          </div>
+        </main>
+
+        {/* ── INSPECTOR ─── */}
+        <aside style={{
+          width: 340, flexShrink: 0,
+          backgroundColor: C.panel, borderLeft: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}>
+          {/* Inspector header */}
+          <div style={{ padding: '14px 16px 0', borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  backgroundColor: C.accentDim, border: `1px solid ${C.accentGlow}`,
+                }}>
+                  <ArrowRight size={13} color={C.accent} />
                 </div>
-                <div className="grid grid-cols-3 p-2 border-b text-xs items-center" style={{ borderColor: colors.border }}>
-                  <div className="col-span-1 font-mono" style={{ color: colors.accent }}>regex</div>
-                  <div className="col-span-2 font-mono break-all p-1 rounded" style={{ backgroundColor: '#0a0c10', color: colors.textMuted }}>
-                    \d{'{2}'}/\d{'{2}'}/\d{'{4}'}
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 p-2 text-xs items-center" style={{ borderColor: colors.border }}>
-                  <div className="col-span-1 font-mono" style={{ color: colors.accent }}>ignoreCase</div>
-                  <div className="col-span-2 font-mono">
-                    <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: colors.surface }}>true</span>
-                  </div>
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: C.text }}>{selectedRule.name}</div>
+                  <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', color: C.text3, marginTop: 1 }}>Extraction Rule</div>
                 </div>
               </div>
+              <button style={{ color: C.text3 }}><X size={13} /></button>
             </div>
-            
+            <div style={{ display: 'flex', gap: 0 }}>
+              {['Details', 'Params', 'Status Results'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setInspTab(tab)}
+                  style={{
+                    padding: '6px 10px', fontSize: 11, fontWeight: inspTab === tab ? 600 : 400,
+                    color: inspTab === tab ? C.accent : C.text2,
+                    borderBottom: `2px solid ${inspTab === tab ? C.accent : 'transparent'}`,
+                    marginBottom: -1, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: 'auto', padding: 14 }}>
+
+            {/* Function */}
+            <Section label="Function">
+              <Row mono label="name" value={selectedRule.fn} valueColor={C.accent} />
+              <Row mono label="type" value="extraction" />
+            </Section>
+
+            {/* Target field */}
+            <Section label="Target Field">
+              <Row mono label="field" value={selectedRule.field} valueColor={C.info} />
+              <Row mono label="type" value="String" />
+              <Row mono label="format" value="Date (MM/DD/YYYY)" />
+            </Section>
+
+            {/* Attributes */}
+            <Section label="Attributes">
+              <AttrRow attrKey="regex" value={String.raw`\d{2}/\d{2}/\d{4}`} />
+              <AttrRow attrKey="ignoreCase" value="true" />
+              <AttrRow attrKey="required" value="true" />
+            </Section>
+
+            {/* Status indicator */}
+            <Section label="Status">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                {selectedRule.status === 'active'
+                  ? <CheckCircle size={13} color={C.good} />
+                  : <AlertTriangle size={13} color={C.warn} />}
+                <span style={{ fontSize: 11, color: selectedRule.status === 'active' ? C.good : C.warn }}>
+                  {selectedRule.status === 'active' ? 'Active · No issues detected' : 'Warning · Check configuration'}
+                </span>
+              </div>
+            </Section>
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.text3, marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{ borderRadius: 6, border: `1px solid ${C.border2}`, overflow: 'hidden' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value, mono, valueColor }: { label: string; value: string; mono?: boolean; valueColor?: string }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '90px 1fr',
+      padding: '6px 10px', borderBottom: `1px solid ${C.border2}`,
+      alignItems: 'center', backgroundColor: C.surface,
+    }}>
+      <span style={{ fontFamily: MONO, fontSize: 10, color: C.text3 }}>{label}</span>
+      <span style={{ fontFamily: mono ? MONO : SANS, fontSize: 11, color: valueColor ?? C.text2 }}>{value}</span>
+    </div>
+  );
+}
+
+function AttrRow({ attrKey, value }: { attrKey: string; value: string }) {
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '90px 1fr',
+      padding: '6px 10px', borderBottom: `1px solid ${C.border2}`,
+      alignItems: 'center', backgroundColor: C.surface,
+    }}>
+      <span style={{ fontFamily: MONO, fontSize: 10, color: C.accent }}>{attrKey}</span>
+      <span style={{ fontFamily: MONO, fontSize: 11, color: C.text2, wordBreak: 'break-all' }}>{value}</span>
     </div>
   );
 }
