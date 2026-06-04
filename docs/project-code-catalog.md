@@ -136,21 +136,21 @@ API v1 is the stable product contract. It wraps extraction output in consistent 
 | `/rules/{nodeId}/subtree` | Selected rule and descendants. |
 | `/rule-lists`, `/rule-lists/{scopeId}` | Snapshot-wide canonical Rule List and Rule Configuration projections. |
 | `/fwd`, `/fwd/overview` | FWD object overview. |
-| `/fwd/object-graph` | Linked canonical FWD object graph projection. |
+| `/fwd/object-graph` | Linked canonical FWD object graph projection, including bounded resource-private nodes when resource details are available. |
 | `/fwd/documents`, `/pages`, `/page-variants`, `/fields`, `/batches` | Core FWD object lists. |
 | `/fwd/processes`, `/fwd/processes/{process}`, `/fwd/processes/{process}/private` | Process inventory and private STC summaries. |
 | `/fwd/processes/drivers` | Heuristic process-private driver findings. |
 | `/fwd/resources` | Resource buckets/details/private config. |
 | `/fwd/functions`, `/fwd/functions/{name}` | AC function catalog with curated semantics, configured status results, observed parameters, relationships, and rule usage. |
 | `/fwd/tables`, `/fwd/tables/inferred` | Table/SelectionList resources and relationship-derived table candidates. |
-| `/fwd/selection-lists` | Canonical SelectionList/table definitions with usage-derived match/plug fields. |
-| `/fwd/udfs`, `/fwd/udfs/canonical`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates, canonical UDF definitions, and caller-side usage evidence. |
-| `/fwd/runtime-impact` | Static runtime/operator-impact projection. |
+| `/fwd/selection-lists` | Canonical SelectionList/table definitions with resource-evidence match fields, plug fields, parsed option roles, usage links, and usage-derived fallback fields. |
+| `/fwd/udfs`, `/fwd/udfs/canonical`, `/fwd/udfs/{name}`, `/fwd/udfs/inferred` | UDF/function resource candidates, canonical UDF definitions, resource evidence, private body candidate nodes, and caller-side field-list bindings. |
+| `/fwd/runtime-impact` | Static runtime/operator-impact projection with behavior flags, configured statuses, parameters, relationship targets, and SelectionList options where applicable. |
 | `/fwd/fip` | FIP page variant inspection. |
 | `/diagnostics` | Global snapshot diagnostics. |
 | `/search` | FWD-aware global search. |
 
-The routes already expose many Editor-adjacent concepts. The gap is that several concepts are still inferred, compatibility-shaped, or usage-derived instead of canonical Editor objects.
+The routes now expose the first canonical Editor-model layer for Rule Lists, selected Rules, UDFs, SelectionLists, object graph, and runtime impact. Remaining gaps are primarily deeper typed parsers for opaque native private payloads, complete function-specific schemas, and page/field design context.
 
 ### `AcRuleWorkbench.Core`
 

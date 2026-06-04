@@ -167,6 +167,14 @@ public sealed class ApiContractTests
         Assert.AreEqual("ParentRuleStatusResultOwnsSubList", selected["incomingStatusResult"]?["relationship"]?.Value<string>());
         Assert.AreEqual("OK", selected["actionLists"]?[0]?["statusResult"]?["name"]?.Value<string>());
         Assert.AreEqual("node-000415", selected["actionLists"]?[0]?["childRuleNodeIds"]?[0]?.Value<string>());
+        Assert.IsTrue(selected["functionSchema"]?["defined"]?.Value<bool>() ?? false);
+        Assert.IsTrue(((JArray)(selected["sourceHandles"] ?? new JArray())).Any(h => string.Equals((string?)h?["source"], "AcTreeReport.Nodes", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(selected["rejects"] ?? new JArray())).Any(r => string.Equals((string?)r?["message"], "Subscriber id required", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(selected["rejects"] ?? new JArray())).Any(r => string.Equals((string?)r?["code"], "SUBID_REQ", StringComparison.OrdinalIgnoreCase)));
+
+        JObject parent = (JObject)configs.First(c => string.Equals((string?)c?["nodeId"], "node-000413", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(((JArray)(parent["diagnostics"] ?? new JArray())).Any(d => (d.Value<string>() ?? string.Empty).StartsWith("AmbiguousFlatInventoryMatches", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(parent["sourceHandles"] ?? new JArray())).Any(h => string.Equals((string?)h?["source"], "AcRuleReport.Rules", StringComparison.OrdinalIgnoreCase) && string.Equals((string?)h?["confidence"], "Low", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -183,8 +191,15 @@ public sealed class ApiContractTests
         Assert.IsTrue(body.Value<bool>("ok"));
         Assert.AreEqual("AcWorkbench.UdfDefinitions", body.Value<string>("schema"));
         JObject udf = (JObject)((JArray)(body["data"]?["items"] ?? new JArray())).First(i => string.Equals((string?)i?["name"], "CopyIfDestBlank", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(udf["definitionParsed"]?.Value<bool>() ?? false);
+        Assert.IsTrue(udf["bodyParsed"]?.Value<bool>() ?? false);
+        Assert.IsTrue(udf["resourceEvidence"]?["hasPrivateTree"]?.Value<bool>() ?? false);
         Assert.IsTrue(((JArray)(udf["fieldListParameters"] ?? new JArray())).Any(p => string.Equals(p.Value<string>(), "Source", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(((JArray)(udf["callerBindings"] ?? new JArray())).Count >= 1);
+        Assert.IsTrue(((JArray)(udf["fieldListParameterBindings"] ?? new JArray())).Any(p =>
+            string.Equals((string?)p?["parameterName"], "Source", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals((string?)p?["callerValue"], "SubscriberID_OCR", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(udf["internalRuleTree"]?["candidateRuleNodes"] ?? new JArray())).Any(n => string.Equals((string?)n?["role"], "RuleBody", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -202,8 +217,35 @@ public sealed class ApiContractTests
         Assert.AreEqual("AcWorkbench.SelectionListDefinitions", body.Value<string>("schema"));
         JObject table = (JObject)((JArray)(body["data"]?["items"] ?? new JArray())).First(i => string.Equals((string?)i?["name"], "MemberTable", StringComparison.OrdinalIgnoreCase));
         Assert.IsTrue(table["canonical"]?.Value<bool>() ?? false);
+        Assert.IsTrue(table["schemaParsed"]?.Value<bool>() ?? false);
+        Assert.IsTrue(table["optionsParsed"]?.Value<bool>() ?? false);
         Assert.IsTrue(((JArray)(table["matchFields"] ?? new JArray())).Any(f => string.Equals((string?)f?["name"], "MemberId", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(table["plugFields"] ?? new JArray())).Any(f => string.Equals((string?)f?["name"], "MemberName", StringComparison.OrdinalIgnoreCase)));
+        JArray options = (JArray)(table["options"] ?? new JArray());
+        Assert.IsTrue(options.Any(o => string.Equals((string?)o?["role"], "OperatorPrompt", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(options.Any(o => string.Equals((string?)o?["role"], "NoGoodMatch", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(options.Any(o => string.Equals((string?)o?["role"], "EnterBehavior", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(options.Any(o => string.Equals((string?)o?["role"], "PlugOutcome", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(options.Any(o => string.Equals((string?)o?["role"], "RejectOutcome", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(((JArray)(table["usageLinks"] ?? new JArray())).Count >= 1);
+    }
+
+    [TestMethod]
+    public void Dispatch_FwdObjectGraph_Returns_PrivateResourceNodes()
+    {
+        var service = new WorkbenchApiService(new UdfDetailStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/fwd/object-graph?kind=ResourcePrivateNode");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/fwd/object-graph", request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.FwdObjectGraph", body.Value<string>("schema"));
+        JArray nodes = (JArray)(body["data"]?["nodes"] ?? new JArray());
+        Assert.IsTrue(nodes.Any(n => string.Equals((string?)n?["name"], "UdfRuleBody", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(nodes.Any(n => string.Equals((string?)n?["metadata"]?["resourceName"], "CopyIfDestBlank", StringComparison.OrdinalIgnoreCase)));
     }
 
     [TestMethod]
@@ -220,7 +262,10 @@ public sealed class ApiContractTests
         Assert.IsTrue(body.Value<bool>("ok"));
         Assert.AreEqual("AcWorkbench.RuntimeImpact", body.Value<string>("schema"));
         JArray items = (JArray)(body["data"]?["items"] ?? new JArray());
-        Assert.IsTrue(items.Any(i => string.Equals((string?)i?["functionName"], "Formatf", StringComparison.OrdinalIgnoreCase)));
+        JObject format = (JObject)items.First(i => string.Equals((string?)i?["functionName"], "Formatf", StringComparison.OrdinalIgnoreCase));
+        Assert.IsTrue(((JArray)(format["behaviorFlags"] ?? new JArray())).Any(f => string.Equals(f.Value<string>(), "WritesField", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(format["configuredStatusResults"] ?? new JArray())).Any(f => string.Equals(f.Value<string>(), "Failed", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(format["parameters"]?["_ParamList0"] ?? new JArray())).Any(f => string.Equals(f.Value<string>(), "SubscriberID_OCR", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(items.All(i => string.Equals((string?)i?["notProven"], "Static configuration evidence only; native runtime execution was not simulated.", StringComparison.OrdinalIgnoreCase)));
     }
 
@@ -585,10 +630,72 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
             report.Rules[0].Parameters["_ParamList0"] = new List<string> { "SubscriberID_OCR" };
             report.Rules[0].ActionNames.Add("OK");
             report.Rules[0].ActionNames.Add("Failed");
+            report.Rules.Add(new AcRuleSummary
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                RuleIndex = 5,
+                RuleGuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                RuleName = "Parent decision",
+                FunctionName = "CheckPageNum"
+            });
+            report.Rules[1].ActionNames.Add("OK");
+            report.Rules[1].ActionNames.Add("Failed");
+            report.Rules.Add(new AcRuleSummary
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                RuleIndex = 5,
+                RuleGuid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                RuleName = "Parent decision",
+                FunctionName = "CheckPageNum"
+            });
+            report.Rules[2].ActionNames.Add("OK");
+            report.Rules[2].ActionNames.Add("Failed");
             return report;
         }
 
-        public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcRelationshipReport TraceAcRelationships(AcTraceOptions options)
+        {
+            var report = new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+            report.Relationships.Add(new AcRuleRelationship
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                RuleIndex = 6,
+                RuleGuid = "db5bf065-618b-44ca-8484-0d12384e7d1a",
+                RuleName = "Fix no splitting",
+                FunctionName = "Formatf",
+                Kind = "RejectOption",
+                TargetType = "RejectMessage",
+                Target = "Subscriber id required",
+                ParameterName = "RejectString",
+                ParameterRole = "RejectMessage",
+                Confidence = "High",
+                Evidence = "Test reject message relationship."
+            });
+            report.Relationships.Add(new AcRuleRelationship
+            {
+                ScopePath = "AC/Pages/DentalADA",
+                ScopeType = "Page",
+                ScopeName = "DentalADA",
+                RuleIndex = 6,
+                RuleGuid = "db5bf065-618b-44ca-8484-0d12384e7d1a",
+                RuleName = "Fix no splitting",
+                FunctionName = "Formatf",
+                Kind = "RejectOption",
+                TargetType = "RejectCode",
+                Target = "SUBID_REQ",
+                ParameterName = "RejectCode",
+                ParameterRole = "RejectCode",
+                Confidence = "High",
+                Evidence = "Test reject code relationship."
+            });
+            return report;
+        }
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
@@ -758,6 +865,38 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
                 Type = "Function",
                 Names = { "CopyIfDestBlank" }
             });
+            var detail = new ResourceTypeDetail { Type = "Function" };
+            var udf = new ResourceDetail
+            {
+                Type = "Function",
+                Name = "CopyIfDestBlank",
+                Category = "UserDefined"
+            };
+            udf.FullAttributes.Add(new ResourceAttrEntry { Key = "FieldListParameters", Value = "Source, Destination", ValueType = "String" });
+            udf.FullAttributes.Add(new ResourceAttrEntry { Key = "StatusResults", Value = "Copied, NotCopied", ValueType = "String" });
+            udf.PrivateTree = new ResourcePrivateNode
+            {
+                Name = "CopyIfDestBlank",
+                Path = "CopyIfDestBlank",
+                Depth = 0,
+                IsCollection = true
+            };
+            udf.PrivateTree.Children.Add(new ResourcePrivateNode
+            {
+                Name = "FieldListParameters",
+                Path = "CopyIfDestBlank/FieldListParameters",
+                Depth = 1,
+                ValuePreview = "Source, Destination"
+            });
+            udf.PrivateTree.Children.Add(new ResourcePrivateNode
+            {
+                Name = "UdfRuleBody",
+                Path = "CopyIfDestBlank/UdfRuleBody",
+                Depth = 1,
+                ValuePreview = "Rule body: if Source has value then copy Source to Destination."
+            });
+            detail.Resources.Add(udf);
+            report.ResourceTypeDetails.Add(detail);
             return report;
         }
 
@@ -814,6 +953,45 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
                 Type = "Table",
                 Names = { "MemberTable" }
             });
+            var detail = new ResourceTypeDetail { Type = "Table" };
+            var table = new ResourceDetail
+            {
+                Type = "Table",
+                Name = "MemberTable",
+                Category = "SelectionList"
+            };
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "MatchFields", Value = "MemberId", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "PlugFields", Value = "MemberName, MemberAddress", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "Persistence", Value = "PersistSelectionAcrossRuleList", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "RerunTrigger", Value = "RerunWhenMemberIdChanges", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "PopupKeyerBehavior", Value = "ShowKeyerPopup", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "No Good Match", Value = "AllowNoGoodMatch", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "EnterBehavior", Value = "EnterSelectsHighlightedRow", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "PlugOutcome", Value = "PlugSelectedRow", ValueType = "String" });
+            table.FullAttributes.Add(new ResourceAttrEntry { Key = "RejectOutcome", Value = "RejectNoGoodMatch", ValueType = "String" });
+            table.PrivateTree = new ResourcePrivateNode
+            {
+                Name = "MemberTable",
+                Path = "MemberTable",
+                Depth = 0,
+                IsCollection = true
+            };
+            table.PrivateTree.Children.Add(new ResourcePrivateNode
+            {
+                Name = "MatchFieldList",
+                Path = "MemberTable/MatchFieldList",
+                Depth = 1,
+                ValuePreview = "MemberId"
+            });
+            table.PrivateTree.Children.Add(new ResourcePrivateNode
+            {
+                Name = "PlugFieldList",
+                Path = "MemberTable/PlugFieldList",
+                Depth = 1,
+                ValuePreview = "MemberName, MemberAddress"
+            });
+            detail.Resources.Add(table);
+            report.ResourceTypeDetails.Add(detail);
             return report;
         }
 

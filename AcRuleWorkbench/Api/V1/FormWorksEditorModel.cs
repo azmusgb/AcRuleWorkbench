@@ -170,6 +170,9 @@ internal sealed class EditorRuleConfigurationModel
 
     [JsonProperty("sourceHandles")]
     public List<EditorSourceHandleModel> SourceHandles { get; } = new();
+
+    [JsonProperty("diagnostics")]
+    public List<string> Diagnostics { get; } = new();
 }
 
 internal sealed class EditorFunctionSchemaModel
@@ -570,6 +573,21 @@ internal sealed class EditorRuntimeImpactModel
     [JsonProperty("confidence")]
     public string Confidence { get; set; } = "Medium";
 
+    [JsonProperty("behaviorFlags")]
+    public List<string> BehaviorFlags { get; } = new();
+
+    [JsonProperty("configuredStatusResults")]
+    public List<string> ConfiguredStatusResults { get; } = new();
+
+    [JsonProperty("parameters")]
+    public Dictionary<string, List<string>> Parameters { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    [JsonProperty("relationshipTargets")]
+    public List<EditorReferenceModel> RelationshipTargets { get; } = new();
+
+    [JsonProperty("selectionListOptions")]
+    public List<EditorSelectionListOptionModel> SelectionListOptions { get; } = new();
+
     [JsonProperty("notProven")]
     public string NotProven { get; set; } = "Static configuration evidence only; native runtime execution was not simulated.";
 }
@@ -728,7 +746,34 @@ internal static class FormWorksEditorModelBuilder
         foreach (KeyValuePair<string, string> attribute in node.Attributes)
             config.Attributes[attribute.Key] = attribute.Value;
 
+        string structuralKey = RuleCorrelation.StructuralKey(node);
+        int flatInventoryMatchCount = snapshot.Rules.Rules.Count(r => RuleCorrelation.Eq(RuleCorrelation.FlatKey(r), structuralKey));
+        if (flatInventoryMatchCount == 0)
+            config.Diagnostics.Add("FlatInventoryMatchUnavailable");
+        else if (flatInventoryMatchCount > 1)
+            config.Diagnostics.Add("AmbiguousFlatInventoryMatches:" + flatInventoryMatchCount.ToString());
+
         AddSourceHandles(config, scope, node, rule);
+        if (rule?.FlatRule == null && flatInventoryMatchCount > 1)
+        {
+            config.SourceHandles.Add(new EditorSourceHandleModel
+            {
+                Source = "AcRuleReport.Rules",
+                Path = structuralKey,
+                Authority = "Multiple flat inventory rows matched this structural Rule; flat ActionNames and raw parameter tokens were not promoted as authoritative.",
+                Confidence = "Low"
+            });
+        }
+        else if (rule?.FlatRule == null)
+        {
+            config.SourceHandles.Add(new EditorSourceHandleModel
+            {
+                Source = "AcRuleReport.Rules",
+                Path = structuralKey,
+                Authority = "No unique flat inventory row matched this structural Rule.",
+                Confidence = "Low"
+            });
+        }
 
         foreach (IGrouping<int, AcTreeEdge> group in scope.StructuralEdges.Where(e => e.FromNodeId == node.NodeId).GroupBy(e => e.ActionListIndex).OrderBy(g => g.Key))
         {
@@ -975,8 +1020,14 @@ internal static class FormWorksEditorModelBuilder
             return "FieldListParameter";
         if (probe.Contains("status result") || probe.Contains("statusresult") || probe.Contains("return code") || probe.Contains("actionname"))
             return "StatusResult";
+        if (resourceKind == "Udf" && (probe.Contains("rule body") || probe.Contains("udf body") || probe.Contains("function body") || probe.Contains("private body")))
+            return "RuleBody";
         if (probe.Contains("rule tree") || probe.Contains("rulelist") || probe.Contains("rule list") || (resourceKind == "Udf" && probe.Contains("rule")))
             return "RuleNode";
+        if (probe.Contains("reject") && (probe.Contains("outcome") || probe.Contains("action") || probe.Contains("result") || probe.Contains("code")))
+            return "RejectOutcome";
+        if (probe.Contains("plug") && (probe.Contains("outcome") || probe.Contains("action") || probe.Contains("result")))
+            return "PlugOutcome";
         if (probe.Contains("match") && (probe.Contains("field") || probe.Contains("column")))
             return "MatchField";
         if ((probe.Contains("plug") || probe.Contains("output") || probe.Contains("destination")) && (probe.Contains("field") || probe.Contains("column")))
@@ -1024,7 +1075,7 @@ internal static class FormWorksEditorModelBuilder
 
     private static bool IsNoiseName(string value)
     {
-        return Regex.IsMatch(value, "^(fieldlist|field|list|parameter|paramlist|status|result|return|code|rule|rules|table|selectionlist|selection|match|plug|option|true|false|null)$", RegexOptions.IgnoreCase);
+        return Regex.IsMatch(value, "^(fieldlist|fieldlistparameters|field|fields|list|parameter|parameters|paramlist|status|statusresults|result|return|code|rule|rules|table|selectionlist|selection|match|matches|matchfields|plug|plugs|plugfields|option|options|true|false|null)$", RegexOptions.IgnoreCase);
     }
 
     private static void AddUdfParameterBindings(EditorUdfDefinitionModel definition)
@@ -1173,7 +1224,7 @@ internal static class FormWorksEditorModelBuilder
             foreach (string impact in impacts.DefaultIfEmpty("Static rule usage was observed; inspect parameters and status results before inferring runtime impact."))
             {
                 string impactType = InferImpactType(functionName, flags, impact, rule.Relationships);
-                yield return new EditorRuntimeImpactModel
+                var model = new EditorRuntimeImpactModel
                 {
                     ImpactId = "impact-" + (++ordinal).ToString("000000"),
                     ImpactType = impactType,
@@ -1185,12 +1236,30 @@ internal static class FormWorksEditorModelBuilder
                     Evidence = definition == null ? "Observed rule/function/relationship evidence" : definition.Evidence,
                     Confidence = definition == null ? "Medium" : "High"
                 };
+                foreach (string flag in flags)
+                    model.BehaviorFlags.Add(flag);
+                foreach (string status in Distinct(rule.Node.ActionNames.Concat(rule.FlatRule?.ActionNames ?? Enumerable.Empty<string>())))
+                    model.ConfiguredStatusResults.Add(status);
+                CopyDictionary(rule.Node.Parameters.Count > 0 ? rule.Node.Parameters : rule.FlatRule?.Parameters ?? new Dictionary<string, List<string>>(), model.Parameters);
+                foreach (AcRuleRelationship relationship in rule.Relationships)
+                {
+                    model.RelationshipTargets.Add(new EditorReferenceModel
+                    {
+                        Kind = relationship.Kind,
+                        TargetType = relationship.TargetType,
+                        Target = relationship.Target,
+                        ParameterRole = relationship.ParameterRole,
+                        Confidence = relationship.Confidence
+                    });
+                }
+
+                yield return model;
             }
         }
 
         foreach (EditorSelectionListDefinitionModel table in selectionLists.Where(t => t.UsageLinks.Count > 0))
         {
-            yield return new EditorRuntimeImpactModel
+            var model = new EditorRuntimeImpactModel
             {
                 ImpactId = "impact-" + (++ordinal).ToString("000000"),
                 ImpactType = "SelectionListLookup",
@@ -1202,6 +1271,11 @@ internal static class FormWorksEditorModelBuilder
                 Evidence = table.Source,
                 Confidence = table.Canonical ? "High" : "Low"
             };
+            foreach (string flag in new[] { "UsesTable", "MayPromptOperator", "MayPlugFields", "MayRouteNoGoodMatch" })
+                model.BehaviorFlags.Add(flag);
+            foreach (EditorSelectionListOptionModel option in table.Options)
+                model.SelectionListOptions.Add(option);
+            yield return model;
         }
     }
 
@@ -1349,7 +1423,7 @@ internal static class FormWorksEditorModelBuilder
             return;
         }
 
-        if (role is "Persistence" or "RerunTrigger" or "OperatorPrompt" or "NoGoodMatch" or "EnterBehavior" or "TableOption")
+        if (role is "Persistence" or "RerunTrigger" or "OperatorPrompt" or "NoGoodMatch" or "EnterBehavior" or "PlugOutcome" or "RejectOutcome" or "TableOption")
         {
             definition.Options.Add(new EditorSelectionListOptionModel
             {

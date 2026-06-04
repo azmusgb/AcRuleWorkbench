@@ -1261,7 +1261,7 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            caveat = "UDF definitions are canonical candidates until the Function resource interface and private rule body are parsed.",
+            caveat = "UDF definitions include resource-interface, private-tree, and caller-binding evidence when available. Candidate fields remain diagnostic-marked when native resource payloads are opaque.",
             diagnostics = snapshot.EditorModel.Diagnostics.Where(d => RuleCorrelation.Contains(d, "Udf")).ToList()
         };
     }
@@ -1284,7 +1284,7 @@ internal sealed class WorkbenchApiService
         {
             count = items.Count,
             items,
-            caveat = "SelectionList/table schemas are not fully parsed; match and plug fields are usage-derived unless schemaParsed is true.",
+            caveat = "SelectionList/table schemas include parsed resource-evidence fields and option roles when available; usage-derived fields remain fallback evidence when schemaParsed is false.",
             diagnostics = snapshot.EditorModel.Diagnostics.Where(d => RuleCorrelation.Contains(d, "SelectionList")).ToList()
         };
     }

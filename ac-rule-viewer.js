@@ -136,6 +136,7 @@ async function loadFwdApiData(){
   const snapshotMode=(()=>{const mode=new URLSearchParams(window.location.search).get('snapshotMode');return mode==='live'?'live':'snapshot';})();
   const timeoutMs=8000;
   const endpoints=[
+    ['editorModel','editor-model?include=ruleLists,objectGraph,udfs,selectionLists,runtimeImpacts'],
     ['overview','fwd/overview'],
     ['documents','fwd/documents'],
     ['pages','fwd/pages'],
@@ -143,9 +144,14 @@ async function loadFwdApiData(){
     ['processes','fwd/processes'],
     ['processDrivers','fwd/processes/drivers'],
     ['resources','fwd/resources'],
+    ['objectGraph','fwd/object-graph'],
     ['functions','fwd/functions'],
+    ['ruleLists','rule-lists'],
     ['tables','fwd/tables'],
+    ['selectionLists','fwd/selection-lists'],
     ['udfs','fwd/udfs?includeDetails=true'],
+    ['canonicalUdfs','fwd/udfs/canonical'],
+    ['runtimeImpact','fwd/runtime-impact'],
     ['pageVariants','fwd/page-variants'],
     ['fields','fwd/fields']
   ];
@@ -185,6 +191,7 @@ async function loadFwdApiData(){
   }
 
   fwdData={
+    editorModel:hydrated.editorModel,
     overview:hydrated.overview,
     documents:hydrated.documents,
     pages:hydrated.pages,
@@ -192,9 +199,14 @@ async function loadFwdApiData(){
     processes:hydrated.processes,
     processDrivers:hydrated.processDrivers,
     resources:hydrated.resources,
+    objectGraph:hydrated.objectGraph,
     functions:hydrated.functions,
+    ruleLists:hydrated.ruleLists,
     tables:hydrated.tables,
+    selectionLists:hydrated.selectionLists,
     udfs:hydrated.udfs,
+    canonicalUdfs:hydrated.canonicalUdfs,
+    runtimeImpact:hydrated.runtimeImpact,
     pageVariants:hydrated.pageVariants,
     fields:hydrated.fields
   };
@@ -616,8 +628,14 @@ function domainRowsByView(view){
     const processItems=list(fwd.processes?.items);
     if(processItems.length)return processItems.map(p=>({name:`${text(p.name)} (process node)`,count:1}));
   }
+  if(fwd&&view==='tables'){
+    const selectionItems=list(fwd.selectionLists?.items);
+    if(selectionItems.length)return selectionItems.map(t=>({name:text(t.name),count:Number(first(list(t.usageLinks).length,list(t.matchFields).length+list(t.plugFields).length,0))||0}));
+    const tableItems=list(fwd.tables?.items);
+    if(tableItems.length)return tableItems.map(t=>({name:text(t.name),count:Number(first(t.referenceCount,t.ruleCount,0))||0}));
+  }
   if(fwd&&view==='udfs'){
-    const items=list(fwd.udfs?.items);
+    const items=list(fwd.canonicalUdfs?.items).length?list(fwd.canonicalUdfs?.items):list(fwd.udfs?.items);
     if(items.length)return items.map(u=>{
       const type=text(u.resourceType);
       const name=text(u.name);
@@ -686,6 +704,28 @@ function buildGlobalResourceDefinitions(){
     }).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
   }
   return domainRowsByView('resources').map(r=>({key:text(r.name),name:text(r.name),type:'Resource reference',source:'Relationship reference',defined:false,metric:Number(first(r.count,0))||0,usage:[],details:null}));
+}
+function objectGraphNodesForResource(row){
+  const graph=model.fwd?.objectGraph||model.fwd?.editorModel?.objectGraph||{};
+  const nodes=list(graph.nodes);
+  const resourceName=text(row?.name||'').trim();
+  const resourceType=text(row?.type||'').trim();
+  if(!resourceName)return [];
+  return nodes.filter(n=>{
+    const meta=n.metadata||{};
+    const nodeName=text(n.name||'').trim();
+    const metaName=text(meta.resourceName||'').trim();
+    const metaType=text(meta.resourceType||'').trim();
+    return (nodeName.toLowerCase()===resourceName.toLowerCase()&&(!resourceType||!metaType||metaType.toLowerCase()===resourceType.toLowerCase()))
+      || metaName.toLowerCase()===resourceName.toLowerCase();
+  });
+}
+function objectGraphPreviewHtml(row){
+  const graph=model.fwd?.objectGraph||model.fwd?.editorModel?.objectGraph||{};
+  const nodes=objectGraphNodesForResource(row);
+  const privateNodes=nodes.filter(n=>text(n.kind)==='ResourcePrivateNode');
+  if(!list(graph.nodes).length)return '';
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Object Graph</h4><p>Canonical FWD object graph nodes and private resource children linked to this definition.</p></div><span class="badge blue">${fmt(nodes.length)} nodes</span></div>${nodes.length?`<div class="mini-list">${nodes.slice(0,10).map(n=>`<div class="mini-row"><span><b>${esc(text(n.kind||'Object'))}</b> ${esc(text(n.name||n.id||''))}</span><span class="mono">${esc(text(first(n.metadata?.path,n.id,'')))}</span></div>`).join('')}</div>${privateNodes.length?`<div class="caption mt-8">${fmt(privateNodes.length)} private resource node(s) exposed for drill-through.</div>`:''}`:'<div class="global-empty-state compact">No object graph node is linked to this resource name.</div>'}</section>`;
 }
 function buildGlobalDriverDefinitions(){
   const items=list(model.fwd?.processDrivers?.items);
@@ -797,6 +837,14 @@ function udfInterfaceHtml(u,callers){
     : '<span class="muted">No explicit status list extracted.</span>';
   return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Interface</h4><p>Named field-list parameters and status values defined for this global UDF.</p></div><span class="badge blue">${fmt(params.length)} params</span></div><div class="udf-facts"><span><b>Definition</b>${u.defined?'FWD-defined':'Referenced'}</span><span><b>Caller rules</b>${fmt(callers.length)}</span><span><b>Type</b>${esc(u.type||'Function')}</span>${messages.length?`<span><b>Messages</b>${fmt(messages.length)}</span>`:''}</div><div class="table-columns-head">Parameters</div>${paramsHtml}${status.length?`<div class="table-columns-head">Status results</div>${statusHtml}`:''}</section>`;
 }
+function udfEvidenceHtml(u){
+  const bindings=list(u.parameterBindings);
+  const evidence=u.resourceEvidence||{};
+  const attrHits=list(evidence.attributeHits);
+  const treeHits=list(evidence.privateTreeHits);
+  const diagnostics=list(u.messages).map(text).filter(Boolean);
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Definition Evidence</h4><p>Canonical UDF interface, caller-slot bindings, and private body parse state from the FWD resource packet.</p></div><span class="badge ${u.bodyParsed?'green':'blue'}">${u.bodyParsed?'body parsed':'body pending'}</span></div><div class="kv">${kv('Definition parsed',u.definitionParsed?'Yes':'No')}${kv('Resource config',evidence.hasConfig?'Available':'Unavailable')}${kv('Private tree',evidence.hasPrivateTree?'Available':'Unavailable')}${kv('Evidence hits',fmt(attrHits.length+treeHits.length))}</div>${bindings.length?`<div class="table-columns-head">Caller slot bindings</div><div class="global-param-matrix">${bindings.slice(0,24).map(b=>`<div class="global-param-card"><b>${esc(text(b.parameterName||''))}</b><small class="udf-param-raw">${esc(text(b.callerSlot||''))}</small><span>${esc(text(b.callerValue||''))}</span></div>`).join('')}</div>`:''}${treeHits.length?`<div class="table-columns-head">Private body hits</div><div class="mini-list">${treeHits.slice(0,8).map(h=>`<div class="mini-row"><span><b>${esc(text(h.role||''))}</b> ${esc(text(h.name||''))}</span><span class="mono">${esc(text(h.path||''))}</span></div>`).join('')}</div>`:''}${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section>`;
+}
 function udfCallerRulesHtml(callers,u){
   const rows=list(callers);
   if(!rows.length)return '<div class="global-empty-state">No caller rules are mapped for this UDF.</div>';
@@ -834,6 +882,14 @@ function normalizeUdfInternalRules(u,udfName='',callers=[]){
   }
   const direct=first(u?.internalRules,u?.InternalRules,u?.ruleBody,u?.RuleBody,u?.bodyRules,u?.BodyRules,u?.definition?.ruleBody,u?.definition?.rules,[]);
   list(direct).forEach(addRule);
+  list(first(u?.internalRuleTree?.candidateRuleNodes,[])).forEach((hit,i)=>addRule({
+    ruleName:text(hit.name||`Private rule ${i+1}`),
+    functionName:text(hit.role||'UDF private tree'),
+    scopeId:'UDF private body',
+    nodeId:'',
+    parameters:{},
+    raw:hit
+  },i));
   const privateTree=first(u?.rawResourceDetails?.privateTree,u?.rawResourceDetails?.private_tree,null);
   if(privateTree&&typeof privateTree==='object'){
     const candidates=list(first(privateTree.rules,privateTree.Rules,privateTree.children,privateTree.Children,[]));
@@ -911,7 +967,7 @@ function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,deta
   $('content').innerHTML=`<section class="global-explorer global-explorer-${esc(kind)}">${summary}<div class="global-explorer-grid"><aside class="global-index-panel">${definitionListHtml(kind,rows,selected.key)}</aside><section class="global-detail-panel"><div class="global-detail-head"><div><h3>${esc(selected.name)}</h3><p>${detailSub}</p></div><div class="tree-detail-badges">${originBadge}<span class="badge blue">${fmt(list(selected.usage).length||selected.metric)} ${metricLabel}</span></div></div><div class="global-detail-facts"><span><b>Type</b>${esc(selected.type)}</span>${originFact}<span><b>${kind==='udfs'?'Callers':kind==='functions'?'Observed by':'Used by'}</b>${fmt(list(selected.usage).length||selected.metric)}</span></div>${detailHtml(selected)}<div class="global-detail-actions"><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Full details</button></div></section></div></section>`;
 }
 function renderGlobalResourceDefinitions(){
-  renderGlobalDefinitionExplorer('resources',buildGlobalResourceDefinitions(),state.selectedResourceKey,'selectedResourceKey',{title:'Resources',body:'Global resources are shared definitions. The main panel stays focused on identity and usage status; details open separately.',emptyTitle:'No resources found',emptyBody:'No FWD resources or usage-derived resources were discovered.'},row=>`<div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}`);
+  renderGlobalDefinitionExplorer('resources',buildGlobalResourceDefinitions(),state.selectedResourceKey,'selectedResourceKey',{title:'Resources',body:'Global resources are shared definitions. The main panel stays focused on identity, graph membership, and usage status.',emptyTitle:'No resources found',emptyBody:'No FWD resources or usage-derived resources were discovered.'},row=>`${objectGraphPreviewHtml(row)}<div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}`);
 }
 function renderGlobalDriverDefinitions(){
   renderGlobalDefinitionExplorer('drivers',buildGlobalDriverDefinitions(),state.selectedDriverKey,'selectedDriverKey',{title:'Input / Output Drivers',body:'Driver definitions and process-private findings are global configuration definitions, not page or document children.',emptyTitle:'No drivers found',emptyBody:'No process driver definitions or driver-like definitions were discovered.'},row=>`<div class="table-columns-head">Finding preview</div>${usagePreviewHtml(row.usage)}`);
@@ -930,6 +986,17 @@ function functionUsageRowsForName(functionName){
   model.nodes.forEach(n=>add(n.scopeId,n.title,n.fn,n.id,n.ActionNames,n.Parameters,'Structural rule'));
   model.inventory.forEach(r=>add(r.scopeId,r.title,r.fn,r.nodeId,r.ActionNames,r.Parameters,r.classification||'Flat inventory'));
   return rows.sort((a,b)=>a.scopeId.localeCompare(b.scopeId,undefined,{sensitivity:'base'})||a.ruleName.localeCompare(b.ruleName,undefined,{sensitivity:'base'}));
+}
+function runtimeImpactRowsForFunction(functionName){
+  const target=lower(functionName);
+  return list(model.fwd?.runtimeImpact?.items)
+    .filter(i=>lower(i.functionName)===target)
+    .sort((a,b)=>text(a.scopeId).localeCompare(text(b.scopeId),undefined,{sensitivity:'base'})||text(a.ruleName).localeCompare(text(b.ruleName),undefined,{sensitivity:'base'}));
+}
+function runtimeImpactEvidenceHtml(functionName){
+  const rows=runtimeImpactRowsForFunction(functionName);
+  if(!rows.length)return '';
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Runtime Impact Evidence</h4><p>Static function-specific impact records from the canonical runtime-impact packet. Native AC execution is not simulated.</p></div><span class="badge blue">${fmt(rows.length)} impacts</span></div><div class="mini-list">${rows.slice(0,12).map(row=>`<div class="mini-row"><span><b>${esc(text(row.impactType||'Impact'))}</b> ${esc(text(row.summary||''))}</span><span class="mono">${esc(text(row.ruleName||row.scopeId||''))}</span></div>`).join('')}</div>${rows.some(r=>list(r.behaviorFlags).length)?`<div class="table-columns-head">Behavior flags</div>${functionTokenStripHtml([...new Set(rows.flatMap(r=>list(r.behaviorFlags).map(text).filter(Boolean)))],'blue')}`:''}${rows.some(r=>list(r.relationshipTargets).length)?`<div class="caption mt-8">Relationship targets are available in the raw impact rows for deeper drill-through.</div>`:''}</section>`;
 }
 function inferClientFunctionCategory(functionName){
   const fn=lower(functionName);
@@ -993,7 +1060,7 @@ function functionConfigurationHtml(f,row){
     ['Observed rules',fmt(first(f.observedRuleCount,row.metric,0))],
     ['Relationships',fmt(first(f.relationshipCount,0))]
   ];
-  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Function Model</h4><p>${esc(first(f.description,'AC function observed in static FWD configuration.'))}</p></div><span class="badge ${f.deprecated?'amber':'blue'}">${f.deprecated?'deprecated':esc(first(f.source,row.source,'catalog'))}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Interface</h4><p>Status results and parameters shown as configured/static evidence.</p></div><span class="badge blue">${fmt(statuses.length||configured.length)} statuses</span></div><div class="table-columns-head">Status results</div>${functionTokenStripHtml(statuses,'amber','No catalog or configured status results were extracted.')}${configured.length?`<div class="caption mt-8">Configured ActionNames from this snapshot: ${esc(configured.join(', '))}</div>`:''}<div class="table-columns-head">Parameter roles</div>${functionTokenStripHtml(roles,'blue','No curated parameter roles are available.')}${params.length?`<div class="table-columns-head">Observed parameter names</div>${functionTokenStripHtml(params,'blue')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Behavior / Runtime UX</h4><p>Static behavior flags and likely operator impact. Native AC execution is not simulated.</p></div><span class="badge blue">${fmt(flags.length)} flags</span></div>${functionTokenStripHtml(flags,'blue','No behavior flags are available.')}${impacts.length?`<div class="table-columns-head">Runtime impact</div><div class="mini-list">${impacts.map(x=>`<div class="mini-row"><span>${esc(x)}</span></div>`).join('')}</div>`:''}</section>`;
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Function Model</h4><p>${esc(first(f.description,'AC function observed in static FWD configuration.'))}</p></div><span class="badge ${f.deprecated?'amber':'blue'}">${f.deprecated?'deprecated':esc(first(f.source,row.source,'catalog'))}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Interface</h4><p>Status results and parameters shown as configured/static evidence.</p></div><span class="badge blue">${fmt(statuses.length||configured.length)} statuses</span></div><div class="table-columns-head">Status results</div>${functionTokenStripHtml(statuses,'amber','No catalog or configured status results were extracted.')}${configured.length?`<div class="caption mt-8">Configured ActionNames from this snapshot: ${esc(configured.join(', '))}</div>`:''}<div class="table-columns-head">Parameter roles</div>${functionTokenStripHtml(roles,'blue','No curated parameter roles are available.')}${params.length?`<div class="table-columns-head">Observed parameter names</div>${functionTokenStripHtml(params,'blue')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Behavior / Runtime UX</h4><p>Static behavior flags and likely operator impact. Native AC execution is not simulated.</p></div><span class="badge blue">${fmt(flags.length)} flags</span></div>${functionTokenStripHtml(flags,'blue','No behavior flags are available.')}${impacts.length?`<div class="table-columns-head">Runtime impact</div><div class="mini-list">${impacts.map(x=>`<div class="mini-row"><span>${esc(x)}</span></div>`).join('')}</div>`:''}</section>${runtimeImpactEvidenceHtml(first(f.name,row.name,''))}`;
 }
 function renderGlobalFunctionDefinitions(){
   const rows=buildGlobalFunctionDefinitions();
@@ -1008,6 +1075,47 @@ function renderGlobalFunctionDefinitions(){
 
 // Build global table definitions and inferred column names from relationship co-occurrence.
 function buildGlobalTableDefinitions(){
+  const selectionItems=list(model.fwd?.selectionLists?.items);
+  if(selectionItems.length){
+    return selectionItems.map(t=>{
+      const name=text(t.name);
+      const usage=list(t.usageLinks).map(u=>({
+        scopeId:text(u.scopeId),
+        ruleName:text(u.ruleName||'SelectionList rule'),
+        functionName:text(u.functionName||''),
+        target:name,
+        targetType:'SelectionList',
+        relationshipKind:text(u.relationshipKind||'UsesTable'),
+        matchLevel:text(first(u.confidence,t.confidence,'High')),
+        node:u.ruleNodeId?model.nodesById.get(String(u.ruleNodeId)):null,
+        nodeId:text(u.ruleNodeId||''),
+        rel:u
+      }));
+      const matchFields=list(t.matchFields).map(f=>({name:text(f.name),hits:Number(first(f.hits,1))||1,matchLevel:text(first(f.confidence,'High')),role:'Match field'})).filter(f=>f.name);
+      const plugFields=list(t.plugFields).map(f=>({name:text(f.name),hits:Number(first(f.hits,1))||1,matchLevel:text(first(f.confidence,'High')),role:'Plug field'})).filter(f=>f.name);
+      const options=list(t.options);
+      return {
+        name,
+        hits:usage.length,
+        scopeCount:new Set(usage.map(u=>u.scopeId).filter(Boolean)).size,
+        ruleCount:usage.length,
+        defined:first(t.canonical,false)===true,
+        inferred:first(t.canonical,false)!==true,
+        parsedColumns:[...matchFields,...plugFields],
+        usageDerivedFields:[],
+        columns:[...matchFields,...plugFields],
+        matchFields,
+        plugFields,
+        options,
+        resourceEvidence:first(t.resourceEvidence,null),
+        hasParsedSchema:first(t.schemaParsed,false)===true,
+        optionsParsed:first(t.optionsParsed,false)===true,
+        messages:list(first(t.diagnostics,[])).map(text).filter(Boolean),
+        usage,
+        raw:t
+      };
+    }).filter(t=>t.name).sort((a,b)=>(b.hits-a.hits)||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  }
   const definedTables=list(model.fwd?.tables?.items);
   const usageByTarget=tableUsageIndex(definedTables.map(t=>t.name));
   if(definedTables.length){
@@ -1108,17 +1216,28 @@ function buildGlobalTableDefinitions(){
 function tableConfigurationHtml(t,row){
   const parsedCols=list(t.parsedColumns);
   const usageCols=list(t.usageDerivedFields);
+  const options=list(t.options);
+  const evidence=t.resourceEvidence||{};
   const facts=[
     ['Resource type',esc(row.type||t.resourceType||'Table')],
-    ['Schema',t.hasParsedSchema?'Parsed from FWD':'Definition present; schema not parsed'],
-    ['Configured columns',fmt(parsedCols.length)],
+    ['Schema',t.hasParsedSchema?'Parsed from SelectionList resource evidence':'Definition present; schema not parsed'],
+    ['Options',t.optionsParsed?`${fmt(options.length)} parsed`:'Not parsed'],
+    ['Configured match fields',fmt(list(t.matchFields).length||parsedCols.length)],
+    ['Configured plug fields',fmt(list(t.plugFields).length)],
+    ['Private tree',evidence.hasPrivateTree?'Available':'Unavailable'],
     ['Referenced fields',fmt(usageCols.length)],
     ['Rule references',fmt(list(row.usage).length||t.ruleCount||t.hits||0)],
     ['Scope count',fmt(t.scopeCount||0)]
   ];
-  return `<section class="table-config-card"><div class="udf-section-head"><div><h4>Configuration</h4><p>SelectionList/table definition details first; rule usage is secondary.</p></div><span class="badge ${t.hasParsedSchema?'green':'blue'}">${t.hasParsedSchema?'schema parsed':'definition'}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div></section>`;
+  return `<section class="table-config-card"><div class="udf-section-head"><div><h4>Configuration</h4><p>SelectionList/table definition details first; rule usage is secondary.</p></div><span class="badge ${t.hasParsedSchema?'green':'blue'}">${t.hasParsedSchema?'schema parsed':'definition'}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${options.length?`<div class="table-columns-head">Options</div><div class="udf-token-strip">${options.slice(0,40).map(o=>`<span class="udf-token amber" title="${esc(text(o.value||''))}">${esc(text(o.role||o.name||'Option'))}</span>`).join('')}</div>`:''}</section>`;
 }
 function tableColumnsHtml(t){
+  const matchFields=list(t.matchFields);
+  const plugFields=list(t.plugFields);
+  if(matchFields.length||plugFields.length){
+    const group=(label,rows)=>rows.length?`<div class="table-columns-head">${esc(label)}</div><div class="table-columns-grid">${rows.map(c=>`<div class="table-column-row"><div class="table-col-name">${esc(c.name)}</div><div class="table-col-meta"><span class="badge blue">${esc(c.role||label)}</span><span class="mono">${esc(c.matchLevel||c.confidence||'parsed')}</span></div></div>`).join('')}</div>`:'';
+    return `${group('Match fields',matchFields)}${group('Plug fields',plugFields)}`;
+  }
   const parsedCols=list(t.parsedColumns);
   if(parsedCols.length){
     return `<div class="table-columns-grid">${parsedCols.map(c=>`<div class="table-column-row"><div class="table-col-name">${esc(first(c.name,c.Name,c.column,c.Column,''))}</div><div class="table-col-meta"><span class="mono">${esc(first(c.type,c.Type,c.kind,c.Kind,'column'))}</span></div></div>`).join('')}</div>`;
@@ -1128,7 +1247,7 @@ function tableColumnsHtml(t){
 }
 function renderGlobalTablesMasterDetail(){
   const tables=buildGlobalTableDefinitions();
-  const isDefined=list(model.fwd?.tables?.items).length>0;
+  const isDefined=list(model.fwd?.selectionLists?.items).length>0||list(model.fwd?.tables?.items).length>0;
   const explorerRows=tables.map(t=>({key:t.name,name:t.name,type:t.hasParsedSchema?'SelectionList / Table':'Table',source:t.inferred?'Referenced by rule configuration':'FWD payload',defined:t.defined,metric:t.hits,usage:list(t.usage),table:t}));
   if(!tables.length){
     $('content').innerHTML=`<section class="global-explorer">${emptyHtml('No tables found','No table definitions were discovered in FWD resources or rule relationships.')}</section>`;
@@ -1170,40 +1289,51 @@ function buildUdfDefinitions(){
     const source=realDefined.length?[...realDefined,...nonGenericCallers]:[...list(definedNames).map(text).filter(Boolean),...nonGenericCallers];
     return [...new Set(source)].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
   }
-  const definedItems=list(model.fwd?.udfs?.items);
+  const definedItems=list(model.fwd?.canonicalUdfs?.items).length?list(model.fwd?.canonicalUdfs?.items):list(model.fwd?.udfs?.items);
   if(definedItems.length){
     return definedItems.map(u=>{
       const type=text(u.resourceType);
       const rawName=text(u.name);
       const displayName=/^function$/i.test(type)?rawName:`${type}: ${rawName}`;
       const matchedRules=configuredRulesFor(rawName||displayName);
+      const canonicalCallers=list(first(u.callerBindings,[])).map(c=>({
+        scopeId:text(c.scopeId),
+        ruleName:text(c.ruleName||'UDF caller'),
+        functionName:text(c.functionName||rawName),
+        parameters:first(c.parameters,{}),
+        nodeId:text(first(c.ruleNodeId,c.nodeId,''))
+      }));
+      const callerRules=canonicalCallers.length?canonicalCallers:matchedRules;
       const derivedParamNames=parameterNamesFromRules(matchedRules);
-      const definedParamNames=list(first(u.parameterNames,u.parameters,[])).map(text).filter(Boolean);
+      const definedParamNames=list(first(u.fieldListParameters,u.parameterNames,u.parameters,[])).map(text).filter(Boolean);
       const parameterNames=mergeUdfParameterNames(definedParamNames,derivedParamNames);
       const definedRules=list(first(u.ruleNames,u.usedByRules,u.rules,[])).map(text).filter(Boolean);
-      const configuredRules=matchedRules.map(r=>`${r.ruleName} · ${r.scopeId}`);
+      const configuredRules=callerRules.map(r=>`${r.ruleName} · ${r.scopeId}`);
       const rules=[...new Set([...definedRules,...configuredRules])].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
       return {
         key:rawName||displayName,
         displayName,
         rawName,
         type:type||'Function',
-        count:Number(first(u.usedByRuleCount,u.count,0))||0,
+        count:Number(first(u.usedByRuleCount,u.count,callerRules.length,0))||0,
         scopeCount:Number(first(u.scopeCount,0))||0,
         defined:!!first(u.defined,true),
         inferred:!!u.inferred,
         definitionParsed:first(u.definitionParsed,u.parsed,u.hasParsedDefinition,false)===true,
-        messages:list(first(u.messages,u.warnings,[])),
+        bodyParsed:first(u.bodyParsed,u.hasParsedBody,false)===true,
+        messages:list(first(u.diagnostics,u.messages,u.warnings,[])),
         classification:text(first(u.classification,'')),
         matchLevel:text(first(u.matchLevel,'')),
         source:text(first(u.source,u.definitionSource,'')),
         scopes:list(first(u.scopeIds,u.scopes,u.usedByScopes,[])).map(text).filter(Boolean),
         rules,
-        callerRules:matchedRules,
+        callerRules,
         parameterNames,
+        parameterBindings:list(first(u.fieldListParameterBindings,[])),
         statusResults:list(first(u.statusResults,u.statuses,u.results,u.definition?.statusResults,[])).map(text).filter(Boolean),
         internalRules:normalizeUdfInternalRules(u,rawName,matchedRules),
-        rawResourceDetails:first(u.rawResourceDetails,u.rawDetails,null)
+        resourceEvidence:first(u.resourceEvidence,null),
+        rawResourceDetails:first(u.rawResourceDetails,u.rawDetails,u.resourceEvidence,null)
       };
     });
   }
@@ -1220,6 +1350,7 @@ function buildUdfDefinitions(){
     defined:false,
     inferred:true,
     definitionParsed:false,
+    bodyParsed:false,
     messages:[],
     classification:'RegexOnly',
     matchLevel:'',
@@ -1228,8 +1359,10 @@ function buildUdfDefinitions(){
     rules:matchedRules.map(x=>`${x.ruleName} · ${x.scopeId}`).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),
     callerRules:matchedRules,
     parameterNames:mergeUdfParameterNames([],parameterNamesFromRules(matchedRules)),
+    parameterBindings:[],
     statusResults:[],
     internalRules:normalizeUdfInternalRules(r,fnName,matchedRules),
+    resourceEvidence:null,
     rawResourceDetails:null
   };});
 }
@@ -1265,7 +1398,7 @@ function renderUdfMasterDetail(){
   renderGlobalDefinitionExplorer('udfs',udfExplorerRows,state.selectedUdfName,'selectedUdfName',{title:'User Defined Functions',body:'UDFs are global functions. Parameters and caller hierarchy are summarized here; caller details open in a focused view.',emptyTitle:'No UDFs found',emptyBody:'No UDF candidates match the current filter.'},row=>{
     const u=row.udf;
     const callers=list(u.callerRules);
-    return `<div class="udf-detail-stack">${udfFilterBarHtml()}${udfInterfaceHtml(u,callers)}${udfInternalRulesHtml(u)}${udfCallerRulesHtml(callers,u)}</div>`;
+    return `<div class="udf-detail-stack">${udfFilterBarHtml()}${udfInterfaceHtml(u,callers)}${udfEvidenceHtml(u)}${udfInternalRulesHtml(u)}${udfCallerRulesHtml(callers,u)}</div>`;
   });
   return;
 
@@ -1357,12 +1490,34 @@ function pathNarrativeHtml(n){
 }
 function selectedPathPacket(n){const incoming=model.incomingByChild.get(n.id);return {schema:'AcWorkbench.SelectedRulePath',schemaVersion:'1.0.0',copiedAt:new Date().toISOString(),scopeId:n.scopeId,identity:{nodeId:n.id,ruleName:n.title,functionName:n.fn,ruleGuid:n.RuleGuid||null},incomingAction:incoming?{label:incoming.label,routeState:incoming.routeState||null,actionName:first(incoming.ActionName,incoming.actionName,null),actionListIndex:first(incoming.ActionListIndex,incoming.actionListIndex,null),resolved:!!incoming.resolved,}:null,path:pathObjects(n),outgoingActions:(model.edgesByParent.get(n.id)||[]).map(e=>({label:e.label,routeState:e.routeState||null,actionName:first(e.ActionName,e.actionName,null),actionListIndex:first(e.ActionListIndex,e.actionListIndex,null),resolved:!!e.resolved,toNodeId:e.to,childName:model.nodesById.get(String(e.to))?.title||null})),caveat:'Parent-rule path comes from the parsed FWD hierarchy. It is read-only configuration, not a runtime execution trace.'};}
 
+function canonicalRuleConfigurationForNode(n){
+  const ruleLists=list(model.fwd?.editorModel?.ruleLists);
+  const ruleList=ruleLists.find(r=>sameName(r.ruleListId,n.scopeId)||sameName(r.scopeId,n.scopeId));
+  if(!ruleList)return null;
+  const configs=list(ruleList.ruleConfigurations);
+  return configs.find(c=>sameName(c.nodeId,n.id))
+    || configs.find(c=>text(c.ruleGuid)&&text(n.RuleGuid)&&sameName(c.ruleGuid,n.RuleGuid))
+    || configs.find(c=>text(c.name)&&sameName(c.name,n.title))
+    || null;
+}
+function canonicalRuleConfigurationHtml(n){
+  const config=canonicalRuleConfigurationForNode(n);
+  if(!config)return '';
+  const schema=config.functionSchema||{};
+  const rejects=list(config.rejects);
+  const sources=list(config.sourceHandles);
+  const diagnostics=list(config.diagnostics).map(text).filter(Boolean);
+  const actions=list(config.actionLists);
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>RuleConfiguration Packet</h4><p>Snapshot-wide FormWorks editor model for this Rule: function schema, status results, rejects, source handles, and ambiguity diagnostics.</p></div><span class="badge ${diagnostics.length?'amber':'green'}">${diagnostics.length?'diagnostics':'canonical'}</span></div><div class="kv">${kv('Function schema',schema.defined?'Catalog-defined':'Observed')}${kv('Configured statuses',fmt(list(schema.configuredStatusResults).length))}${kv('Action Lists',fmt(actions.length))}${kv('Source handles',fmt(sources.length))}${kv('Reject mappings',fmt(rejects.length))}</div>${list(schema.behaviorFlags).length?`<div class="table-columns-head">Behavior flags</div>${functionTokenStripHtml(schema.behaviorFlags,'blue')}`:''}${rejects.length?`<div class="table-columns-head">Reject message/code</div><div class="mini-list">${rejects.map(r=>`<div class="mini-row"><span><b>${esc(text(r.parameterName||r.kind||'Reject'))}</b> ${esc(text(r.message||r.code||r.target||''))}</span><span class="badge blue">${esc(text(r.confidence||''))}</span></div>`).join('')}</div>`:''}${sources.length?`<div class="table-columns-head">Source handles</div><div class="mini-list">${sources.slice(0,8).map(s=>`<div class="mini-row"><span><b>${esc(text(s.source||''))}</b> ${esc(text(s.authority||''))}</span><span class="mono">${esc(text(s.path||''))}</span></div>`).join('')}</div>`:''}${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section>`;
+}
+
 function selectedRuleConfigPacket(n){
   const incoming=model.incomingByChild.get(n.id);
   const refs=model.rels.filter(r=>String(r.nodeId)===String(n.id));
   const diags=model.diags.filter(d=>String(d.nodeId)===String(n.id));
   const inv=model.inventory.find(r=>String(r.nodeId)===String(n.id));
   const fieldResolution=resolveNodeFieldReferences(n);
+  const editorRuleConfiguration=canonicalRuleConfigurationForNode(n);
   return {
     schema:'AcWorkbench.SelectedRuleConfiguration',
     schemaVersion:'1.1.0',
@@ -1380,6 +1535,7 @@ function selectedRuleConfigPacket(n){
     references:refs.map(r=>({kind:r.kind,targetType:r.targetType,target:r.target})),
     messages:diags.map(d=>({severity:d.severity,title:d.title,detail:d.detail})),
     reconciliation:{flatInventoryMatch:!!inv,flatInventoryId:inv?.id||null,classification:inv?.classification||null},
+    editorRuleConfiguration,
     rawNode:n
   };
 }
@@ -1416,8 +1572,9 @@ function renderNodeInspector(n){
  const relBody=refs.length?refs.slice(0,120).map(r=>`<div class="split-row my-7"><span>${esc(r.kind)} -&gt; <b>${esc(r.target)}</b><div class="caption">${esc(r.targetType||'Reference')}</div></span><span class="badge blue">configured</span></div>`).join(''):'<div class="muted">No references are linked to this rule in the current snapshot.</div>';
  const diagBody=diags.length?diags.map(d=>`<div class="notice compact"><div class="notice-icon">!</div><div><b>${esc(d.title)}</b><br>${esc(d.detail)}</div></div>`).join(''):'<div class="muted">No messages linked to this rule.</div>';
  const summary=`<div class="kv">${kv('Rule name',esc(n.title))}${kv('Function',`<span class="mono">${esc(n.fn||'')}</span>`)}${kv('Scope',esc(n.scopeId))}${kv('Display path',`<span class="mono path-line">${esc(displayPath)}</span>`)}${kv('Parent action',incoming?`<span class="route-chip ${incoming.resolved?'resolved':'unresolved'}">${esc(incoming.label)}</span>`:'Root rule list')}${kv('Disabled state',disabledHtml)}${kv('Sub-list children',fmt(childIds(n.id).length))}${kv('References',fmt(refs.length))}${kv('Node',esc(n.id))}</div><div class="inline-actions mt-12"><button class="btn" type="button" data-action="copy-route-path">Copy path</button><button class="btn primary" type="button" data-action="copy-rule-config">Copy config</button></div>`;
+ const canonicalConfig=canonicalRuleConfigurationHtml(n);
  const raw=`<pre class="raw">${esc(JSON.stringify(n,null,2))}</pre>`;
- $('inspectorBody').innerHTML=`${sectionHtml('Summary','rule',summary,true)}${sectionHtml('Function Metadata','function',functionMetadataBlock(n),true)}${sectionHtml('Fields / Parameters',Object.keys(n.Parameters||{}).length,`${params}<div class="table-columns-head mt-12">Field Catalog Match</div>${fieldBody}`,Object.keys(n.Parameters||{}).length>0)}${sectionHtml('Attributes',attributeEntriesForRule(n).length,attributes,attributeEntriesForRule(n).length>0)}${sectionHtml('Status Results / Actions',actionListRowsForRule(n).length,statusActions,actionListRowsForRule(n).length>0)}${sectionHtml('Parent Rule / Sub-list Path','path',parentActionPath,false)}${sectionHtml('References',refs.length,relBody,false)}${diags.length?sectionHtml('Messages',diags.length,diagBody,false):''}${sectionHtml('Raw','JSON',raw,false)}`;
+ $('inspectorBody').innerHTML=`${sectionHtml('Summary','rule',summary,true)}${sectionHtml('Function Metadata','function',functionMetadataBlock(n),true)}${canonicalConfig}${sectionHtml('Fields / Parameters',Object.keys(n.Parameters||{}).length,`${params}<div class="table-columns-head mt-12">Field Catalog Match</div>${fieldBody}`,Object.keys(n.Parameters||{}).length>0)}${sectionHtml('Attributes',attributeEntriesForRule(n).length,attributes,attributeEntriesForRule(n).length>0)}${sectionHtml('Status Results / Actions',actionListRowsForRule(n).length,statusActions,actionListRowsForRule(n).length>0)}${sectionHtml('Parent Rule / Sub-list Path','path',parentActionPath,false)}${sectionHtml('References',refs.length,relBody,false)}${diags.length?sectionHtml('Messages',diags.length,diagBody,false):''}${sectionHtml('Raw','JSON',raw,false)}`;
 }
 
 function sameName(a,b){return text(a).trim().toLowerCase()===text(b).trim().toLowerCase();}
@@ -1783,7 +1940,7 @@ function globalNavigationCounts(){
   return {
     resources:first(definedCounts.resourceTypes,domainRowsByView('resources').length),
     functions:first(model.fwd?.functions?.count,domainRowsByView('functions').length),
-    tables:first(model.fwd?.tables?.count,definedCounts.tables,tableDefs.length),
+    tables:first(model.fwd?.selectionLists?.count,model.fwd?.tables?.count,definedCounts.tables,tableDefs.length),
     drivers:domainRowsByView('drivers').length,
     udfs:buildUdfDefinitions().length
   };
@@ -1824,7 +1981,7 @@ function renderObjectTreeBlock(){
     structure:scopedRuleNodes().length,
     resources:first(definedCounts?.resourceTypes,toTotal(resources)),
     functions:first(model.fwd?.functions?.count,toTotal(domainRowsByView('functions'))),
-    tables:first(model.fwd?.tables?.count,definedCounts?.tables,tableDefs.length),
+    tables:first(model.fwd?.selectionLists?.count,model.fwd?.tables?.count,definedCounts?.tables,tableDefs.length),
     drivers:toTotal(drivers),
     udfs:toTotal(udfs),
     unresolvedFields:getScopeFieldResolutionIndex(state.scopeId).summary.unresolved

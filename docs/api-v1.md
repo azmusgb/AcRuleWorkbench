@@ -73,9 +73,22 @@ GET /api/v1/fwd/selection-lists
 GET /api/v1/fwd/runtime-impact
 ```
 
-These routes are canonical read-only projections, not authoring surfaces. UDF bodies
-and SelectionList schemas remain explicitly marked as unparsed when only resource names
-and usage-derived evidence are available.
+These routes are canonical read-only projections, not authoring surfaces. Snapshot
+builds now request resource configuration and bounded private resource trees, so UDF
+definitions can expose field-list parameters, status results, candidate private body
+nodes, caller-slot bindings, and resource evidence when the native payload contains
+those signals. SelectionList/table definitions can expose parsed match fields, plug
+fields, persistence, rerun/keyer/popup/enter/no-good-match options, and plug/reject
+outcome roles from resource evidence. When the native payload only yields resource
+names or rule usage, the same packets keep explicit diagnostics rather than implying
+full FormWorks Editor parity.
+
+The desktop viewer hydrates these canonical packets directly when hosted by the API:
+the Resources workspace consumes the object graph, the selected-rule inspector shows
+the RuleConfiguration packet, the UDF workspace consumes canonical UDF definitions,
+the Tables workspace consumes SelectionList definitions, and the Functions workspace
+shows runtime-impact records. These panels remain static evidence views; they do not
+execute AC rules or modify FWD configuration.
 
 ## Rule identifier behavior
 
