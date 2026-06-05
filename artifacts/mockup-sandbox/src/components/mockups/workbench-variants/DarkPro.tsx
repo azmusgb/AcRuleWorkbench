@@ -150,6 +150,48 @@ const RECENT = [
   { label:'BATCH_STANDARD',      kind:'batch',     path:'/batches/BATCH_STANDARD', ts:'Yesterday' },
 ];
 
+/* Phase 2 static data */
+const DOC_PAGES = [
+  { name:'PAGE_INVOICE_HEADER', variants:2, fields:4, warn:1 },
+  { name:'PAGE_LINE_ITEMS',     variants:1, fields:6, warn:0 },
+  { name:'PAGE_FOOTER',         variants:1, fields:2, warn:0 },
+];
+const DOC_FIELDS = [
+  { name:'doc_id',      type:'String',  src:'DB',  bound:'DOC_CAPTURE_MAIN' },
+  { name:'capture_date',type:'Date',    src:'OCR', bound:'DOC_CAPTURE_MAIN' },
+  { name:'vendor_id',   type:'String',  src:'DB',  bound:'DOC_CAPTURE_MAIN' },
+  { name:'total_amount',type:'Numeric', src:'OCR', bound:'DOC_CAPTURE_MAIN' },
+];
+const DOC_DIAGS = [
+  { sev:'warn', msg:'2 unresolved WFFileRef references', src:'resource' },
+  { sev:'info', msg:'DOC_CAPTURE_MAIN references 3 pages across 1 batch', src:'parser' },
+];
+const BATCH_DOCS_TREE = [
+  { name:'DOC_CAPTURE_MAIN', pages:['PAGE_INVOICE_HEADER','PAGE_LINE_ITEMS','PAGE_FOOTER'], warn:2 },
+];
+const BATCH_META = [
+  ['name','BATCH_STANDARD'], ['documents','1'], ['pages','3 (via docs)'],
+  ['processes','2'], ['AC process','configured'], ['Store process','configured'],
+];
+const WHERE_USED = [
+  { consumer:'ValidateDateFormat', objType:'rule',    path:'/pages/PAGE_INVOICE_HEADER/AC', refMode:'direct',  warn:1 },
+  { consumer:'ValidateTotal',      objType:'rule',    path:'/pages/PAGE_INVOICE_HEADER/AC', refMode:'direct',  warn:0 },
+  { consumer:'DOC_CAPTURE_MAIN',   objType:'document',path:'/documents/DOC_CAPTURE_MAIN',  refMode:'indirect',warn:0 },
+  { consumer:'CaptureLineRef',     objType:'rule',    path:'/pages/PAGE_LINE_ITEMS/AC',     refMode:'direct',  warn:0 },
+];
+const SEARCH_INDEX = [
+  { label:'PAGE_INVOICE_HEADER', kind:'page',     sub:'3 variants · 4 fields' },
+  { label:'PAGE_LINE_ITEMS',     kind:'page',     sub:'1 variant · 6 fields' },
+  { label:'PAGE_FOOTER',         kind:'page',     sub:'1 variant · 2 fields' },
+  { label:'DOC_CAPTURE_MAIN',    kind:'document', sub:'3 pages · 2 warnings' },
+  { label:'BATCH_STANDARD',      kind:'batch',    sub:'1 document' },
+  { label:'VendorLookup',        kind:'resource', sub:'Functions · 4 usages' },
+  { label:'TaxCalc',             kind:'resource', sub:'Functions · 2 usages' },
+  { label:'ValidateDateFormat',  kind:'page',     sub:'Rule · PAGE_INVOICE_HEADER/AC' },
+  { label:'MatchField',          kind:'resource', sub:'Function · 14 usages' },
+  { label:'RegexCapture',        kind:'resource', sub:'Function · 8 usages' },
+];
+
 /* ─── Tab types ──────────────────────────────────────────────────────────── */
 type TabKind = 'overview'|'page'|'document'|'batch'|'resource'|'raw';
 interface WorkspaceTab { id:string; kind:TabKind; label:string; nodeId?:string }
@@ -281,7 +323,7 @@ function TreeNode({ node, depth, selected, onSelect, expanded, onToggle, onOpen 
 }
 
 /* ─── Top Command Bar ────────────────────────────────────────────────────── */
-function TopCommandBar({ warnCount, errCount }:{ warnCount:number; errCount:number }) {
+function TopCommandBar({ warnCount, errCount, onSearch }:{ warnCount:number; errCount:number; onSearch:()=>void }) {
   return (
     <header style={{ height:48, flexShrink:0, display:'flex', alignItems:'center',
       padding:'0 14px', borderBottom:`1px solid ${T.border}`,
@@ -324,11 +366,13 @@ function TopCommandBar({ warnCount, errCount }:{ warnCount:number; errCount:numb
 
       {/* Global search */}
       <div style={{ flex:1, maxWidth:440 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, backgroundColor:T.bgBase,
-          border:`1px solid ${T.border}`, borderRadius:5, padding:'0 10px', height:28 }}>
+        <div onClick={onSearch} style={{ display:'flex', alignItems:'center', gap:6,
+          backgroundColor:T.bgBase, border:`1px solid ${T.border}`, borderRadius:5,
+          padding:'0 10px', height:28, cursor:'text' }}>
           <Search size={11} color={T.tx3} />
-          <input type="search" placeholder="Search objects, GUIDs, rules, attributes…"
-            style={{ flex:1, fontSize:11, color:T.tx1 }} />
+          <span style={{ flex:1, fontSize:11, color:T.tx3 }}>
+            Search objects, GUIDs, rules, attributes…
+          </span>
           <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3, border:`1px solid ${T.border}`,
             borderRadius:3, padding:'0px 4px', flexShrink:0 }}>⌘K</span>
         </div>
@@ -937,6 +981,560 @@ function RawNodeInspectorView() {
   );
 }
 
+/* ─── View: Document Inspector ───────────────────────────────────────────── */
+function DocumentInspectorView({ docName, onOpenPage }:{
+  docName:string; onOpenPage:(name:string)=>void;
+}) {
+  const [selPage, setSelPage] = useState<string|null>(null);
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'8px 16px', borderBottom:`1px solid ${T.border}`,
+        flexShrink:0, display:'flex', alignItems:'center', gap:10 }}>
+        <Layers size={13} color={T.violet}/>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>Documents</span>
+        <ChevronRight size={10} color={T.tx3}/>
+        <span style={{ fontFamily:MONO, fontSize:11, fontWeight:600, color:T.tx1 }}>{docName}</span>
+        <WarnBadge n={2}/>
+        <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:'auto' }}>
+          {['AC','Store'].map(p => (
+            <button key={p} style={{ fontSize:10, padding:'2px 8px', borderRadius:4,
+              border:`1px solid ${T.border}`, backgroundColor:T.bgSurface, color:T.tx3 }}>{p}</button>
+          ))}
+          <button style={{ display:'flex', alignItems:'center', gap:4, fontSize:10,
+            padding:'2px 8px', borderRadius:4, border:`1px solid ${T.border}`,
+            backgroundColor:T.bgSurface, color:T.tx3 }}>
+            <Binary size={9}/> Raw
+          </button>
+        </div>
+      </div>
+
+      {/* 3-column body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+
+        {/* Left: pages in document */}
+        <div style={{ width:220, flexShrink:0, borderRight:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <SectionLabel>Pages in Document ({DOC_PAGES.length})</SectionLabel>
+          <div style={{ flex:1, overflow:'auto' }}>
+            {DOC_PAGES.map(p => (
+              <div key={p.name} onClick={()=>setSelPage(p.name)}
+                style={{ padding:'7px 10px', cursor:'pointer',
+                  borderLeft:`2px solid ${selPage===p.name?T.violet:'transparent'}`,
+                  backgroundColor:selPage===p.name?T.violetLo:'transparent',
+                  borderBottom:`1px solid ${T.border2}` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:3 }}>
+                  <FileText size={10} color={selPage===p.name?T.blue:T.tx3}/>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:selPage===p.name?T.tx1:T.tx2,
+                    flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {p.name}
+                  </span>
+                  {p.warn>0 && <WarnBadge n={p.warn}/>}
+                </div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3, paddingLeft:16 }}>
+                  {p.variants}v · {p.fields} fields
+                </div>
+              </div>
+            ))}
+          </div>
+          {selPage && (
+            <div style={{ padding:'8px 10px', borderTop:`1px solid ${T.border}`, flexShrink:0 }}>
+              <button onClick={()=>onOpenPage(selPage)}
+                style={{ width:'100%', display:'flex', alignItems:'center', gap:6,
+                  padding:'5px 8px', borderRadius:4, border:`1px solid ${T.blue}44`,
+                  backgroundColor:T.blueLo, fontSize:10, color:T.blue, justifyContent:'center' }}>
+                <ArrowRight size={10}/> Open {selPage}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Center: document fields + metadata */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <SectionLabel>Document Fields</SectionLabel>
+          <div style={{ overflow:'auto', flex:1 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
+              <thead>
+                <tr style={{ backgroundColor:T.bgPanel, position:'sticky', top:0 }}>
+                  {['Name','Type','Source','Bound To'].map(h=>(
+                    <th key={h} style={{ padding:'5px 12px', fontFamily:MONO, fontSize:8,
+                      textAlign:'left', color:T.tx3, fontWeight:700, letterSpacing:'0.07em',
+                      textTransform:'uppercase', borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {DOC_FIELDS.map((f,i)=>(
+                  <tr key={f.name} style={{ backgroundColor:i%2===0?'transparent':T.bgPanel2+'60',
+                    cursor:'pointer' }}>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:10, color:T.accent }}>{f.name}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:10, color:T.blue }}>{f.type}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:10, color:T.tx3 }}>{f.src}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:10, color:T.tx2 }}>{f.bound}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Metadata */}
+            <SectionLabel>Metadata</SectionLabel>
+            <div style={{ margin:'0 10px', borderRadius:5, border:`1px solid ${T.border2}`,
+              overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:14 }}>
+              {[['name',docName],['pages','3'],['fields','4'],['batches','1 (BATCH_STANDARD)'],
+                ['raw path','/Root/Documents/DOC_CAPTURE_MAIN'],
+                ['processes','AC, Store']].map(([k,v])=>(
+                <div key={k} style={{ display:'grid', gridTemplateColumns:'100px 1fr',
+                  padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                  <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: relationships + diagnostics */}
+        <div style={{ width:230, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'auto' }}>
+          <SectionLabel>Batch Membership</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'6px 10px',
+              borderBottom:`1px solid ${T.border2}` }}>
+              <Package size={10} color={T.amber}/>
+              <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>BATCH_STANDARD</span>
+              <KindTag kind="batch"/>
+            </div>
+          </div>
+          <SectionLabel>Diagnostics</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {DOC_DIAGS.map((d,i)=>(
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:6,
+                padding:'6px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                <SevIcon sev={d.sev} size={10}/>
+                <div>
+                  <div style={{ fontSize:10, color:T.tx2, lineHeight:1.5 }}>{d.msg}</div>
+                  <div style={{ fontFamily:MONO, fontSize:8, color:T.tx3, marginTop:2 }}>{d.src}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <SectionLabel>Actions</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {['Open AC processing','Show page membership','Open raw node','Export as JSON'].map(a=>(
+              <button key={a} style={{ width:'100%', display:'flex', alignItems:'center',
+                gap:7, padding:'6px 10px', borderBottom:`1px solid ${T.border2}`,
+                fontSize:10, color:T.tx2, textAlign:'left' }}>
+                <ArrowRight size={9} color={T.tx3}/>{a}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── View: Batch Inspector ──────────────────────────────────────────────── */
+function BatchInspectorView({ batchName }:{ batchName:string }) {
+  const [selDoc, setSelDoc] = useState<string|null>('DOC_CAPTURE_MAIN');
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set(['DOC_CAPTURE_MAIN']));
+
+  function toggleDoc(name:string) {
+    setExpandedDocs(prev=>{ const n=new Set(prev); n.has(name)?n.delete(name):n.add(name); return n; });
+  }
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'8px 16px', borderBottom:`1px solid ${T.border}`,
+        flexShrink:0, display:'flex', alignItems:'center', gap:10 }}>
+        <Package size={13} color={T.amber}/>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>Batches</span>
+        <ChevronRight size={10} color={T.tx3}/>
+        <span style={{ fontFamily:MONO, fontSize:11, fontWeight:600, color:T.tx1 }}>{batchName}</span>
+        <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:'auto' }}>
+          {['AC','Store'].map(p=>(
+            <button key={p} style={{ fontSize:10, padding:'2px 8px', borderRadius:4,
+              border:`1px solid ${T.border}`, backgroundColor:T.bgSurface, color:T.tx3 }}>{p}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+        {/* Left: document membership tree */}
+        <div style={{ width:240, flexShrink:0, borderRight:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <SectionLabel>Document Membership</SectionLabel>
+          <div style={{ flex:1, overflow:'auto' }}>
+            {BATCH_DOCS_TREE.map(doc=>(
+              <div key={doc.name}>
+                <button onClick={()=>{ setSelDoc(doc.name); toggleDoc(doc.name); }}
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:6,
+                    padding:'6px 10px', cursor:'pointer', textAlign:'left',
+                    borderLeft:`2px solid ${selDoc===doc.name?T.amber:'transparent'}`,
+                    backgroundColor:selDoc===doc.name?T.amberLo:'transparent',
+                    borderBottom:`1px solid ${T.border2}` }}>
+                  {expandedDocs.has(doc.name)
+                    ? <ChevronDown size={10} color={T.tx3}/>
+                    : <ChevronRight size={10} color={T.tx3}/>}
+                  <Layers size={10} color={selDoc===doc.name?T.violet:T.tx3}/>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:selDoc===doc.name?T.tx1:T.tx2,
+                    flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    {doc.name}
+                  </span>
+                  {doc.warn>0 && <WarnBadge n={doc.warn}/>}
+                </button>
+                {expandedDocs.has(doc.name) && doc.pages.map(pg=>(
+                  <div key={pg} style={{ display:'flex', alignItems:'center', gap:5,
+                    padding:'4px 10px 4px 28px', borderBottom:`1px solid ${T.border2}`,
+                    cursor:'pointer' }}>
+                    <ChevronRight size={8} color={T.tx3}/>
+                    <FileText size={9} color={T.blue}/>
+                    <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{pg}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center: batch metadata + page rollup */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', padding:16 }}>
+          <SectionLabel>Batch Metadata</SectionLabel>
+          <div style={{ borderRadius:6, border:`1px solid ${T.border2}`, overflow:'hidden',
+            backgroundColor:T.bgSurface, marginBottom:14 }}>
+            {BATCH_META.map(([k,v])=>(
+              <div key={k} style={{ display:'grid', gridTemplateColumns:'130px 1fr',
+                padding:'5px 12px', borderBottom:`1px solid ${T.border2}` }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+
+          <SectionLabel>Page Rollup (via Documents)</SectionLabel>
+          <div style={{ borderRadius:6, border:`1px solid ${T.border}`, overflow:'hidden',
+            backgroundColor:T.bgPanel }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 80px 60px 60px',
+              padding:'5px 12px', borderBottom:`1px solid ${T.border}`,
+              backgroundColor:T.bgSurface2 }}>
+              {['Page','Variants','Fields','Warnings'].map(h=>(
+                <span key={h} style={{ fontFamily:MONO, fontSize:8, color:T.tx3, fontWeight:700,
+                  textTransform:'uppercase', letterSpacing:'0.07em' }}>{h}</span>
+              ))}
+            </div>
+            {DOC_PAGES.map((p,i)=>(
+              <div key={p.name} style={{ display:'grid', gridTemplateColumns:'1fr 80px 60px 60px',
+                padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                backgroundColor:i%2===0?'transparent':T.bgPanel2+'60' }}>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.blue,
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>{p.variants}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>{p.fields}</span>
+                <span>{p.warn>0?<WarnBadge n={p.warn}/>:<span style={{ fontFamily:MONO,fontSize:10,color:T.green }}>—</span>}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: impacts + diagnostics */}
+        <div style={{ width:210, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'auto' }}>
+          <SectionLabel>Impacts</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {[['Documents','1'],['Pages (rollup)','3'],['Total rules','29'],
+              ['Warnings','2'],['Errors','0']].map(([k,v])=>(
+              <div key={k} style={{ display:'grid', gridTemplateColumns:'110px 1fr',
+                padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, fontWeight:600,
+                  color:k==='Warnings'&&v!=='0'?T.amber:k==='Errors'&&v!=='0'?T.red:T.tx2 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <SectionLabel>Diagnostics</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:6,
+              padding:'6px 10px', borderBottom:`1px solid ${T.border2}` }}>
+              <SevIcon sev="warn" size={10}/>
+              <div style={{ fontSize:10, color:T.tx2, lineHeight:1.5 }}>
+                2 warnings propagated from DOC_CAPTURE_MAIN
+              </div>
+            </div>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:6, padding:'6px 10px' }}>
+              <SevIcon sev="info" size={10}/>
+              <div style={{ fontSize:10, color:T.tx2, lineHeight:1.5 }}>
+                Batch structure valid — 1 doc · 3 pages
+              </div>
+            </div>
+          </div>
+          <SectionLabel>Actions</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {['Open AC processing','Open Store config','Open raw node','Export batch'].map(a=>(
+              <button key={a} style={{ width:'100%', display:'flex', alignItems:'center',
+                gap:7, padding:'6px 10px', borderBottom:`1px solid ${T.border2}`,
+                fontSize:10, color:T.tx2, textAlign:'left' }}>
+                <ArrowRight size={9} color={T.tx3}/>{a}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── View: Resource Inspector ───────────────────────────────────────────── */
+function ResourceInspectorView({ resName }:{ resName:string }) {
+  const [selRow, setSelRow] = useState<string|null>(null);
+  const config = [
+    ['name', resName], ['type','Function'], ['category','Lookup'],
+    ['returns','String | null'], ['params','(key: String, table: String)'],
+    ['table','VENDOR_MASTER'], ['nullable','false'], ['cache','session'],
+  ];
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'8px 16px', borderBottom:`1px solid ${T.border}`,
+        flexShrink:0, display:'flex', alignItems:'center', gap:10 }}>
+        <Grid3X3 size={13} color={T.green}/>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>Resources / Functions</span>
+        <ChevronRight size={10} color={T.tx3}/>
+        <span style={{ fontFamily:MONO, fontSize:11, fontWeight:600, color:T.tx1 }}>{resName}</span>
+        <KindTag kind="resource"/>
+        <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:'auto' }}>
+          <button style={{ display:'flex', alignItems:'center', gap:4, fontSize:10,
+            padding:'2px 8px', borderRadius:4, border:`1px solid ${T.border}`,
+            backgroundColor:T.bgSurface, color:T.tx3 }}>
+            <Binary size={9}/> Raw Node
+          </button>
+          <button style={{ display:'flex', alignItems:'center', gap:4, fontSize:10,
+            padding:'2px 8px', borderRadius:4, border:`1px solid ${T.border}`,
+            backgroundColor:T.bgSurface, color:T.tx3 }}>
+            <Download size={9}/> Export
+          </button>
+        </div>
+      </div>
+
+      {/* 3-column body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+        {/* Left: public config */}
+        <div style={{ width:230, flexShrink:0, borderRight:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'auto' }}>
+          <SectionLabel>Public Config</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {config.map(([k,v])=>(
+              <div key={k} style={{ display:'grid', gridTemplateColumns:'80px 1fr',
+                padding:'5px 10px', borderBottom:`1px solid ${T.border2}`, alignItems:'start' }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.accent }}>{k}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2,
+                  wordBreak:'break-all', lineHeight:1.5 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+          <SectionLabel>Raw Node</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {[['path',`/Root/Resources/Functions/${resName}`],['type','Collection'],
+              ['size','1.4 KB'],['parse','Known']].map(([k,v])=>(
+              <div key={k} style={{ display:'grid', gridTemplateColumns:'50px 1fr',
+                padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.tx2,
+                  wordBreak:'break-all' }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center: where-used table */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ padding:'6px 14px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
+            <span style={{ fontSize:10, color:T.tx2 }}>
+              {WHERE_USED.length} references
+            </span>
+            <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.greenLo,
+              color:T.green, borderRadius:3, padding:'1px 5px', marginLeft:'auto' }}>
+              {WHERE_USED.length} consumers
+            </span>
+          </div>
+          <div style={{ flex:1, overflow:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
+              <thead>
+                <tr style={{ backgroundColor:T.bgPanel, position:'sticky', top:0 }}>
+                  {['Consumer','Type','Path','Ref Mode','Warn'].map(h=>(
+                    <th key={h} style={{ padding:'5px 12px', fontFamily:MONO, fontSize:8,
+                      textAlign:'left', color:T.tx3, fontWeight:700, letterSpacing:'0.07em',
+                      textTransform:'uppercase', borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {WHERE_USED.map((w,i)=>(
+                  <tr key={w.consumer} onClick={()=>setSelRow(w.consumer)}
+                    style={{ backgroundColor:selRow===w.consumer?T.accentLo
+                      :i%2===0?'transparent':T.bgPanel2+'60',
+                      borderLeft:`2px solid ${selRow===w.consumer?T.accent:'transparent'}`,
+                      cursor:'pointer' }}>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:10, color:T.accent }}>{w.consumer}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}` }}>
+                      <KindTag kind={w.objType}/>
+                    </td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:9, color:T.tx3, maxWidth:180,
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{w.path}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}`,
+                      fontFamily:MONO, fontSize:9,
+                      color:w.refMode==='direct'?T.blue:T.tx3 }}>{w.refMode}</td>
+                    <td style={{ padding:'6px 12px', borderBottom:`1px solid ${T.border2}` }}>
+                      {w.warn>0 ? <WarnBadge n={w.warn}/> : <span style={{ color:T.tx3,fontFamily:MONO,fontSize:9 }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Right: diagnostics */}
+        <div style={{ width:200, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'auto' }}>
+          <SectionLabel>Diagnostics</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 10px',
+              borderBottom:`1px solid ${T.border2}` }}>
+              <CheckCircle size={12} color={T.green}/>
+              <span style={{ fontSize:10, color:T.green }}>No resource errors</span>
+            </div>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:6, padding:'8px 10px' }}>
+              <SevIcon sev="info" size={10}/>
+              <div style={{ fontSize:10, color:T.tx2, lineHeight:1.5 }}>
+                1 consumer has an active warning (ValidateDateFormat)
+              </div>
+            </div>
+          </div>
+          <SectionLabel>Actions</SectionLabel>
+          <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+            overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+            {['Copy resource name','Open raw node','Show all references','Export config'].map(a=>(
+              <button key={a} style={{ width:'100%', display:'flex', alignItems:'center',
+                gap:7, padding:'6px 10px', borderBottom:`1px solid ${T.border2}`,
+                fontSize:10, color:T.tx2, textAlign:'left' }}>
+                <ArrowRight size={9} color={T.tx3}/>{a}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Global Search Dialog ───────────────────────────────────────────────── */
+function GlobalSearchDialog({ onClose, onOpen }:{
+  onClose:()=>void; onOpen:(kind:TabKind,label:string)=>void;
+}) {
+  const [q, setQ] = useState('');
+  const results = q.length>=1
+    ? SEARCH_INDEX.filter(r=>r.label.toLowerCase().includes(q.toLowerCase()))
+    : SEARCH_INDEX.slice(0,6);
+
+  const groups = Array.from(new Set(results.map(r=>r.kind)));
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex',
+      alignItems:'flex-start', justifyContent:'center', paddingTop:80,
+      backgroundColor:'rgba(0,0,0,0.65)' }} onClick={onClose}>
+      <div style={{ width:560, backgroundColor:T.bgPanel, borderRadius:10,
+        border:`1px solid ${T.border}`, boxShadow:'0 24px 80px rgba(0,0,0,0.6)',
+        overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
+        {/* Search input */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
+          borderBottom:`1px solid ${T.border}` }}>
+          <Search size={14} color={T.accent}/>
+          <input autoFocus value={q} onChange={e=>setQ(e.target.value)}
+            placeholder="Search objects, rules, GUIDs, attributes…"
+            style={{ flex:1, fontSize:13, color:T.tx1 }}/>
+          <button onClick={onClose} style={{ color:T.tx3, display:'flex' }}>
+            <X size={14}/>
+          </button>
+        </div>
+
+        {/* Results */}
+        <div style={{ maxHeight:380, overflow:'auto', padding:'8px 0' }}>
+          {results.length===0 ? (
+            <div style={{ padding:'24px 16px', textAlign:'center', color:T.tx3, fontSize:11 }}>
+              No results for "{q}"
+            </div>
+          ) : (
+            groups.map(group=>(
+              <div key={group}>
+                <div style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
+                  textTransform:'uppercase', color:T.tx3, padding:'6px 16px 3px' }}>
+                  {group}
+                </div>
+                {results.filter(r=>r.kind===group).map(r=>(
+                  <div key={r.label}
+                    onClick={()=>{ onOpen(r.kind as TabKind, r.label); onClose(); }}
+                    style={{ display:'flex', alignItems:'center', gap:10,
+                      padding:'8px 16px', cursor:'pointer',
+                      borderRadius:0 }}
+                    onMouseOver={e=>(e.currentTarget.style.backgroundColor=T.bgHover)}
+                    onMouseOut={e=>(e.currentTarget.style.backgroundColor='transparent')}>
+                    <NodeIcon kind={r.kind} size={12}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:MONO, fontSize:11, color:T.tx1 }}>
+                        {r.label}
+                      </div>
+                      <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginTop:1 }}>
+                        {r.sub}
+                      </div>
+                    </div>
+                    <KindTag kind={r.kind}/>
+                    <ArrowRight size={10} color={T.tx3}/>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display:'flex', alignItems:'center', gap:14, padding:'8px 16px',
+          borderTop:`1px solid ${T.border}`, backgroundColor:T.bgBase }}>
+          {[['↵','open'],['↑↓','navigate'],['esc','close']].map(([k,l])=>(
+            <span key={l} style={{ display:'flex', alignItems:'center', gap:4 }}>
+              <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.bgSurface,
+                border:`1px solid ${T.border}`, borderRadius:3,
+                padding:'1px 5px', color:T.tx2 }}>{k}</span>
+              <span style={{ fontSize:9, color:T.tx3 }}>{l}</span>
+            </span>
+          ))}
+          <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+            {results.length} results
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Right Inspector Rail ───────────────────────────────────────────────── */
 function RightInspectorRail({ selectedFieldId, activeTab }:{
   selectedFieldId:string|null; activeTab:WorkspaceTab|null;
@@ -1134,6 +1732,7 @@ export function DarkPro() {
   );
   const [selectedFieldId, setSelectedFieldId] = useState<string|null>(null);
   const [bottomCollapsed, setBottomCollapsed] = useState(false);
+  const [searchOpen, setSearchOpen]           = useState(false);
 
   const warnCount = MESSAGES.filter(m=>m.sev==='warn').length;
 
@@ -1180,8 +1779,15 @@ export function DarkPro() {
         @media(prefers-reduced-motion:reduce){*{transition:none!important}}
       `}</style>
 
+      {/* Search dialog */}
+      {searchOpen && (
+        <GlobalSearchDialog
+          onClose={()=>setSearchOpen(false)}
+          onOpen={(kind,label)=>{ openTab(kind,label); setSearchOpen(false); }} />
+      )}
+
       {/* Top command bar */}
-      <TopCommandBar warnCount={warnCount} errCount={0} />
+      <TopCommandBar warnCount={warnCount} errCount={0} onSearch={()=>setSearchOpen(true)} />
 
       {/* Tab strip — full width above body */}
       <TabStrip tabs={tabs} activeId={activeTabId}
@@ -1207,17 +1813,17 @@ export function DarkPro() {
               selectedFieldId={selectedFieldId}
               onSelectField={setSelectedFieldId} />
           )}
-          {activeTab?.kind==='raw' && <RawNodeInspectorView />}
-          {activeTab && !['overview','page','raw'].includes(activeTab.kind) && (
-            <div style={{ flex:1, display:'flex', flexDirection:'column',
-              alignItems:'center', justifyContent:'center', gap:10, color:T.tx3 }}>
-              <NodeIcon kind={activeTab.kind} size={24}/>
-              <div style={{ fontFamily:MONO, fontSize:12, color:T.tx2 }}>{activeTab.label}</div>
-              <div style={{ fontSize:11, color:T.tx3 }}>
-                {activeTab.kind} inspector — Phase 2
-              </div>
-            </div>
+          {activeTab?.kind==='document' && (
+            <DocumentInspectorView docName={activeTab.label}
+              onOpenPage={name=>openTab('page',name)} />
           )}
+          {activeTab?.kind==='batch' && (
+            <BatchInspectorView batchName={activeTab.label} />
+          )}
+          {activeTab?.kind==='resource' && (
+            <ResourceInspectorView resName={activeTab.label} />
+          )}
+          {activeTab?.kind==='raw' && <RawNodeInspectorView />}
         </main>
 
         {/* Right inspector rail */}
