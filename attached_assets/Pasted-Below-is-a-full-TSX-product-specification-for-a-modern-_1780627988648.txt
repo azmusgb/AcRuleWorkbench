@@ -1,0 +1,1224 @@
+Below is a full TSX product specification for a modern replica of the FormWorks / Document Capture Manager Editor. It is grounded in the actual editor model and wrapper surface, not just visual interpretation.
+
+The most important grounding points are:
+
+* FWEditor is a three-part workstation window: FWD Tree, Configuration Window, and Message Window.  
+* The Editor is a GUI for defining pages, documents, batches, and the process/resource configurations associated with them in the .FWD database, with process/resource behavior controlled through PCMs.
+* Rules are not flat rows. They are ordered rule lists with actions, sub-lists, and parent rules, forming a tree of rule evaluations.
+* Page editing is image-template-centric, and page-level process access is contextual: from the page image’s processes panel or from the FWD tree. Field-level process access comes from right-clicking the field in the page image.  
+* The wrapper surface supports the exact object hierarchy you need to reproduce: pages, variants, documents, batches, processes, resources, private process nodes, page/document traversal, raw STC child nodes, and page/variant field geometry.
+* Navigator is a separate web monitoring/governance product with dashboard panels and left navigation, and should not be confused with FWEditor’s tree-driven configuration UX.
+
+⸻
+
+1. Product definition
+
+1.1 Product goal
+
+Build a TSX-based engineering workbench that replicates the Editor, not Navigator.
+
+That means the product is primarily for:
+
+* inspecting and editing the FWD object hierarchy
+* configuring object-bound processes
+* editing page geometry and variants
+* managing resources
+* editing rule trees
+* inspecting raw node structures
+* seeing messages/diagnostics continuously
+
+It is not primarily:
+
+* a dashboard
+* a live-ops monitor
+* a report center
+* a workflow administration portal
+
+1.2 Fidelity target
+
+The implementation should preserve these editor truths:
+
+1. Tree-first navigation
+2. Selection-driven context
+3. Multi-pane workstation layout
+4. Image-backed page editing
+5. Rule-tree editing with action sub-lists
+6. Persistent message window
+7. Heavy right-click/context interaction
+8. Scope awareness at field/page/variant/document/batch/process/resource levels
+
+⸻
+
+2. Technology recommendation for TSX implementation
+
+2.1 Frontend stack
+
+Recommended:
+
+* React
+* TypeScript
+* TanStack Router
+* TanStack Query
+* Zustand or Redux Toolkit
+* React Aria or equivalent keyboardable primitives
+* SVG + Canvas hybrid for image/field overlays
+* AG Grid / TanStack Table for dense configuration grids
+* Monaco only for raw/advanced panes where truly useful
+
+2.2 Layout library
+
+Prefer custom split-pane layout over generic dashboard kits.
+
+Recommended:
+
+* react-resizable-panels
+* or custom splitter implementation
+
+You need:
+
+* persistent pane sizes
+* nested split panes
+* low-latency resizing
+* docking-like behavior
+
+2.3 Styling system
+
+Use a stable design system, not utility drift.
+
+Recommended:
+
+* Tailwind or CSS Modules
+* tokenized semantic colors
+* very compact density scale
+* mono typography for metadata/tokens
+* square/low-radius panels
+* explicit separators
+
+⸻
+
+3. Global information architecture
+
+3.1 Root object model
+
+FWD
+├─ Pages
+│  ├─ Page
+│  │  ├─ Variants
+│  │  ├─ Fields
+│  │  └─ Processing
+├─ Documents
+│  ├─ Document
+│  │  ├─ Pages
+│  │  ├─ Fields
+│  │  └─ Processing
+├─ Batches
+│  ├─ Batch
+│  │  ├─ Documents
+│  │  └─ Processing
+├─ Processes
+│  ├─ AC
+│  ├─ Collator
+│  ├─ FIP
+│  ├─ OCR
+│  ├─ Store
+│  ├─ TwainScan
+│  └─ Inventory
+├─ Resources
+│  ├─ Tables
+│  ├─ Functions
+│  ├─ Filerefs
+│  ├─ Rule DLL
+│  ├─ Store DLL
+│  ├─ DateFormat
+│  ├─ Entry Grid
+│  ├─ Option Groups
+│  └─ DCN Groups
+├─ Diagnostics
+└─ Raw Nodes
+
+This is faithful to the documented editor content sections and the wrapper enumeration surface.
+
+3.2 Supported scopes
+
+These scopes must be explicit in UI and state:
+
+* Field
+* Page
+* Page Variant
+* Document
+* Batch
+* Process
+* Resource
+* Raw Node
+
+And for rules specifically:
+
+* field-bound
+* page-bound
+* variant-bound
+* document-bound
+* batch-bound
+
+The AC guide is explicit that rules can be bound to fields, graphic variants, page types, document types, and batch types, and that rules cannot reference fields outside their scope.  
+
+⸻
+
+4. Route map
+
+Use a desktop-style routed tab workspace.
+
+4.1 Primary routes
+
+/
+├─ /overview
+├─ /pages
+│  ├─ /pages/:pageName
+│  ├─ /pages/:pageName/variants/:variantName
+│  ├─ /pages/:pageName/fields/:fieldName
+│  └─ /pages/:pageName/process/:processName
+├─ /documents
+│  ├─ /documents/:docName
+│  └─ /documents/:docName/process/:processName
+├─ /batches
+│  ├─ /batches/:batchName
+│  └─ /batches/:batchName/process/:processName
+├─ /processes
+│  ├─ /processes/:processName
+│  └─ /processes/:processName/private/:nodePath
+├─ /resources
+│  ├─ /resources/:resourceType
+│  └─ /resources/:resourceType/:resourceName
+├─ /rules
+│  ├─ /rules/page/:pageName/:processName
+│  ├─ /rules/page/:pageName/:processName/field/:fieldName
+│  ├─ /rules/document/:docName/:processName
+│  └─ /rules/batch/:batchName/:processName
+├─ /raw
+│  └─ /raw/*nodePath
+└─ /diagnostics
+
+4.2 Tab identity model
+
+Routes and tabs are not identical. Tabs are route instances with persistent pane state.
+
+type WorkspaceTab =
+  | { id: string; kind: "overview"; route: "/overview" }
+  | { id: string; kind: "page"; route: `/pages/${string}`; pageName: string }
+  | { id: string; kind: "variant"; route: `/pages/${string}/variants/${string}`; pageName: string; variantName: string }
+  | { id: string; kind: "field"; route: `/pages/${string}/fields/${string}`; pageName: string; fieldName: string }
+  | { id: string; kind: "document"; route: `/documents/${string}`; docName: string }
+  | { id: string; kind: "batch"; route: `/batches/${string}`; batchName: string }
+  | { id: string; kind: "process"; route: `/processes/${string}`; processName: string }
+  | { id: string; kind: "resource"; route: `/resources/${string}/${string}`; resourceType: string; resourceName: string }
+  | { id: string; kind: "rawNode"; route: `/raw/${string}`; nodePath: string }
+  | { id: string; kind: "ruleEditor"; route: string; scope: "page" | "field" | "document" | "batch" };
+
+⸻
+
+5. Global app shell
+
+The editor guide’s core shell is tree + configuration + message window. Preserve that.  
+
+5.1 Shell structure
+
+<AppShell>
+  <TopCommandBar />
+  <MainHorizontalLayout>
+    <LeftExplorerPane />
+    <CenterWorkspacePane />
+    <RightInspectorRail />
+  </MainHorizontalLayout>
+  <BottomMessagePane />
+  <StatusBar />
+</AppShell>
+
+5.2 Pane sizing defaults
+
+Recommended default proportions:
+
+* Left explorer: 280px
+* Center workspace: flex
+* Right inspector rail: 320px
+* Bottom message pane: 160px collapsed / 260px expanded
+
+These should be resizable and persisted per user.
+
+⸻
+
+6. Top command bar contract
+
+6.1 Required regions
+
+<TopCommandBar>
+  <AppIdentity />
+  <DatabaseCommands />
+  <GlobalSearch />
+  <WorkspaceTabStrip />
+  <SessionStatus />
+  <HelpMenu />
+</TopCommandBar>
+
+6.2 Required actions
+
+* Open database
+* Recent databases
+* Reopen closed tab
+* Search objects
+* Jump to path
+* Open diagnostics
+* Toggle message pane
+* Help / shortcuts
+
+6.3 Things to avoid
+
+Do not make this a website navbar with:
+
+* Pages
+* Documents
+* Processes
+* Rules
+
+Those belong in the explorer tree, not in the top app bar.
+
+⸻
+
+7. Left explorer tree contract
+
+7.1 Core behavior
+
+The FWD tree is foundational. Page/image and rule workflows explicitly start from it when not opened through the image template.  
+
+Required behaviors:
+
+* expand/collapse
+* lazy loading
+* keyboard navigation
+* context menus
+* badges
+* search filter
+* open in tab
+* open in split
+
+7.2 Tree node type
+
+type ExplorerNodeKind =
+  | "root"
+  | "group"
+  | "page"
+  | "pageVariant"
+  | "field"
+  | "document"
+  | "batch"
+  | "process"
+  | "resourceType"
+  | "resource"
+  | "diagnosticGroup"
+  | "diagnostic"
+  | "rawNode";
+interface ExplorerNodeVm {
+  id: string;
+  kind: ExplorerNodeKind;
+  label: string;
+  path: string;
+  parentId?: string | null;
+  hasChildren: boolean;
+  children?: string[];
+  icon: string;
+  badges?: Array<{ kind: "warning" | "error" | "dirty" | "count"; value?: string | number }>;
+  isExpanded?: boolean;
+  isSelected?: boolean;
+  isLoading?: boolean;
+  canContextMenu?: boolean;
+}
+
+7.3 Explorer context menus
+
+For pages
+
+* Open
+* Open in new tab
+* Open AC processing
+* Open field list
+* Open variants
+* Open raw node
+* Show where used
+
+For fields
+
+* Open field processing
+* Show references
+* Select on page image
+* Open raw metadata
+
+For documents/batches
+
+* Open processing
+* Open membership
+* Open raw node
+
+For resources
+
+* Open config
+* Show references
+* Open raw node
+
+For rules
+
+* Open rule tree
+* Open field-specific rules
+* Show impacted resources
+
+⸻
+
+8. State schema
+
+8.1 Root store
+
+interface AppState {
+  session: SessionState;
+  workspace: WorkspaceState;
+  explorer: ExplorerState;
+  selection: SelectionState;
+  diagnostics: DiagnosticsState;
+  search: SearchState;
+  entities: EntityState;
+  layout: LayoutState;
+}
+
+8.2 Session state
+
+interface SessionState {
+  databasePath: string | null;
+  databaseName: string | null;
+  releaseNumber?: number | null;
+  releaseString?: string | null;
+  releaseDateString?: string | null;
+  readonly: boolean;
+  isLoaded: boolean;
+  isLoading: boolean;
+  openError?: string | null;
+}
+
+The wrapper exposes FWD attributes and release metadata, so that should appear in session state.  
+
+8.3 Selection state
+
+type SelectionState =
+  | { kind: "none" }
+  | { kind: "page"; pageName: string }
+  | { kind: "pageVariant"; pageName: string; variantName: string | null }
+  | { kind: "field"; pageName: string; variantName?: string | null; fieldName: string }
+  | { kind: "document"; docName: string }
+  | { kind: "batch"; batchName: string }
+  | { kind: "process"; processName: string; targetScope?: "page" | "document" | "batch"; targetName?: string }
+  | { kind: "resource"; resourceType: string; resourceName: string }
+  | { kind: "rule"; scopeKey: string; ruleNodeId: string }
+  | { kind: "rawNode"; nodePath: string };
+
+8.4 Layout state
+
+interface LayoutState {
+  leftPaneWidth: number;
+  rightPaneWidth: number;
+  bottomPaneHeight: number;
+  bottomPaneCollapsed: boolean;
+  inspectorMode: "metadata" | "type" | "route" | "export";
+  currentCanvasZoom: number;
+  currentCanvasPan: { x: number; y: number };
+}
+
+8.5 Workspace state
+
+interface WorkspaceState {
+  tabs: WorkspaceTab[];
+  activeTabId: string | null;
+  recentTabs: WorkspaceTab[];
+  splitMode: "none" | "vertical" | "horizontal";
+}
+
+8.6 Diagnostics state
+
+type DiagnosticSeverity = "error" | "warning" | "info";
+interface DiagnosticVm {
+  id: string;
+  severity: DiagnosticSeverity;
+  source: "interop" | "rules" | "resource" | "page" | "variant" | "process" | "parser";
+  title: string;
+  message: string;
+  objectPath?: string;
+  relatedEntityId?: string;
+  relatedRoute?: string;
+  timestamp?: string;
+}
+
+8.7 Entity state
+
+Normalize aggressively.
+
+interface EntityState {
+  pages: Record<string, PageVm>;
+  variants: Record<string, VariantVm>;
+  fields: Record<string, FieldVm>;
+  documents: Record<string, DocumentVm>;
+  batches: Record<string, BatchVm>;
+  processes: Record<string, ProcessVm>;
+  resources: Record<string, ResourceVm>;
+  rules: Record<string, RuleTreeVm>;
+  rawNodes: Record<string, RawNodeVm>;
+  references: ReferenceEdge[];
+}
+
+⸻
+
+9. Domain view models
+
+9.1 Page and variant
+
+interface PageVm {
+  id: string;
+  name: string;
+  variantNames: string[];
+  fieldIds: string[];
+  processNames: string[];
+  documentIds: string[];
+  rawNodePath?: string;
+  diagnostics: string[];
+}
+interface VariantVm {
+  id: string;
+  pageName: string;
+  variantName: string | null;
+  formId?: number | null;
+  fieldIds: string[];
+  imageSource?: { kind: "bytes" | "tempfile" | "none"; url?: string };
+  dropoutRegions?: DropoutRegionVm[];
+  omrFields?: OmrFieldVm[];
+  diagnostics: string[];
+}
+
+The wrapper supports page variants, image access, fields info, dropout regions, and OMR field configuration.
+
+9.2 Field
+
+interface FieldVm {
+  id: string;
+  pageName: string;
+  variantName?: string | null;
+  name: string;
+  fieldType?: string;
+  rect?: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+  source?: string | null;
+  ruleReferences: string[];
+  diagnostics: string[];
+}
+
+The wrapper exposes field geometry and type through FieldsInfo.  
+
+9.3 Document and batch
+
+interface DocumentVm {
+  id: string;
+  name: string;
+  pageNames: string[];
+  fieldIds: string[];
+  processNames: string[];
+  batchIds: string[];
+  rawNodePath?: string;
+  diagnostics: string[];
+}
+interface BatchVm {
+  id: string;
+  name: string;
+  documentNames: string[];
+  processNames: string[];
+  rawNodePath?: string;
+  diagnostics: string[];
+}
+
+Fwd exposes GetPagesInDoc, GetDocsInBatch, and batch/document node access.
+
+9.4 Process and resource
+
+interface ProcessVm {
+  id: string;
+  name: string;
+  pageBindings: string[];
+  documentBindings: string[];
+  batchBindings: string[];
+  privateNodePath?: string;
+  diagnostics: string[];
+}
+interface ResourceVm {
+  id: string;
+  resourceType: string;
+  name: string;
+  publicConfig?: Record<string, unknown>;
+  privateNodePath?: string;
+  whereUsed: ReferenceEdge[];
+  diagnostics: string[];
+}
+
+The wrapper exposes process names, private process nodes, resource names, public config, and private resource nodes.
+
+9.5 Raw nodes
+
+interface RawNodeVm {
+  id: string;
+  path: string;
+  name: string;
+  isCollection: boolean;
+  childNames: string[];
+  size?: number;
+  asciiValue?: string | null;
+  rawData?: Uint8Array | null;
+  attrs?: Record<string, unknown> | null;
+  parseMode: "known" | "partial" | "generic" | "unknown";
+  diagnostics: string[];
+}
+
+STCHandle exposes child names, child node access, attr list loading, value, data, size, and save-to-file.
+
+9.6 Rules
+
+interface RuleTreeVm {
+  id: string;
+  scope: "page" | "field" | "document" | "batch" | "udf";
+  scopeKey: string;
+  processName: string;
+  rootNodeIds: string[];
+}
+interface RuleNodeVm {
+  id: string;
+  parentId: string | null;
+  hierarchyLevel: number;
+  actionListIndex: number | null;
+  ruleName?: string;
+  functionType?: string;
+  functionName?: string;
+  disabled?: boolean;
+  fields: string[];
+  attributes: Record<string, unknown>;
+  statuses: RuleStatusVm[];
+  childNodeIds: string[];
+}
+interface RuleStatusVm {
+  ordinal: number;
+  token: string;
+  description?: string;
+  actionType: "none" | "reject" | "subrule" | "statusResult";
+  actionLabel?: string;
+  targetChildListId?: string | null;
+}
+
+This mirrors the documented rule semantics: rule lists, actions, sub-lists, parent rules, fixed status results, and per-status actions.
+
+⸻
+
+10. Component catalog
+
+10.1 Shell-level components
+
+<AppShell />
+<TopCommandBar />
+<LeftExplorerPane />
+<CenterWorkspacePane />
+<RightInspectorRail />
+<BottomMessagePane />
+<StatusBar />
+
+10.2 Explorer and navigation
+
+<FwdTree />
+<ExplorerNode />
+<ExplorerFilterBox />
+<ObjectBreadcrumb />
+<WorkspaceTabs />
+<TabStrip />
+
+10.3 Overview
+
+<SystemOverviewPage />
+<OverviewCountsStrip />
+<RecentObjectsTable />
+<DiagnosticsSummaryPanel />
+<FwdMetadataPanel />
+<RelationshipSummaryPanel />
+
+10.4 Page and variant
+
+<PageInspectorPage />
+<PageHeaderBar />
+<PageProcessPanel />
+<PageVariantSelector />
+<PageCanvas />
+<FieldOverlayLayer />
+<DropoutRegionLayer />
+<OmrOverlayLayer />
+<FieldGrid />
+<FieldInspectorPanel />
+<PageDiagnosticsPanel />
+
+10.5 Document and batch
+
+<DocumentInspectorPage />
+<DocumentPageMembershipPanel />
+<DocumentFieldGrid />
+<BatchInspectorPage />
+<BatchDocumentTree />
+<BatchProcessingPanel />
+
+10.6 Rules
+
+<RuleEditorPage />
+<RuleTree />
+<RuleTreeNode />
+<RuleSummaryPanel />
+<RuleStatusMatrix />
+<RuleEditorHost />
+<DefaultRuleEditor />
+<FieldsTab />
+<AttributesTab />
+<RuleDescriptionPane />
+
+10.7 Resources
+
+<ResourceExplorerPage />
+<ResourceList />
+<ResourceInspectorPage />
+<ResourceMetadataPanel />
+<WhereUsedTable />
+<ResourceReferencesPanel />
+
+10.8 Raw nodes
+
+<RawNodeInspectorPage />
+<RawNodeTree />
+<RawModeTabs />
+<HexViewer />
+<TextViewer />
+<AttrsViewer />
+<ParsedViewer />
+<RawMetadataPanel />
+<ExportActionsPanel />
+
+10.9 Diagnostics and utility
+
+<MessageWindow />
+<DiagnosticsTable />
+<DiagnosticRow />
+<GlobalSearchDialog />
+<OpenDatabaseDialog />
+<ExportDialog />
+
+⸻
+
+11. Screen-by-screen layout contracts
+
+11.1 System Overview
+
+The editor itself is tree/config/message based, while Navigator is the dashboard-style product. So keep the overview restrained and object-centric, not like Navigator’s panel-heavy operational dashboard.
+
+Layout contract
+
+TopCommandBar
+LeftExplorer
+Center:
+  - Count strip
+  - Recent objects table
+  - Diagnostics summary
+  - FWD metadata
+  - Relationship summary
+RightInspector:
+  - current DB/session info
+BottomMessagePane
+
+Required data
+
+* page count
+* variant count
+* document count
+* batch count
+* process count
+* resource count
+* recent objects
+* FWD metadata (release/build/date if available)
+* diagnostics count
+
+Avoid
+
+* CPU
+* RAM
+* live network indicators
+* fake operational telemetry
+
+⸻
+
+11.2 Page Inspector
+
+The page editor must reflect that page editing is image-template-centric and that page-level process access exists from the page image’s process panel.
+
+Layout contract
+
+TopCommandBar
+LeftExplorer
+Center:
+  Header:
+    - breadcrumb
+    - page title
+    - variant selector
+    - page process panel
+  Body (horizontal split):
+    Left 70%:
+      - page/variant canvas
+      - zoom/pan toolbar
+      - overlay layers
+    Right 30%:
+      - field grid
+      - field quick filters
+RightInspector:
+  - selected field
+  - page metadata
+  - variant metadata
+  - diagnostics
+BottomMessagePane
+
+Canvas behaviors
+
+* zoom
+* pan
+* fit
+* select field
+* hover field label
+* sync with field grid
+* show/hide overlay layers
+
+Field grid columns
+
+* name
+* type
+* x
+* y
+* width
+* height
+* source
+* rule count
+* warning count
+
+⸻
+
+11.3 Variant Inspector
+
+The variant object model supports image data, fields info, dropout regions, OMR configs, and FormID.  
+
+Layout contract
+
+Header:
+  - page.variant title
+  - FormID
+  - process selector (FIP/OCR)
+Body:
+  Left:
+    - variant image canvas
+    - overlay toggles
+  Right:
+    - variant metadata
+    - dropout region list
+    - OMR field list
+    - diagnostics
+Bottom:
+  - geometry/messages
+
+Required overlay toggles
+
+* fields
+* dropout regions
+* OMR regions
+* diagnostics
+
+⸻
+
+11.4 Document Inspector
+
+Layout contract
+
+Header:
+  - document name
+  - process shortcuts
+Body:
+  Left:
+    - pages in document
+  Center:
+    - document fields / metadata
+  Right:
+    - relationships
+    - diagnostics
+Bottom:
+  - message window
+
+Required behaviors
+
+* open page from membership list
+* open document-level AC config
+* show batch membership
+* show raw node path if available
+
+⸻
+
+11.5 Batch Inspector
+
+Layout contract
+
+Header:
+  - batch title
+  - batch processes
+Body:
+  Left:
+    - document membership tree
+  Center:
+    - batch metadata
+    - page rollup via documents
+  Right:
+    - impacts / diagnostics
+Bottom:
+  - message window
+
+Required hierarchy view
+
+* Batch
+    * Document
+        * Page
+
+⸻
+
+11.6 Process Inspector / Process Scope Matrix
+
+The editor guide has separate process sections for AC, FIP, OCR, Store, TwainScan, Inventory, plus page/document/batch processing by scope.  
+
+Layout contract
+
+Header:
+  - process name
+  - target scope
+  - target object
+Body:
+  Top:
+    - scope matrix
+  Middle:
+    - linked resources
+    - reverse references
+  Bottom:
+    - diagnostics / notes
+RightInspector:
+  - process metadata
+  - private node path
+  - export/copy actions
+BottomMessagePane
+
+Scope matrix rows
+
+* System
+* Batch
+* Document
+* Page
+* Page Variant
+* Resource
+
+Matrix columns
+
+* scope object
+* configured?
+* references count
+* rules count
+* warnings count
+* open action
+
+⸻
+
+11.7 Rule Editor
+
+The AC guide is explicit about rule list semantics and UI elements: rule list, action list, status results, fields/parameters, description pane, customized interfaces, and generic fallback fields/attributes tabs.
+
+Layout contract
+
+Header:
+  - scope banner
+  - process name
+  - target object
+Body (3-column):
+  Left:
+    - rule tree
+  Center:
+    - selected rule summary
+    - status/action matrix
+    - function editor host
+  Right:
+    - rule description
+    - references
+    - diagnostics
+Bottom:
+  - message window
+
+Rule tree node visuals
+
+Each node row shows:
+
+* rule name
+* function name
+* disabled icon
+* status chip count
+* sub-list badge
+* warning badge
+
+Function editor host
+
+<RuleEditorHost functionName={node.functionName}>
+  {registry.has(functionName)
+    ? registry.render(functionName)
+    : <DefaultRuleEditor tabs={["Fields", "Attributes"]} />}
+</RuleEditorHost>
+
+That mirrors the documented custom editor vs default Fields/Attributes behavior.
+
+Rule status/action matrix
+
+Columns:
+
+* ordinal
+* token
+* description
+* action type
+* action target
+* open sub-list
+
+⸻
+
+11.8 Resource Inspector
+
+Resources are first-class in the editor guide and many rules depend on them. If resources change, open rule windows refresh.  
+
+Layout contract
+
+Header:
+  - resource type
+  - resource name
+Body:
+  Left:
+    - metadata / public config
+  Center:
+    - where-used table
+  Right:
+    - related raw node
+    - diagnostics
+Bottom:
+  - message window
+
+Where-used table columns
+
+* consumer object
+* object type
+* path
+* reference mode
+* open action
+
+⸻
+
+11.9 Raw STC Node Inspector
+
+The wrapper surface clearly supports a true child-node browser with raw data, value, attr lists, and export.
+
+Layout contract
+
+Header:
+  - raw node path
+  - mode tabs
+Body (3-pane):
+  Left:
+    - child node tree
+  Center:
+    - active mode viewer (Hex/Text/Attrs/Parsed)
+  Right:
+    - metadata
+    - parse status
+    - export actions
+Bottom:
+  - diagnostics / parser messages
+
+Mode tabs
+
+* Hex
+* Text
+* Attrs
+* Parsed
+
+Hex viewer columns
+
+* offset
+* 16 bytes
+* ASCII
+
+Parse status states
+
+* Known structure
+* Partial decode
+* Generic blob fallback
+* Unknown node type
+* Checksum mismatch
+
+⸻
+
+12. Interaction contracts
+
+12.1 Selection synchronization
+
+When user selects:
+
+* tree node → open/select workspace tab and inspector
+* field on canvas → select grid row + inspector
+* rule node → update rule summary + function editor
+* raw child node → update viewer + metadata
+
+12.2 Context menus
+
+Required everywhere meaningful:
+
+* tree nodes
+* field overlays
+* rule nodes
+* resource rows
+* raw node rows
+
+12.3 Save model
+
+Because FWEditor often saves on close, but you are building in TSX, model two modes:
+
+Compatibility mode
+
+* apply changes on focus switch/close
+
+Safer modern mode
+
+* in-memory dirty state
+* explicit Apply/Save at object scope
+
+If you are building read-only first, still wire the dirty-state model now.
+
+⸻
+
+13. Backend contract from wrapper surface
+
+13.1 Open / metadata
+
+Fwd(string fileName) opens readonly; release metadata is available from FWD attributes.  
+
+Endpoints:
+
+GET /api/session
+POST /api/open
+GET /api/fwd/attributes
+
+13.2 Hierarchy
+
+Fwd exposes pages, variants, documents, batches, processes, resources, pages-in-doc, docs-in-batch.
+
+Endpoints:
+
+GET /api/pages
+GET /api/pages/:page
+GET /api/pages/:page/variants
+GET /api/documents
+GET /api/documents/:doc/pages
+GET /api/batches
+GET /api/batches/:batch/documents
+GET /api/processes
+GET /api/resources/:resourceType
+
+13.3 Page/variant geometry
+
+FieldsInfo supports page/document/variant field geometry and type. PageVariantConfig supports image bytes, FormID, dropout regions, OMR configs.
+
+Endpoints:
+
+GET /api/pages/:page/fields
+GET /api/pages/:page/variants/:variant
+GET /api/pages/:page/variants/:variant/image
+GET /api/pages/:page/variants/:variant/dropout-regions?process=FIP
+GET /api/pages/:page/variants/:variant/omr-fields?process=FIP
+
+13.4 Raw node access
+
+STCHandle supports child nodes, attr lists, values, bytes, and export.
+
+Endpoints:
+
+GET /api/raw?path=/Root/Processes/FIP/Resource_02
+GET /api/raw/children?path=...
+GET /api/raw/value?path=...
+GET /api/raw/data?path=...
+GET /api/raw/attrs?path=...
+POST /api/raw/export
+
+⸻
+
+14. Exact implementation priorities
+
+Phase 1
+
+* shell
+* explorer
+* overview
+* page inspector
+* raw node inspector
+* message window
+
+Phase 2
+
+* document inspector
+* batch inspector
+* resource inspector
+* search
+* references
+
+Phase 3
+
+* rule editor
+* process scope matrix
+* variant overlays
+* diagnostics graph
+
+Phase 4
+
+* custom rule editor registry
+* advanced compare/diff
+* workflow visualization
+
+⸻
+
+15. Final build principle
+
+The clearest way to keep this faithful is:
+
+Build it as a multi-pane, tree-driven, image-backed configuration workbench with rule-tree editing and persistent diagnostics.
+
+That is the actual FormWorks Editor DNA.
+
+The most important mistakes to avoid are:
+
+* dashboard-first layout
+* browser-site top navigation
+* losing the FWD tree
+* flattening rules into tables
+* treating page editing as forms-only rather than image/template-backed
+* hiding diagnostics in ephemeral toasts
+
+If you want, I’ll turn this next into a full file/folder TSX code architecture, including:
+
+* route files
+* store slices
+* component filenames
+* API contract types
+* exact prop interfaces for each major component.
