@@ -26,7 +26,7 @@
 'use strict';
 // v62.12 resource-hydration fix: unwraps API data, loads canonical UDF/table endpoints, and displays tables/UDFs without hiding confirmed FWD resources.
 /*
-  AC Rule Workbench generated viewer.
+  FormWorks Editor generated viewer.
 
   Engineering notes:
   - This file is intentionally dependency-free and focused on read-only FWD configuration viewing.
@@ -233,15 +233,26 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const storeKey='ac-rule-workbench-v62-11-content-depth';
+const storeKey='ac-rule-workbench-v62-15-editor-wiring';
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
 const list=x=>Array.isArray(x)?x:(x==null?[]:[x]);
 const first=(...xs)=>xs.find(x=>x!==undefined&&x!==null&&String(x).length>0);
 const text=x=>String(x??'');
 const lower=x=>text(x).toLowerCase();
 const fmt=n=>Number(n||0).toLocaleString();
+const messageFilterModes=['all','error','warning','info','rule-validation','missing-refs','linked'];
+function normalizeMessageFilter(value){
+  const v=lower(value).replace(/_/g,'-');
+  return messageFilterModes.includes(v)?v:'all';
+}
 const esc=s=>text(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const slug=s=>text(s).replace(/[^a-z0-9_-]+/gi,'-').replace(/^-+|-+$/g,'')||'scope';
+const rxEsc=s=>text(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function hasProcessToken(processName,value){
+  const key=text(processName).trim();
+  if(!key)return false;
+  return new RegExp(`(^|[^a-z0-9])${rxEsc(key)}([^a-z0-9]|$)`,'i').test(text(value));
+}
 
 function boundedPreviewValue(value,options={},depth=0,seen){
   const opts={
@@ -322,20 +333,20 @@ function definitionSearchText(row){
 function safeJson(s,fallback){
   try { return JSON.parse(s); }
   catch (error) {
-    console.warn('AC Rule Workbench: failed to parse JSON state; using fallback.', error);
+    console.warn('FormWorks Editor Viewer: failed to parse JSON state; using fallback.', error);
     return fallback;
   }
 }
 function readStorage(key){
   try { return window.localStorage ? localStorage.getItem(key) : null; }
   catch (error) {
-    console.warn('AC Rule Workbench: localStorage read failed.', error);
+    console.warn('FormWorks Editor Viewer: localStorage read failed.', error);
     return null;
   }
 }
 function writeStorage(key,value){
   try { if (window.localStorage) localStorage.setItem(key,value); }
-  catch (error) { console.warn('AC Rule Workbench: localStorage write failed.', error); }
+  catch (error) { console.warn('FormWorks Editor Viewer: localStorage write failed.', error); }
 }
 function readState(){
   const saved=safeJson(readStorage(storeKey)||'{}',{});
@@ -348,12 +359,13 @@ function readState(){
     workspaceView:saved.workspaceView||'structure',
     fieldResolutionFilter:saved.fieldResolutionFilter||'unresolved',
     inventoryFilter:['all','StructuralMatch','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:'all',
-    messageFilter:['all','warning','info','linked'].includes(saved.messageFilter)?saved.messageFilter:'all',
+    messageFilter:normalizeMessageFilter(saved.messageFilter),
     inspectorView:['summary','config','actions','references','messages','raw'].includes(savedInspectorView)?savedInspectorView:'summary',
     focusNodeId:'',theme:['light','dark'].includes(saved.theme)?saved.theme:'light',density:saved.density==='high'?'high':'standard',modal:'',
     selectedResourceKey:saved.selectedResourceKey||'',
     selectedFunctionName:saved.selectedFunctionName||'',
     selectedDriverKey:saved.selectedDriverKey||'',
+    selectedProcessName:text(saved.selectedProcessName||''),
     globalDetailKind:'',
     selectedTableName:saved.selectedTableName||'',
     selectedUdfName:saved.selectedUdfName||'',
@@ -567,15 +579,15 @@ function installPaneResizers(){
 }
 function reportUiError(context,error){
   const message=error&&error.message?error.message:String(error||'Unknown error');
-  console.error(`AC Rule Workbench ${context} failed:`, error);
+  console.error(`FormWorks Editor Viewer ${context} failed:`, error);
   const banner=optionalElement('globalErrorBanner');
   if(banner){
-    banner.textContent=`${context==='data load'?'FWD snapshot load error':'Workbench error'}: ${message}`;
+    banner.textContent=`${context==='data load'?'FWD snapshot load error':'Editor viewer error'}: ${message}`;
     banner.hidden=false;
   }
   const toastNode=optionalElement('toast');
   if(toastNode){
-    toast(`Workbench error: ${message}`,'error',4500);
+    toast(`Editor viewer error: ${message}`,'error',4500);
   }
 }
 // Keep global actions aligned with actual selection state.
@@ -917,8 +929,8 @@ function globalViewHeading(view=state.workspaceView){
 }
 
 function workspaceHeroHtml(options={}){
-  const eyebrow=text(options.eyebrow||'Workbench');
-  const title=text(options.title||'AC Rule Workbench');
+  const eyebrow=text(options.eyebrow||'Configuration Window');
+  const title=text(options.title||'FormWorks Editor Viewer');
   const caption=text(options.caption||'Read-only FWD snapshot analysis.');
   const metrics=list(options.metrics).filter(Boolean);
   const actions=text(options.actions||'');
@@ -959,6 +971,93 @@ function selectedRuleSummaryHtml(selected){
   const path=text(first(selected.DisplayPath,selected.displayPath,selected.StructuralPath,selected.structuralPath,selected.RuleListPath,selected.ruleListPath,''));
   return `<div class="selected-rule-summary"><span class="badge blue">${esc(type)}</span><b>${esc(title)}</b>${path?`<small>${esc(path)}</small>`:''}</div>`;
 }
+function editorScopeKind(scope=currentScope()){
+  const hay=lower(`${scope?.kind||''} ${scope?.name||''} ${scope?.scopeId||''}`);
+  if(/batch/.test(hay))return 'Batch';
+  if(/document|doc/.test(hay))return 'Document';
+  if(/variant/.test(hay))return 'Page Variant';
+  if(/page/.test(hay))return 'Page';
+  if(/process|\bac\b|\bdv\b|\bfip\b|\bocr\b|store|scan|inventory/.test(hay))return 'Process';
+  return text(scope?.kind||'Scope');
+}
+function processNamesForScope(scope=currentScope()){
+  const kind=editorScopeKind(scope).toLowerCase();
+  if(kind.includes('page'))return ['AC','DV','FIP','OCR','OCRepair','Store'];
+  if(kind.includes('document'))return ['AC','Collator','Store'];
+  if(kind.includes('batch'))return ['Collator','FIP','Scan','Inventory'];
+  if(kind.includes('process'))return ['AC','Collator','FIP','OCR','Store','TwainScan','Inventory'];
+  return ['AC','DV','FIP','OCR','Store'];
+}
+function observedProcessText(scope=currentScope()){
+  const processItems=[
+    ...list(model.fwd?.processes?.items).map(p=>first(p.name,p.processName,'')),
+    ...list(model.fwd?.processDrivers?.items).map(p=>first(p.processName,p.name,'')),
+    ...scopedRuleNodes().map(n=>n.fn)
+  ];
+  return lower(processItems.map(text).join(' '));
+}
+function processPanelHtml(scope=currentScope()){
+  const processText=observedProcessText(scope);
+  const scopeRules=scopedRuleNodes().length;
+  const diags=scopedDiags();
+  const activeProcess=lower(state.selectedProcessName);
+  return `<div class="process-panel" aria-label="Scope processes">${processNamesForScope(scope).map(name=>{
+    const key=lower(name);
+    const configured=hasProcessToken(name,processText)||((key==='ac'||key==='dv')&&scopeRules>0);
+    const warnings=diags.filter(d=>hasProcessToken(name,`${d.title} ${d.detail} ${d.scopeId}`)).length;
+    const active=activeProcess===key;
+    return `<button class="process-pill ${configured?'configured':'not-configured'} ${warnings?'warn':''} ${active?'active':''}" type="button" data-action="select-process" data-process-name="${esc(name)}" aria-pressed="${active?'true':'false'}" title="Select ${esc(name)} process context"><span>${esc(name)}</span><b>${warnings?`${fmt(warnings)} msg`:configured?'configured':'not found'}</b></button>`;
+  }).join('')}</div>`;
+}
+function scopeBannerHtml(scope=currentScope()){
+  const kind=editorScopeKind(scope);
+  const diags=scopedDiags().length;
+  const process=text(state.selectedProcessName).trim();
+  return `<div class="editor-scope-banner"><div><span class="workspace-eyebrow">Configuration Window</span><b>Scope: ${esc(kind)} / ${esc(scope.name||scope.scopeId)}</b><small>${esc(scope.scopeId||'FWD scope')} - read-only snapshot, selection-linked across tree, rule tree, message window, and inspector.</small></div><div class="editor-scope-badges"><span class="head-chip kind">${esc(kind)}</span>${process?`<span class="head-chip active">Process: ${esc(process)}</span>`:''}<span class="head-chip">${fmt(scopedRuleNodes().length)} rules</span><span class="head-chip ${diags?'warn':''}">${fmt(diags)} messages</span><span class="head-chip">clean</span></div></div>`;
+}
+function statusActionPreviewHtml(){
+  const branch=selectedBranch();
+  if(branch){
+    const children=branch.childNodes.length?branch.childNodes.slice(0,8).map(n=>`<button class="mini-row" type="button" data-node="${esc(n.id)}"><span><b>${esc(n.title)}</b><small>${esc(n.fn||'No function')}</small></span><span class="badge blue">child</span></button>`).join(''):'<div class="muted">No child rules under this action list.</div>';
+    return `<div class="status-action-preview"><div class="status-action-context"><b>${esc(branch.label)}</b><span>Parent: ${esc(branch.parent.title)} - ${esc(branch.routeState)}</span></div>${children}</div>`;
+  }
+  const node=selectedNode();
+  if(!node)return '<div class="muted">Select a rule or action list to inspect Status Result dispatch.</div>';
+  return statusActionsBlockForRule(node);
+}
+function ruleEditorHostPreviewHtml(){
+  const node=selectedNode();
+  if(!node)return '<div class="muted">Select a rule to see the function-specific editor host.</div>';
+  const paramCount=Object.keys(node.Parameters||{}).length;
+  const attrCount=attributeEntriesForRule(node).length;
+  const udf=udfForFunctionName(node.fn||'');
+  const editor=udf?'UDF invocation editor':/table|lookup|select/i.test(node.fn||'')?'Table/SelectionList editor':'Default Fields / Attributes editor';
+  return `<div class="rule-editor-host-preview"><div><span class="badge blue">${esc(editor)}</span><b>${esc(node.fn||'No function mapped')}</b></div><div class="mini-list"><div class="mini-row"><span>Fields / Parameters</span><b>${fmt(paramCount)}</b></div><div class="mini-row"><span>Attributes</span><b>${fmt(attrCount)}</b></div><div class="mini-row"><span>Status Results</span><b>${fmt(actionListRowsForRule(node).length)}</b></div></div></div>`;
+}
+function workspaceTabDefinitions(){
+  if(isGlobalDefinitionView()){
+    return [
+      ['resources','Resources','FWD resources and resource-type definitions'],
+      ['functions','Functions','AC function catalog and observed rule usage'],
+      ['tables','Tables','SelectionList and table configuration'],
+      ['udfs','UDFs','Reusable rule-list functions and caller bindings'],
+      ['drivers','Drivers','Driver definitions and process-private findings']
+    ];
+  }
+  return [
+    ['structure','Structure','Rule List hierarchy, Status Results, and Action Lists'],
+    ['field-resolution','Fields','Field and parameter references resolved against the FWD catalog']
+  ];
+}
+function renderWorkspaceTabs(){
+  const host=$('tabs');
+  const defs=workspaceTabDefinitions();
+  host.removeAttribute('aria-hidden');
+  host.innerHTML=defs.map(([id,label,title])=>{
+    const active=state.workspaceView===id;
+    return `<button class="workspace-tab ${active?'active':''}" type="button" role="tab" data-action="view-${esc(id)}" aria-selected="${active?'true':'false'}" tabindex="${active?'0':'-1'}" title="${esc(title)}"><span>${esc(label)}</span></button>`;
+  }).join('');
+}
 
 function renderMainHead(){
   const s=currentScope();
@@ -978,9 +1077,7 @@ function renderMainHead(){
     $('scopeCaption').innerHTML=`<span class="scope-caption-note">${esc(captions[state.workspaceView]||captions.structure)}</span>`;
     $('crumbs').innerHTML=`<span class="head-chip kind">${esc(s.kind)}</span><span class="head-chip">Read-only FWD snapshot</span>${state.focusNodeId?'<span class="head-chip focus">Focused subtree</span>':''}`;
   }
-  const tabsEl=$('tabs');
-  tabsEl.innerHTML='';
-  tabsEl.setAttribute('aria-hidden','true');
+  renderWorkspaceTabs();
   renderViewbar();
 }
 
@@ -989,9 +1086,9 @@ function renderStructure(){
   const summary=structureWorkspaceSummary(rows);
   const s=currentScope();
   const hero=workspaceHeroHtml({
-    eyebrow:'Rule hierarchy',
+    eyebrow:'FWEditor Configuration Window',
     title:text(s.name||'Current scope'),
-    caption:viewLabel(),
+    caption:`${editorScopeKind(s)} scope - ${viewLabel()}`,
     metrics:[
       {label:'Visible rules',value:fmt(summary.visibleRules),tone:'blue'},
       {label:'Route branches',value:fmt(summary.branches),tone:'teal'},
@@ -1003,7 +1100,7 @@ function renderStructure(){
   const treeHtml=rows.length
     ? `<div class="tree workspace-tree" role="tree" aria-label="Structural rule tree">${rows.map(r=>r.type==='branch'?branchRow(r):treeRow(r.n,r.level)).join('')}</div>`
     : emptyHtml('No structural nodes match the current filter','Clear the search/filter or choose a different scope.');
-  const body=`<div class="structure-workspace-grid"><section class="workspace-card workspace-card-primary"><div class="workspace-card-head"><div><h4>Structure</h4><p>Dense read-only hierarchy with action-list routes, disabled inheritance, and selected-path context.</p></div></div>${treeHtml}</section><aside class="workspace-side-stack">${workspaceSectionHtml('Current selection',selectedRuleSummaryHtml(summary.selected),{caption:'Use the inspector for full configuration and references.'})}${workspaceSectionHtml('Navigation tips','<div class="tip-list"><span>Use <kbd>/</kbd> or <kbd>Ctrl</kbd><kbd>K</kbd> to jump anywhere.</span><span>Use <kbd>Alt</kbd> + drag or middle-drag to pan large panes.</span><span>Resize panes with the vertical dividers.</span></div>',{caption:'Keyboard-first desktop workflow'})}</aside></div>`;
+  const body=`${scopeBannerHtml(s)}<div class="structure-workspace-grid"><section class="workspace-card workspace-card-primary"><div class="workspace-card-head"><div><h4>Rule Tree</h4><p>Ordered Rule Lists with Status Result / Action List sub-lists. This is the configuration tree, not a flat rule table.</p></div></div>${treeHtml}</section><aside class="workspace-side-stack">${workspaceSectionHtml('Processes',processPanelHtml(s),{caption:'Scope-valid process strip modeled after the page/document/batch Processes panel.'})}${workspaceSectionHtml('Status Results / Action Lists',statusActionPreviewHtml(),{caption:'Selected rule dispatch and nested sub-list evidence.'})}${workspaceSectionHtml('Rule Editor Host',ruleEditorHostPreviewHtml(),{caption:'Function-specific editor when known, otherwise default Fields / Attributes configuration.'})}${workspaceSectionHtml('Current selection',selectedRuleSummaryHtml(summary.selected),{caption:'Selection is shared by tree, workspace, message window, and inspector.'})}</aside></div>`;
   $('content').innerHTML=workspacePageHtml('structure',hero,body,{split:true});
 }
 function renderContent(){
@@ -1014,6 +1111,77 @@ function renderContent(){
   if(state.workspaceView==='drivers')return renderGlobalDriverDefinitions();
   if(state.workspaceView==='udfs')return renderUdfMasterDetail();
   return renderStructure();
+}
+function severityIsProblem(severity){return /warn|error|fatal/i.test(text(severity));}
+function severityIsError(severity){return /error|fatal/i.test(text(severity));}
+function messageWindowStats(scope=currentScope()){
+  const diags=scopedDiags();
+  const fieldSummary=getScopeFieldResolutionIndex(scope.scopeId).summary;
+  const routes=scopedRouteStats();
+  const unnamedRoutes=routes.indexOnly+routes.unnamed;
+  const errorCount=diags.filter(d=>severityIsError(d.severity)).length;
+  const warningCount=diags.filter(d=>severityIsProblem(d.severity)).length;
+  const infoCount=diags.filter(d=>!severityIsProblem(d.severity)).length;
+  const linkedCount=diags.filter(d=>!!d.nodeId).length;
+  const missingRefs=fieldSummary.unresolved+unnamedRoutes;
+  const validationCount=warningCount+missingRefs;
+  return {diags,fieldSummary,routes,unnamedRoutes,errorCount,warningCount,infoCount,linkedCount,missingRefs,validationCount};
+}
+function diagMatchesMessageFilter(d,filter=state.messageFilter){
+  if(!hasVisibleQuery(d))return false;
+  const mode=normalizeMessageFilter(filter);
+  const sev=text(d.severity);
+  const blob=lower(`${d.title} ${d.detail} ${d.Message} ${d.scopeId}`);
+  if(mode==='error')return severityIsError(sev);
+  if(mode==='warning')return severityIsProblem(sev);
+  if(mode==='info')return !severityIsProblem(sev);
+  if(mode==='linked')return !!d.nodeId;
+  if(mode==='rule-validation')return !!d.nodeId||severityIsProblem(sev)||/rule|action|status|validation/.test(blob);
+  if(mode==='missing-refs')return /missing|unresolved|dangling|reference|field/.test(blob);
+  return true;
+}
+function filteredDiags(){return scopedDiags().filter(d=>diagMatchesMessageFilter(d));}
+function firstDiagnosticForFilter(filter=state.messageFilter){return scopedDiags().find(d=>diagMatchesMessageFilter(d,filter))||null;}
+function messageFilterLabel(filter=state.messageFilter){
+  const map={
+    all:'All messages',
+    error:'Errors',
+    warning:'Warnings',
+    info:'Info',
+    'rule-validation':'Rule validation',
+    'missing-refs':'Missing refs',
+    linked:'Linked messages'
+  };
+  return map[normalizeMessageFilter(filter)]||map.all;
+}
+function diagnosticsTabHtml(mode,label,count){
+  const active=state.messageFilter===mode;
+  return `<button class="diagnostics-tab ${count?'has-count':''}" type="button" role="tab" data-action="message-filter-${esc(mode)}" aria-selected="${active?'true':'false'}"><span>${esc(label)}</span><b>${fmt(count)}</b></button>`;
+}
+function renderDiagnosticsDock(){
+  const host=optionalElement('diagnosticsDock');
+  if(!host)return;
+  if(!model||bootState.phase==='loading'){
+    host.innerHTML='<div class="diagnostics-dock-empty">Snapshot diagnostics loading.</div>';
+    return;
+  }
+  const scope=currentScope();
+  const stats=messageWindowStats(scope);
+  const hydration=fwdHydrationSummary();
+  const rows=filteredDiags();
+  const messagePreview=rows.slice(0,3).map(d=>`<button class="diagnostics-message ${state.selectedId===d.id?'active':''}" type="button" data-diag="${esc(d.id)}"><span class="badge ${severityIsProblem(d.severity)?'amber':'blue'}">${esc(d.severity||'Info')}</span><span>${esc(d.title||'Message')}</span></button>`).join('');
+  const missingRefsNote=state.messageFilter==='missing-refs'&&stats.missingRefs?`<button class="diagnostics-message active" type="button" data-action="view-field-resolution"><span class="badge amber">${fmt(stats.missingRefs)}</span><span>Open unresolved references</span></button>`:'';
+  const messageBody=messagePreview||missingRefsNote||'<span class="diagnostics-note">No messages match this filter.</span>';
+  const tabs=[
+    diagnosticsTabHtml('all','All',stats.diags.length),
+    diagnosticsTabHtml('error','Errors',stats.errorCount),
+    diagnosticsTabHtml('warning','Warnings',stats.warningCount),
+    diagnosticsTabHtml('info','Info',stats.infoCount),
+    diagnosticsTabHtml('linked','Linked',stats.linkedCount),
+    diagnosticsTabHtml('rule-validation','Rule validation',stats.validationCount),
+    diagnosticsTabHtml('missing-refs','Missing refs',stats.missingRefs)
+  ].join('');
+  host.innerHTML=`<div class="message-window-title"><b>Message Window</b><span>${esc(editorScopeKind(scope))} - ${esc(messageFilterLabel())}</span></div><div class="diagnostics-tabbar" role="tablist" aria-label="Message Window filters">${tabs}</div><div class="diagnostics-feed"><span class="diagnostics-scope">${esc(scope.name||scope.scopeId)}</span>${messageBody}<span class="diagnostics-note">${esc(hydration.label)}</span>${stats.warningCount?`<span class="diagnostics-warn">${fmt(stats.warningCount)} warning${stats.warningCount===1?'':'s'}</span>`:''}</div>`;
 }
 function bars(rows){if(!rows.length)return '<div class="muted">No values.</div>';const max=Math.max(...rows.map(r=>r.count),1);return `<div class="mini-list">${rows.slice(0,10).map(r=>`<div class="mini-row"><span class="mono">${esc(r.name)}</span><b>${fmt(r.count)}</b><div class="bar bar-span-all"><i style="--bar-w:${Math.max(3,r.count/max*100)}%"></i></div></div>`).join('')}</div>`;}
 function topCounts(values){const m=new Map();values.map(text).filter(Boolean).forEach(v=>m.set(v,(m.get(v)||0)+1));return [...m].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));}
@@ -1048,7 +1216,6 @@ function routeChip(e){
 }
 function filteredInventory(){return scopedInventory().filter(r=>{if(!hasVisibleQuery(r))return false;if(state.inventoryFilter==='StructuralMatch')return r.classification==='StructuralMatch';if(state.inventoryFilter==='FlatOnly')return r.classification==='FlatOnly';if(state.inventoryFilter==='direct')return r.disabled==='direct';if(state.inventoryFilter==='inherited')return r.disabled==='inherited';return true;});}
 function renderInventory(){const rows=filteredInventory();$('content').innerHTML=`<div class="notice"><div class="notice-icon">!</div><div><b>Inventory is not execution order.</b> Use flat rows for search/completeness. Only rows classified as StructuralMatch link to the hierarchy.</div></div><div class="table-list">${rows.slice(0,5000).map(r=>`<div class="data-row ${state.selectedId===r.id?'selected':''}" data-inventory="${esc(r.id)}"><div><div class="data-title">${esc(r.title)}</div><div class="data-sub">${esc(r.scopeId)} · ${esc(r.RuleGuid||r.RuleId||'no id')}</div></div><div class="mono">${esc(r.fn||'no function')}</div><div>${r.classification==='FlatOnly'?'<span class="badge amber">Unlinked flat row</span>':'<span class="badge green">StructuralMatch</span>'}</div><div>${r.nodeId?'<span class="badge blue">Linked</span>':''}</div></div>`).join('')||emptyHtml('No inventory rows match','Adjust search or filter.')}</div>${rows.length>5000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 5,000 matching inventory rows for browser performance. Narrow the filter for full review.</div></div>':''}`;}
-function filteredDiags(){return scopedDiags().filter(d=>{if(!hasVisibleQuery(d))return false;const sev=lower(d.severity);if(state.messageFilter==='warning')return /warn|error/.test(sev);if(state.messageFilter==='info')return sev==='info';if(state.messageFilter==='linked')return !!d.nodeId;return true;});}
 function renderMessages(){const rows=filteredDiags();$('content').innerHTML=`<div class="table-list">${rows.map(d=>`<div class="data-row ${state.selectedId===d.id?'selected':''}" data-diag="${esc(d.id)}"><div><div class="data-title">${esc(d.title)}</div><div class="data-sub">${esc(d.detail||d.Message||'')}</div></div><div><span class="badge ${/warn|error/i.test(d.severity)?'amber':'blue'}">${esc(d.severity)}</span></div><div>${d.nodeId?`<span class="badge blue">Node ${esc(d.nodeId)}</span>`:''}</div><div></div></div>`).join('')||emptyHtml('No messages match','This scope has no messages matching the filter.')}</div>`;}
 function domainRowsByView(view){
   const fwd=model.fwd;
@@ -1517,7 +1684,7 @@ function definitionOriginUi(kind,row){
     return {
       defined:false,
       eyebrow:`${type} · observed usage`,
-      caption:'This function appears in rule configuration or inventory evidence. The workbench can show observed callers even when no richer function metadata was exported.',
+      caption:'This function appears in rule configuration or inventory evidence. The editor viewer can show observed callers even when no richer function metadata was exported.',
       badge:'Observed',
       badgeTone:'amber',
       origin:source||'Observed rule usage',
@@ -2096,11 +2263,12 @@ function renderNoData(){
   $('globalNav').innerHTML='';
   $('scopeList').innerHTML=emptyHtml('No scopes available','Generate a snapshot or verify the FWD path.');
   $('content').innerHTML=emptyHtml('No FWD structure found',detail);
+  optionalElement('diagnosticsDock')?.replaceChildren();
 }
 // Curated in-product guide content for first-use navigation.
 function renderHelp(){
   const quickStart=`<div class="panel"><h3>Quick Start</h3><ol class="config-list"><li>Choose a FormWorks scope or global definition from the left rail.</li><li>Open <b>Structure</b> to inspect rule lists, parent rules, status results, and action lists.</li><li>Select a rule to review function metadata, fields/parameters, attributes, status-result actions, references, messages, and raw FWD data.</li><li>Use <b>Functions</b>, <b>UDFs</b>, and <b>Tables</b> for AC function behavior, reusable rule-list functions, and SelectionList/table lookup configuration.</li></ol></div>`;
-  const editorModel=`<div class="panel"><h3>FormWorks Editor Model</h3><div class="kv">${kv('FWD/STC','Documents, pages, variants, fields, batches, processes, resources, and private configuration nodes.')}${kv('Read-only boundary','FW Editor authors and saves the FWD. This workbench inspects static configuration only.')}${kv('Runtime boundary','The viewer does not execute AC, run AC Rules Tester, or prove actual claim outcomes.')}</div></div>`;
+  const editorModel=`<div class="panel"><h3>FormWorks Editor Model</h3><div class="kv">${kv('FWD/STC','Documents, pages, variants, fields, batches, processes, resources, and private configuration nodes.')}${kv('Read-only boundary','FW Editor authors and saves the FWD. This viewer inspects static configuration only.')}${kv('Runtime boundary','The viewer does not execute AC, run AC Rules Tester, or prove actual claim outcomes.')}</div></div>`;
   const ruleModel=`<div class="panel"><h3>AC Rule Model</h3><div class="mini-list"><div class="mini-row"><span><b>Rule List</b></span><span class="caption">Ordered rules in a page, document, UDF, or process scope</span></div><div class="mini-row"><span><b>Rule</b></span><span class="caption">Function plus fields/parameters, attributes, sources, and actions</span></div><div class="mini-row"><span><b>Status Result</b></span><span class="caption">Function return token owned by the parent rule</span></div><div class="mini-row"><span><b>Action List</b></span><span class="caption">Sub-list selected by a status result; not a rule</span></div></div></div>`;
   const functionModel=`<div class="panel"><h3>Functions, UDFs, Tables</h3><div class="kv">${kv('Function categories','Intrinsic, Tcl/custom, User Defined, Testing, Formatting, Rectifying, Table, Store, Deprecated.')}${kv('UDFs','Reusable rule-list functions with named field-list parameters, status results, internal rules, and caller bindings.')}${kv('SelectionLists','Lookup configuration: table identity, match fields, plug fields, persistence, rerun triggers, and keyer impact.')}</div></div>`;
   const fwdModel=`<div class="panel"><h3>Evidence Classes</h3><div class="kv">${kv('Structure','Hierarchy, rule order, parent rules, action-list order, and disabled inheritance.')}${kv('Inventory','Broad search and completeness evidence; not hierarchy proof.')}${kv('References','Static relationships. Read confidence and parameter role explicitly.')}${kv('Messages','Snapshot diagnostics that may affect completeness.')}${kv('Raw','Final confirmation when formatted views are incomplete.')}</div></div>`;
@@ -2546,7 +2714,7 @@ function stableSnapshotFallbackId(){
   return `static-${(hash>>>0).toString(36)}`;
 }
 function snapshotId(){return text(first(treeData.SnapshotId,treeData.snapshotId,rulesData.SnapshotId,rulesData.snapshotId,treeData.GeneratedAtUtc,rulesData.GeneratedAtUtc,stableSnapshotFallbackId())).replace(/[^a-z0-9_.:-]+/gi,'-');}
-function snapshotStoreKey(){return `ac-rule-workbench-v62-7:${snapshotId()}`;}
+function snapshotStoreKey(){return `ac-rule-workbench-v62-15:${snapshotId()}`;}
 function requestedWorkspaceView(){
   try{
     const href=text(window.location?.href||'');
@@ -2571,6 +2739,7 @@ function saveState(){
     selectedResourceKey:state.selectedResourceKey,
     selectedFunctionName:state.selectedFunctionName,
     selectedDriverKey:state.selectedDriverKey,
+    selectedProcessName:state.selectedProcessName,
     selectedTableName:state.selectedTableName,
     selectedUdfName:state.selectedUdfName,
     udfFilter:state.udfFilter,
@@ -2580,11 +2749,11 @@ function saveState(){
     recentScopes:state.recentScopes,
     disclosureLevel:state.disclosureLevel
   }));
-  writeStorage('ac-rule-workbench-v62-7-theme',state.theme);
+  writeStorage('ac-rule-workbench-v62-15-theme',state.theme);
 }
 function restoreSnapshotState(){
   const saved=safeJson(readStorage(snapshotStoreKey())||'{}',{});
-  const theme=readStorage('ac-rule-workbench-v62-7-theme')||(['light','dark'].includes(saved.theme)?saved.theme:'light');
+  const theme=readStorage('ac-rule-workbench-v62-15-theme')||'light';
   state.theme=theme;
   document.documentElement.dataset.theme=theme;
   state.density=saved.density==='high'?'high':state.density;
@@ -2597,11 +2766,12 @@ function restoreSnapshotState(){
   state.workspaceView=requestedWorkspaceView()||state.workspaceView;
   state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';
   state.inventoryFilter=['all','StructuralMatch','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:state.inventoryFilter;
-  state.messageFilter=['all','warning','info','linked'].includes(saved.messageFilter)?saved.messageFilter:state.messageFilter;
+  state.messageFilter=normalizeMessageFilter(saved.messageFilter||state.messageFilter);
   state.inspectorView=['summary','config','actions','references','messages','raw'].includes(saved.inspectorView)?saved.inspectorView:'summary';
   state.selectedResourceKey=text(saved.selectedResourceKey||'');
   state.selectedFunctionName=text(saved.selectedFunctionName||'');
   state.selectedDriverKey=text(saved.selectedDriverKey||'');
+  state.selectedProcessName=text(saved.selectedProcessName||'');
   state.selectedTableName=text(saved.selectedTableName||'');
   state.selectedUdfName=text(saved.selectedUdfName||'');
   state.udfFilter=['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;
@@ -2748,7 +2918,7 @@ function searchResults(){
     addGlobalDefinitionSearchRows(rows,q,'Resource','resources',buildGlobalResourceDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Driver','drivers',buildGlobalDriverDefinitions());
   }catch(error){
-    console.warn('AC Rule Workbench: global search definition indexing failed.',error);
+    console.warn('FormWorks Editor Viewer: global search definition indexing failed.',error);
   }
   for(const r of model.rels){
     if(matchesSearchQuery(r,q))rows.push({kind:'Reference',scopeId:r.scopeId,nodeId:r.nodeId,title:`${r.kind}: ${r.target}`,subtitle:`${r.targetType}`,badges:['Reference']});
@@ -2818,7 +2988,7 @@ function renderGlobalNavigation(){
     const active=state.workspaceView===view;
     return `<button class="global-view-row ${active?'active':''}" type="button" data-action="${esc(action)}" aria-current="${active?'true':'false'}" title="${esc(title)}"><span class="global-view-name">${esc(label)}</span><span class="global-view-count">${fmt(count)}</span></button>`;
   }
-  el.innerHTML=`<div class="scope-group global-nav-heading"><span>Global Definitions</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
+  el.innerHTML=`<div class="fwd-tree-root"><b>FWD Tree</b><span>Pages, documents, batches, processes, resources, raw/STC evidence</span></div>${renderObjectTreeBlock()}<div class="scope-group global-nav-heading"><span>Resources</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
     globalNavRow('view-resources','Resources',counts.resources,'FWD-level resource buckets and definitions'),
     globalNavRow('view-functions','Functions',counts.functions,'AC function catalog and observed rule usage'),
     globalNavRow('view-tables','Tables',counts.tables,'Global table definitions and rule usage'),
@@ -2967,8 +3137,9 @@ function normalizeWorkspaceViewForScope(){
   const scope=currentScope();
   if(!scope)return;
   if(!['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
+  if(state.selectedProcessName&&!processNamesForScope(scope).some(name=>lower(name)===lower(state.selectedProcessName)))state.selectedProcessName='';
 }
-function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
+function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
 function renderTop(){
   const banner=optionalElement('globalErrorBanner');
   if(banner&&bootState.phase!=='failed')banner.hidden=true;
@@ -3026,22 +3197,18 @@ function activeSliceHtml(){
     drivers:['Drivers','Global definitions'],
     udfs:['UDFs','Global definitions'],
   };
-  const row=labels[view]||['Workbench','FWD view'];
-  return `<div class="active-slice" aria-label="Active workspace"><span>${esc(row[0])}</span><b>${esc(row[1])}</b></div>`;
+  const row=labels[view]||['Editor','FWD view'];
+  return `<div class="active-slice" aria-label="Active configuration view"><span>${esc(row[0])}</span><b>${esc(row[1])}</b></div>`;
 }
 function renderViewbar(){
   const struct=state.workspaceView==='structure';
   const globalView=isGlobalDefinitionView();
   const hasFilter=!!state.query;
-  const viewDefs=globalView
-    ? [['resources','Resources'],['functions','Functions'],['tables','Tables'],['udfs','UDFs'],['drivers','Drivers']]
-    : [['structure','Structure'],['field-resolution','Fields']];
-  const viewButtons=viewDefs.map(([id,label])=>`<button class="btn ${state.workspaceView===id?'primary':''}" type="button" data-action="view-${id}" aria-pressed="${state.workspaceView===id?'true':'false'}">${label}</button>`);
   const treeMenu=struct?`<details class="action-menu tree-options"><summary class="btn">Tree</summary><div class="action-menu-pop"><button class="btn" type="button" data-action="expand-selected-depth">Open selected branch</button><button class="btn" type="button" data-action="expand-selected-subtree">Open subtree</button><button class="btn" type="button" data-action="collapse-siblings">Collapse siblings</button><button class="btn" type="button" data-action="collapse-all">Collapse all</button><button class="btn" type="button" data-action="reset-pane-layout">Reset panes</button></div></details>`:'';
   const treeSelectors=struct?`<select id="treeFilter" aria-label="Tree filter"><option value="all" ${state.treeFilter==='all'?'selected':''}>All nodes</option><option value="disabled" ${state.treeFilter==='disabled'?'selected':''}>Disabled</option><option value="inherited" ${state.treeFilter==='inherited'?'selected':''}>Inherited disabled</option><option value="warnings" ${state.treeFilter==='warnings'?'selected':''}>Messages</option><option value="actions" ${state.treeFilter==='actions'?'selected':''}>Action parents</option><option value="sections" ${state.treeFilter==='sections'?'selected':''}>Sections</option></select><select id="disclosureLevel" aria-label="Tree disclosure level"><option value="1" ${state.disclosureLevel===1?'selected':''}>Names</option><option value="2" ${state.disclosureLevel===2?'selected':''}>Function</option><option value="3" ${state.disclosureLevel===3?'selected':''}>State</option><option value="4" ${state.disclosureLevel===4?'selected':''}>Details</option></select>`:'';
   const search=viewSearchMeta();
   const countLabel=globalView?'' : `<span class="view-count">${esc(viewLabel())}</span>`;
-  $('viewbar').innerHTML=`<div class="viewbar-shell"><div class="cmd-main" role="group" aria-label="Workbench views">${viewButtons.join('')}</div><div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" title="Clear current filter" aria-label="Clear current filter" ${hasFilter?'':'disabled'}>Clear</button></div><div class="viewbar-right">${treeSelectors}${treeMenu}${countLabel}</div></div>`;
+  $('viewbar').innerHTML=`<div class="viewbar-shell"><div class="cmd-main view-context" role="group" aria-label="${globalView?'Global definition context':'Scope context'}">${activeSliceHtml()}</div><div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" title="Clear current filter" aria-label="Clear current filter" ${hasFilter?'':'disabled'}>Clear</button></div><div class="viewbar-right">${treeSelectors}${treeMenu}${countLabel}</div></div>`;
 }
 
 function modalFocusableElements(){
@@ -3111,8 +3278,64 @@ function subtreeNodes(nodeId){
   return result;
 }
 
-function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'Workbench help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FormWorks Editor companion.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
-function handleAction(a){if(a==='open-global-detail'){state.globalDetailKind=state.workspaceView;state.modal='global-detail';renderModal();return;}if(a==='go-structure'){state.workspaceView='structure';state.treeFilter='all';state.query='';state.treeQuery='';state.focusNodeId='';renderAll();toast('Structure workspace ready');return;}if(a==='clear-tree-search'){state.query='';state.treeQuery='';$('globalSearch').value='';renderContent();renderInspector();renderViewbar();renderSearchPopover();optionalElement('viewSearch')?.focus?.();return;}if(a==='show-messages'){const d=scopedDiags()[0];if(d){state.selectedType='diag';state.selectedId=d.id;document.body.classList.add('inspector-open');renderAll();}else toast('No messages in this scope');return;}if(a==='open-help'){state.modal='help';renderModal();return;}if(a==='help-action-branch'||a==='help-model'||a==='help-disabled'){state.modal=a.replace(/^help-/,'help-');renderModal();return;}if(a==='close-modal'){closeModalRender();return;}if(a==='toggle-theme'){state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;saveState();toast(`${state.theme==='dark'?'Dark':'Light'} mode`);return;}if(a==='close-inspector'){document.body.classList.remove('inspector-open');applyPaneLayout();saveState();return;}if(a==='show-inspector'){document.body.classList.add('inspector-open');applyPaneLayout();saveState();return;}if(a==='reset-pane-layout'){resetPaneLayout();return;}if(a==='expand-all'){const count=scopedRuleNodes().length;if(count>2500&&!confirm(`Expand ${fmt(count)} structural rules and all action lists? This can be slow.`))return;scopedNodes().forEach(n=>state.expanded.add(n.id));state.collapsedBranches.clear();renderAll();return;}if(a==='collapse-all'){state.expanded.clear();(model.rootsByScope.get(state.scopeId)||[]).forEach(id=>state.expanded.add(String(id)));state.collapsedBranches=new Set(allBranchKeysForScope(state.scopeId));renderAll();return;}if(a==='expand-selected-depth'){const n=selectedNode();if(!n){toast('Select a rule first');return;}state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();return;}if(a==='expand-selected-subtree'){const n=selectedNode();if(!n){toast('Select a rule first');return;}subtreeNodes(n.id).forEach(x=>state.expanded.add(x.id));childRouteGroups(n.id).forEach(g=>state.collapsedBranches.delete(branchKey(n.id,g)));renderAll();return;}if(a==='collapse-siblings'){const n=selectedNode();if(!n){toast('Select a rule first');return;}const parent=model.parentByChild.get(n.id);if(parent){childIds(parent).filter(id=>id!==n.id).forEach(id=>state.expanded.delete(id));}renderAll();return;}if(a==='expand-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.delete(k));renderAll();return;}if(a==='collapse-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.add(k));renderAll();return;}if(a==='clear-focus'){state.focusNodeId='';renderAll();return;}if(a==='focus-selected'){const n=selectedNode();if(n){state.focusNodeId=n.id;state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();}return;}if(a==='open-linked-node'){const obj=selectedInventory()||selectedRel();if(obj&&obj.nodeId){selectNode(obj.nodeId);}else toast('No linked structural node');return;}if(a==='copy-route-path'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(JSON.stringify(selectedPathPacket(n),null,2));return;}if(a==='copy-rule-config'){const b=selectedBranch();if(b){copyText(JSON.stringify(branchPacket(b),null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or branch first');return;}copyText(JSON.stringify(selectedRuleConfigPacket(n),null,2));return;}if(a==='copy-rule-explanation'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(rulePlainLanguageNarrative(n));return;}if(a==='copy-branch-route'){const b=selectedBranch();if(!b){toast('Select an action list first');return;}copyText(JSON.stringify({schema:'AcWorkbench.ActionListPath',scopeId:b.scopeId,path:branchPathObjects(b)},null,2));return;}if(a==='first-warning-scope'){const s=model.scopes.find(x=>x.warnings>0);if(s)selectScope(s.scopeId);return;}if(a==='largest-scope'){const s=[...model.scopes].sort((a,b)=>b.structural-a.structural)[0];if(s)selectScope(s.scopeId);return;}}
+function matchingProcessDiagnostic(processName){
+  if(!text(processName).trim())return null;
+  return scopedDiags().find(d=>hasProcessToken(processName,`${d.title} ${d.detail} ${d.Message} ${d.scopeId}`))||null;
+}
+function matchingProcessRule(processName){
+  if(!text(processName).trim())return null;
+  return scopedRuleNodes().find(n=>hasProcessToken(processName,`${n.fn} ${n.title} ${n.scopeId}`))||null;
+}
+function selectProcessContext(processName){
+  const name=text(processName).trim();
+  if(!name)return;
+  state.selectedProcessName=name;
+  state.workspaceView='structure';
+  const diag=matchingProcessDiagnostic(name);
+  const node=diag?null:matchingProcessRule(name);
+  if(diag){
+    state.messageFilter=severityIsError(diag.severity)?'error':(severityIsProblem(diag.severity)?'warning':'info');
+    state.selectedType='diag';
+    state.selectedId=diag.id;
+    document.body.classList.add('inspector-open');
+  }else if(node){
+    state.selectedType='node';
+    state.selectedId=node.id;
+    state.focusNodeId=node.id;
+    state.expanded.add(node.id);
+    document.body.classList.add('inspector-open');
+  }else{
+    state.selectedType='scope';
+    state.selectedId='';
+    state.focusNodeId='';
+    document.body.classList.remove('inspector-open');
+  }
+  renderAll();
+  toast(`${name} process context selected`);
+}
+function selectMessageFilter(mode){
+  state.messageFilter=normalizeMessageFilter(mode);
+  if(state.messageFilter==='rule-validation'){
+    state.workspaceView='structure';
+    state.treeFilter='warnings';
+  }else if(state.messageFilter==='missing-refs'){
+    state.workspaceView='field-resolution';
+    state.fieldResolutionFilter='unresolved';
+  }
+  const d=firstDiagnosticForFilter(state.messageFilter);
+  if(d){
+    state.selectedType='diag';
+    state.selectedId=d.id;
+    document.body.classList.add('inspector-open');
+  }else if(state.selectedType==='diag'){
+    state.selectedType='scope';
+    state.selectedId='';
+  }
+  renderAll();
+}
+
+function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'Editor viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FormWorks Editor companion.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
+function handleAction(a){if(text(a).startsWith('message-filter-')){selectMessageFilter(text(a).replace(/^message-filter-/,''));return;}if(a==='open-global-detail'){state.globalDetailKind=state.workspaceView;state.modal='global-detail';renderModal();return;}if(a==='go-structure'){state.workspaceView='structure';state.treeFilter='all';state.query='';state.treeQuery='';state.focusNodeId='';renderAll();toast('Rule Tree ready');return;}if(a==='clear-tree-search'){state.query='';state.treeQuery='';$('globalSearch').value='';renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();renderSearchPopover();optionalElement('viewSearch')?.focus?.();return;}if(a==='show-messages'){const d=firstDiagnosticForFilter(state.messageFilter)||scopedDiags()[0];if(d){state.selectedType='diag';state.selectedId=d.id;document.body.classList.add('inspector-open');renderAll();}else toast('No messages in this scope');return;}if(a==='open-help'){state.modal='help';renderModal();return;}if(a==='help-action-branch'||a==='help-model'||a==='help-disabled'){state.modal=a.replace(/^help-/,'help-');renderModal();return;}if(a==='close-modal'){closeModalRender();return;}if(a==='toggle-theme'){state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;saveState();toast(`${state.theme==='dark'?'Dark':'Light'} mode`);return;}if(a==='close-inspector'){document.body.classList.remove('inspector-open');applyPaneLayout();saveState();return;}if(a==='show-inspector'){document.body.classList.add('inspector-open');applyPaneLayout();saveState();return;}if(a==='reset-pane-layout'){resetPaneLayout();return;}if(a==='expand-all'){const count=scopedRuleNodes().length;if(count>2500&&!confirm(`Expand ${fmt(count)} structural rules and all action lists? This can be slow.`))return;scopedNodes().forEach(n=>state.expanded.add(n.id));state.collapsedBranches.clear();renderAll();return;}if(a==='collapse-all'){state.expanded.clear();(model.rootsByScope.get(state.scopeId)||[]).forEach(id=>state.expanded.add(String(id)));state.collapsedBranches=new Set(allBranchKeysForScope(state.scopeId));renderAll();return;}if(a==='expand-selected-depth'){const n=selectedNode();if(!n){toast('Select a rule first');return;}state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();return;}if(a==='expand-selected-subtree'){const n=selectedNode();if(!n){toast('Select a rule first');return;}subtreeNodes(n.id).forEach(x=>state.expanded.add(x.id));childRouteGroups(n.id).forEach(g=>state.collapsedBranches.delete(branchKey(n.id,g)));renderAll();return;}if(a==='collapse-siblings'){const n=selectedNode();if(!n){toast('Select a rule first');return;}const parent=model.parentByChild.get(n.id);if(parent){childIds(parent).filter(id=>id!==n.id).forEach(id=>state.expanded.delete(id));}renderAll();return;}if(a==='expand-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.delete(k));renderAll();return;}if(a==='collapse-action-groups'){allBranchKeysForScope(state.scopeId).forEach(k=>state.collapsedBranches.add(k));renderAll();return;}if(a==='clear-focus'){state.focusNodeId='';renderAll();return;}if(a==='focus-selected'){const n=selectedNode();if(n){state.focusNodeId=n.id;state.expanded.add(n.id);collapseBranchesForNode(n.id);renderAll();}return;}if(a==='open-linked-node'){const obj=selectedInventory()||selectedRel();if(obj&&obj.nodeId){selectNode(obj.nodeId);}else toast('No linked structural node');return;}if(a==='copy-route-path'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(JSON.stringify(selectedPathPacket(n),null,2));return;}if(a==='copy-rule-config'){const b=selectedBranch();if(b){copyText(JSON.stringify(branchPacket(b),null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or branch first');return;}copyText(JSON.stringify(selectedRuleConfigPacket(n),null,2));return;}if(a==='copy-rule-explanation'){const n=selectedNode();if(!n){toast('Select a structural rule first');return;}copyText(rulePlainLanguageNarrative(n));return;}if(a==='copy-branch-route'){const b=selectedBranch();if(!b){toast('Select an action list first');return;}copyText(JSON.stringify({schema:'AcWorkbench.ActionListPath',scopeId:b.scopeId,path:branchPathObjects(b)},null,2));return;}if(a==='first-warning-scope'){const s=model.scopes.find(x=>x.warnings>0);if(s)selectScope(s.scopeId);return;}if(a==='largest-scope'){const s=[...model.scopes].sort((a,b)=>b.structural-a.structural)[0];if(s)selectScope(s.scopeId);return;}}
 function viewSearchMeta(){
   if(state.workspaceView==='structure')return {label:'Filter structure',placeholder:'Filter rules by name, function, status result, action list, field, or disabled state'};
   if(state.workspaceView==='field-resolution')return {label:'Filter field resolution',placeholder:'Filter field references by field name, rule, function, or parameter'};
@@ -3134,7 +3357,7 @@ function syncViewSearchMeta(){
   }
 }
 function syncQueryInputs(){const q=state.query;const g=optionalElement('globalSearch');if(g&&g.value!==q)g.value=q;const v=optionalElement('viewSearch');if(v&&v.value!==q)v.value=q;const clearBtn=document.querySelector('[data-action="clear-tree-search"]');if(clearBtn)clearBtn.disabled=!text(q).trim();syncViewSearchMeta();}
-function applyQueryInput(value,sourceId=''){state.query=value;state.treeQuery=value;syncQueryInputs();renderContent();renderInspector();if(sourceId==='globalSearch')renderSearchPopover();else closeSearchPopover();}
+function applyQueryInput(value,sourceId=''){state.query=value;state.treeQuery=value;syncQueryInputs();renderContent();renderDiagnosticsDock();renderInspector();if(sourceId==='globalSearch')renderSearchPopover();else closeSearchPopover();}
 // Surface concise guidance from control titles in the top action hint region for mouse and keyboard users.
 function wireGuidanceHints(){
   const host=document.body;
@@ -3162,10 +3385,10 @@ function wireOnboardingChecklist(){
     dismissBtn.addEventListener('click',()=>dismissOnboardingChecklist());
   }
 }
-function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='view-structure'||act==='view-field-resolution'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act==='view-structure'||act==='view-field-resolution'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
   document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch')applyQueryInput(e.target.value,e.target.id);});
-  document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderViewbar();return;}});
+  document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderDiagnosticsDock();renderViewbar();return;}});
   document.addEventListener('keydown',e=>{
     if(state.modal)handleModalFocusTrap(e);
     const activeTag=document.activeElement?.tagName||'';
@@ -3239,7 +3462,7 @@ function wireUdfSelection(){document.addEventListener('click',e=>{const udfName=
 function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const row=e.target.closest('[data-global-kind][data-global-key]');if(!row)return;const kind=row.dataset.globalKind,key=row.dataset.globalKey;if(kind==='resources')state.selectedResourceKey=key;else if(kind==='functions')state.selectedFunctionName=key;else if(kind==='drivers')state.selectedDriverKey=key;else if(kind==='tables')state.selectedTableName=key;else if(kind==='udfs')state.selectedUdfName=key;else return;e.preventDefault();renderContent();saveState();});}
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.branch-row[data-branch]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.branch&&state.selectedId===r.dataset.branch));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.branch)selectBranch(row.dataset.branch);row.focus();}
-function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const branch=active?.closest?.('[data-branch]')?.dataset.branch;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(branch)selectBranch(branch);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(branch){state.collapsedBranches.has(branch)?state.collapsedBranches.delete(branch):state.collapsedBranches.add(branch);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseBranchesForNode(node));}renderContent();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(branch)state.collapsedBranches.delete(branch);else if(node){state.expanded.add(node);collapseBranchesForNode(node);}renderContent();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(branch)state.collapsedBranches.add(branch);else if(node)state.expanded.delete(node);renderContent();renderInspector();return;}}
+function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const branch=active?.closest?.('[data-branch]')?.dataset.branch;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(branch)selectBranch(branch);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(branch){state.collapsedBranches.has(branch)?state.collapsedBranches.delete(branch):state.collapsedBranches.add(branch);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseBranchesForNode(node));}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(branch)state.collapsedBranches.delete(branch);else if(node){state.expanded.add(node);collapseBranchesForNode(node);}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(branch)state.collapsedBranches.add(branch);else if(node)state.expanded.delete(node);renderContent();renderDiagnosticsDock();renderInspector();return;}}
 async function init(){
   renderBootLoading();
   try {

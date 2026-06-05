@@ -1,25 +1,25 @@
 <!doctype html>
-<html lang="en" data-theme="light" data-ui-build="v62-11-content-depth-workbench">
+<html lang="en" data-theme="light" data-ui-build="v62-15-editor-wiring">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="Read-only FormWorks Editor companion for FWD/STC, AC rules, UDFs, tables, and SelectionLists.">
-<title>AC Rule Workbench - Read-only Editor Companion</title>
+<title>FormWorks Editor Viewer - Read-only FWD Companion</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=readonly-editor-v62-11">
+<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=readonly-editor-v62-15">
 </head>
-<body class="density-standard calm-workspace layout-v61">
+<body class="density-standard calm-workspace layout-v61 tabbed-workbench">
 <a class="skip-link" href="#mainContent">Skip to content</a>
 
 <div class="app">
   <header class="topbar" role="banner">
-    <div class="brand" aria-label="AC Rule Workbench">
+    <div class="brand" aria-label="FormWorks Editor Viewer">
       <div class="logo" aria-hidden="true">AC</div>
       <div class="brand-copy">
-        <h1>AC Rule Workbench</h1>
+        <h1>FormWorks Editor Viewer</h1>
         <div class="brand-sub" id="sourceSubtitle">Loading FWD snapshot...</div>
       </div>
     </div>
@@ -37,7 +37,7 @@
       <div class="snapshot-stat"><span>Rules</span><b id="sourceSummaryRules">Pending</b></div>
       <div class="snapshot-stat"><span>Messages</span><b id="sourceSummaryWarnings">Pending</b></div>
     </div>
-    <div class="top-actions" role="toolbar" aria-label="Workbench actions">
+    <div class="top-actions" role="toolbar" aria-label="Editor viewer actions">
       <span class="pill" id="statusPill"><span class="dot warn"></span> Loading</span>
       <button class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18V3z" fill="currentColor"></path></svg>
@@ -50,7 +50,7 @@
   </header>
 
   <div class="shell">
-    <aside class="pane left" aria-label="Workbench navigator">
+    <aside class="pane left" aria-label="FWD Tree">
       <div id="globalNav" class="global-nav" role="navigation" aria-label="Global definitions"></div>
       <div id="recentScopes" class="recent-scopes" role="region" aria-label="Recently viewed scopes"></div>
       <div id="scopeList" class="scope-list scroll" role="navigation" tabindex="0" aria-label="Rule scopes"></div>
@@ -60,7 +60,7 @@
       <div class="main-head">
         <div class="scope-title">
           <div class="scope-heading-stack">
-            <div class="scope-kicker">Workbench</div>
+            <div class="scope-kicker">Configuration Window</div>
             <h2 id="scopeTitle">No scope selected</h2>
             <div id="scopeCaption" class="caption"></div>
             <div id="crumbs" class="crumbs"></div>
@@ -73,6 +73,7 @@
         <div id="viewbar" class="viewbar"></div>
       </div>
       <div id="content" class="content scroll" tabindex="0" aria-busy="false"></div>
+      <div id="diagnosticsDock" class="diagnostics-dock" role="region" aria-label="Diagnostics and snapshot messages"></div>
       <div id="contentStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </main>
 
@@ -100,7 +101,7 @@
 <section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1">
   <div class="modal-head">
     <div>
-      <h2 id="helpTitle">Workbench help</h2>
+      <h2 id="helpTitle">Editor viewer help</h2>
       <div id="helpCaption" class="caption">Read-only FormWorks Editor companion for FWD/STC configuration, AC rules, UDFs, and SelectionLists.</div>
     </div>
     <button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">&times;</button>
@@ -110,6 +111,6 @@
 
 <div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script defer src="ac-rule-viewer.js?v=readonly-editor-v62-11"></script>
+<script defer src="ac-rule-viewer.js?v=readonly-editor-v62-15"></script>
 </body>
 </html>
