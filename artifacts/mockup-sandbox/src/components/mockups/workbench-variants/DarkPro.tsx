@@ -57,8 +57,8 @@ const FWD_TREE: FwdNode[] = [{
           children:[
             { id:'page-inv-vars', kind:'group', label:'Variants', meta:'2',
               children:[
-                { id:'var-default', kind:'pageVariant', label:'Default' },
-                { id:'var-alt1',    kind:'pageVariant', label:'Alt1' },
+                { id:'var-default', kind:'pageVariant', label:'Default', tabKind:'variant' },
+                { id:'var-alt1',    kind:'pageVariant', label:'Alt1',    tabKind:'variant' },
               ]},
             { id:'page-inv-flds', kind:'group', label:'Fields', meta:'4',
               children:[
@@ -81,9 +81,9 @@ const FWD_TREE: FwdNode[] = [{
       ]},
     { id:'processes', kind:'group', label:'Processes', meta:'3',
       children:[
-        { id:'proc-ac',  kind:'process', label:'AC' },
-        { id:'proc-fip', kind:'process', label:'FIP' },
-        { id:'proc-ocr', kind:'process', label:'OCR' },
+        { id:'proc-ac',  kind:'process', label:'AC',  tabKind:'process' },
+        { id:'proc-fip', kind:'process', label:'FIP', tabKind:'process' },
+        { id:'proc-ocr', kind:'process', label:'OCR', tabKind:'process' },
       ]},
     { id:'resources', kind:'group', label:'Resources', meta:'3 types',
       children:[
@@ -97,7 +97,7 @@ const FWD_TREE: FwdNode[] = [{
         { id:'res-rules',    kind:'resourceType', label:'Rule DLL',  meta:'1' },
         { id:'res-dateformat',kind:'resourceType',label:'DateFormat', meta:'0' },
       ]},
-    { id:'diagnostics', kind:'diagnosticGroup', label:'Diagnostics', warn:2,
+    { id:'diagnostics', kind:'diagnosticGroup', label:'Diagnostics', warn:2, tabKind:'diagnostics',
       children:[
         { id:'diag-1', kind:'diagnostic', label:'Regex pattern may be too broad',    warn:1 },
         { id:'diag-2', kind:'diagnostic', label:'Tolerance threshold uses default',  warn:1 },
@@ -193,8 +193,120 @@ const SEARCH_INDEX = [
 ];
 
 /* ─── Tab types ──────────────────────────────────────────────────────────── */
-type TabKind = 'overview'|'page'|'document'|'batch'|'resource'|'raw';
+type TabKind = 'overview'|'page'|'document'|'batch'|'resource'|'raw'
+             | 'rule'|'process'|'variant'|'diagnostics';
 interface WorkspaceTab { id:string; kind:TabKind; label:string; nodeId?:string }
+
+/* ─── Phase 3 static data ───────────────────────────────────────────────── */
+interface RuleNode {
+  id:string; name:string; fn:string; ordinal:number; level:number;
+  status:'ok'|'warn'|'error'; disabled:boolean;
+  statuses:Array<{ord:number;tok:string;desc:string;action:string;target?:string}>;
+  fields:string[]; attrs:Record<string,string>; children:RuleNode[];
+}
+const RULE_NODES: RuleNode[] = [
+  { id:'rn1', name:'ExtractInvoiceDate', fn:'MatchField', ordinal:1, level:1,
+    status:'ok', disabled:false,
+    statuses:[
+      {ord:1,tok:'MATCH',   desc:'Pattern matched',       action:'none'},
+      {ord:2,tok:'NOMATCH', desc:'Pattern did not match', action:'reject'},
+    ],
+    fields:['InvoiceDate'], attrs:{regex:'\\d{2}/\\d{2}/\\d{4}',required:'true'},
+    children:[
+      { id:'rn1a', name:'ValidateDateFormat', fn:'RegexCheck', ordinal:1.1, level:2,
+        status:'warn', disabled:false,
+        statuses:[
+          {ord:1,tok:'OK',   desc:'Format valid',   action:'none'},
+          {ord:2,tok:'FAIL', desc:'Format invalid', action:'reject'},
+        ],
+        fields:['InvoiceDate'], attrs:{pattern:'^\\d{2}/\\d{2}/\\d{4}$'},
+        children:[] },
+    ]},
+  { id:'rn2', name:'ExtractVendorName', fn:'RegexCapture', ordinal:2, level:1,
+    status:'ok', disabled:false,
+    statuses:[
+      {ord:1,tok:'MATCH',   desc:'Vendor captured',       action:'none'},
+      {ord:2,tok:'NOMATCH', desc:'Vendor not found',      action:'subrule', target:'FallbackVendor'},
+    ],
+    fields:['VendorName'], attrs:{pattern:'(?i)([A-Z][a-z]+ (?:Inc|LLC|Corp))'},
+    children:[] },
+  { id:'rn3', name:'ValidateTotal', fn:'NumericCheck', ordinal:3, level:1,
+    status:'warn', disabled:false,
+    statuses:[
+      {ord:1,tok:'VALID',   desc:'Total is valid',    action:'none'},
+      {ord:2,tok:'INVALID', desc:'Total is invalid',  action:'reject'},
+      {ord:3,tok:'MISSING', desc:'Total field empty', action:'reject'},
+    ],
+    fields:['Total'], attrs:{tolerance:'0.01',allowNeg:'false'},
+    children:[
+      { id:'rn3a', name:'CheckCurrencyCode', fn:'LookupTable', ordinal:3.1, level:2,
+        status:'ok', disabled:false,
+        statuses:[
+          {ord:1,tok:'FOUND',    desc:'Code in table',    action:'none'},
+          {ord:2,tok:'NOTFOUND', desc:'Code not in table',action:'reject'},
+        ],
+        fields:[], attrs:{table:'CURRENCY_CODES',key:'currency'},
+        children:[] },
+    ]},
+  { id:'rn4', name:'CaptureLineRef', fn:'MatchField', ordinal:4, level:1,
+    status:'ok', disabled:true,
+    statuses:[
+      {ord:1,tok:'MATCH',   desc:'Ref found',  action:'none'},
+      {ord:2,tok:'NOMATCH', desc:'Ref absent', action:'none'},
+    ],
+    fields:['LineRef'], attrs:{},
+    children:[] },
+];
+
+const PROCESS_SCOPES = [
+  { scope:'System',       obj:'(global)',              configured:false, refs:0,  rules:0,  warn:0 },
+  { scope:'Batch',        obj:'BATCH_STANDARD',        configured:true,  refs:2,  rules:0,  warn:0 },
+  { scope:'Document',     obj:'DOC_CAPTURE_MAIN',      configured:true,  refs:8,  rules:5,  warn:1 },
+  { scope:'Page',         obj:'PAGE_INVOICE_HEADER',   configured:true,  refs:12, rules:29, warn:2 },
+  { scope:'Page',         obj:'PAGE_LINE_ITEMS',       configured:true,  refs:7,  rules:11, warn:0 },
+  { scope:'Page',         obj:'PAGE_FOOTER',           configured:false, refs:0,  rules:0,  warn:0 },
+  { scope:'Page Variant', obj:'Default',               configured:true,  refs:3,  rules:4,  warn:0 },
+  { scope:'Resource',     obj:'VendorLookup',          configured:true,  refs:4,  rules:0,  warn:0 },
+];
+const PROC_LINKED_RES = [
+  { name:'VendorLookup', type:'Function', refs:4 },
+  { name:'TaxCalc',      type:'Function', refs:2 },
+  { name:'CURRENCY_CODES',type:'Table',  refs:1 },
+];
+const PROC_REVERSE_REFS = [
+  { label:'4 rules reference AC directly',       kind:'rule' },
+  { label:'3 pages bind AC as primary process',  kind:'page' },
+  { label:'1 document declares AC scope',        kind:'document' },
+];
+
+const DROPOUT_REGIONS = [
+  { id:'d1', name:'HeaderBackground', x:0,  y:0,  w:100, h:14, color:'#3b82f6', process:'FIP' },
+  { id:'d2', name:'FooterLine',       x:0,  y:86, w:100, h:8,  color:'#6366f1', process:'FIP' },
+  { id:'d3', name:'SideMargin',       x:0,  y:14, w:4,   h:72, color:'#3b82f6', process:'FIP' },
+];
+const OMR_FIELDS = [
+  { name:'SignatureBox',  x:13, y:62, w:10, h:6, type:'checkbox', threshold:0.7 },
+  { name:'ApprovalMark', x:13, y:70, w:10, h:6, type:'checkbox', threshold:0.6 },
+];
+
+const DIAG_FULL = [
+  { id:'df1', sev:'warn', source:'rules',
+    title:'Regex too broad',
+    msg:'ValidateDateFormat: Regex pattern may be too broad — consider adding anchors (^ and $)',
+    path:'/pages/PAGE_INVOICE_HEADER/AC/ValidateDateFormat', ts:'09:14:02' },
+  { id:'df2', sev:'warn', source:'rules',
+    title:'Tolerance default in use',
+    msg:'ValidateTotal: Tolerance threshold not explicitly set, using default (0.01)',
+    path:'/pages/PAGE_INVOICE_HEADER/AC/ValidateTotal', ts:'09:14:02' },
+  { id:'df3', sev:'info', source:'resource',
+    title:'Unresolved refs',
+    msg:'2 unresolved WFFileRef references detected in DOC_CAPTURE_MAIN',
+    path:'/documents/DOC_CAPTURE_MAIN', ts:'09:14:02' },
+  { id:'df4', sev:'info', source:'parser',
+    title:'Parse complete',
+    msg:'Parse completed in 142ms · 29 rules · 12 functions · 6 UDFs resolved',
+    path:'', ts:'09:14:02' },
+];
 
 /* ─── Primitives ─────────────────────────────────────────────────────────── */
 function SevIcon({ sev, size=12 }:{ sev:string; size?:number }) {
@@ -253,6 +365,9 @@ function NodeIcon({ kind, size=12, active=false }:{ kind:string; size?:number; a
     case 'diagnosticGroup':return <Terminal size={size} color={active?T.amber:T.tx3} />;
     case 'diagnostic':    return <AlertTriangle size={size} color={T.amber} />;
     case 'rawNode':       return <Binary size={size} color={active?T.violet:T.tx3} />;
+    case 'rule':          return <Braces size={size} color={active?T.amber:T.tx3} />;
+    case 'variant':       return <Image size={size} color={active?T.accent:T.tx3} />;
+    case 'diagnostics':   return <Terminal size={size} color={active?T.red:T.tx3} />;
     default:              return <FileText size={size} color={c} />;
   }
 }
@@ -622,8 +737,9 @@ function OverviewView({ onOpen }:{ onOpen:(kind:TabKind,label:string)=>void }) {
 }
 
 /* ─── View: Page Inspector ───────────────────────────────────────────────── */
-function PageInspectorView({ pageName, selectedFieldId, onSelectField }:{
+function PageInspectorView({ pageName, selectedFieldId, onSelectField, onOpenRules, onOpenVariant }:{
   pageName:string; selectedFieldId:string|null; onSelectField:(id:string|null)=>void;
+  onOpenRules?:(label:string)=>void; onOpenVariant?:(label:string)=>void;
 }) {
   const [variant, setVariant] = useState('Default');
   const [zoom, setZoom] = useState(100);
@@ -658,14 +774,24 @@ function PageInspectorView({ pageName, selectedFieldId, onSelectField }:{
                 color:variant===v?T.accent:T.tx3 }}>{v}</button>
           ))}
         </div>
-        {/* Process shortcuts */}
+        {/* Process shortcuts + Phase 3 entry points */}
         <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:'auto' }}>
-          {['AC','FIP','OCR'].map(p => (
-            <button key={p} style={{ fontSize:10, padding:'2px 7px', borderRadius:4,
-              border:`1px solid ${T.border}`, backgroundColor:T.bgSurface, color:T.tx3 }}>
+          {(['AC','FIP','OCR'] as const).map(p => (
+            <button key={p}
+              onClick={()=>onOpenRules?.(`${pageName} / ${p}`)}
+              style={{ fontSize:10, padding:'2px 7px', borderRadius:4,
+                border:`1px solid ${T.border}`, backgroundColor:T.bgSurface, color:T.tx3,
+                cursor:onOpenRules?'pointer':'default' }}>
               {p}
             </button>
           ))}
+          <div style={{ width:1, height:16, backgroundColor:T.border, margin:'0 4px' }}/>
+          <button onClick={()=>onOpenVariant?.(variant)}
+            style={{ fontSize:10, padding:'2px 7px', borderRadius:4,
+              border:`1px solid ${T.border}`, backgroundColor:T.bgSurface,
+              color:T.accent, cursor:'pointer', fontFamily:MONO }}>
+            ⊞ Variant
+          </button>
           <div style={{ width:1, height:16, backgroundColor:T.border, margin:'0 4px' }}/>
           <WarnBadge n={1} />
         </div>
@@ -1535,6 +1661,747 @@ function GlobalSearchDialog({ onClose, onOpen }:{
   );
 }
 
+/* ─── Phase 3: Rule Editor ───────────────────────────────────────────────── */
+function flattenRules(nodes:RuleNode[], depth=0):Array<{node:RuleNode;depth:number}> {
+  return nodes.flatMap(n => [{node:n,depth},...flattenRules(n.children,depth+1)]);
+}
+
+function RuleEditorView({ processName='AC' }:{ processName?:string }) {
+  const [selId, setSelId]   = useState<string>('rn1');
+  const [fnTab, setFnTab]   = useState<'attrs'|'fields'>('attrs');
+  const flat = flattenRules(RULE_NODES);
+  const sel  = flat.find(f=>f.node.id===selId)?.node ?? flat[0].node;
+
+  const statusColor = (s:string) =>
+    s==='warn' ? T.amber : s==='error' ? T.red : T.green;
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ flexShrink:0, padding:'8px 14px', borderBottom:`1px solid ${T.border}`,
+        backgroundColor:T.bgPanel, display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3,
+          background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+          padding:'2px 6px' }}>{processName}</span>
+        <span style={{ fontSize:11, color:T.tx1, fontWeight:600 }}>Rule Editor</span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>·</span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.accent }}>PAGE_INVOICE_HEADER / {processName}</span>
+        <span style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          {['Add Rule','Reorder','Export DLL'].map(a=>(
+            <button key={a} style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+              background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+              color:T.tx2, cursor:'pointer' }}>{a}</button>
+          ))}
+        </span>
+      </div>
+
+      {/* 3-column body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+
+        {/* Left — Rule tree */}
+        <div style={{ width:220, flexShrink:0, borderRight:`1px solid ${T.border}`,
+          display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ padding:'6px 10px', borderBottom:`1px solid ${T.border}`,
+            fontSize:10, color:T.tx3, fontFamily:MONO }}>
+            {RULE_NODES.length} rules · {flat.length - RULE_NODES.length} sub-rules
+          </div>
+          <div style={{ flex:1, overflowY:'auto' }}>
+            {flat.map(({node:n,depth})=>(
+              <div key={n.id} onClick={()=>setSelId(n.id)}
+                style={{ display:'flex', alignItems:'center', gap:5, cursor:'pointer',
+                  padding:`4px 10px 4px ${10+depth*14}px`,
+                  backgroundColor:selId===n.id ? T.bgHover : 'transparent',
+                  borderLeft:selId===n.id ? `2px solid ${T.accent}` : '2px solid transparent' }}>
+                <span style={{ fontSize:9, color:statusColor(n.status), flexShrink:0 }}>
+                  {n.status==='warn' ? '⚠' : n.status==='error' ? '✕' : '●'}
+                </span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3, flexShrink:0, width:18 }}>
+                  {n.ordinal}
+                </span>
+                <span style={{ fontSize:11, color:n.disabled ? T.tx3 : T.tx1,
+                  textDecoration:n.disabled ? 'line-through' : 'none',
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {n.name}
+                </span>
+                {n.disabled && (
+                  <span style={{ fontFamily:MONO, fontSize:8, color:T.tx3,
+                    background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:2,
+                    padding:'0 3px', flexShrink:0 }}>off</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Center — Rule detail */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          {/* Summary card */}
+          <div style={{ flexShrink:0, padding:'10px 14px', borderBottom:`1px solid ${T.border}`,
+            backgroundColor:T.bgPanel, display:'flex', gap:16 }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:700, color:T.tx1, marginBottom:2 }}>{sel.name}</div>
+              <div style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>
+                fn: <span style={{ color:T.accent }}>{sel.fn}</span>
+                &nbsp;· ordinal: {sel.ordinal}
+                &nbsp;· {sel.statuses.length} statuses
+              </div>
+            </div>
+            <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'flex-start' }}>
+              <span style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+                background:`${statusColor(sel.status)}18`,
+                border:`1px solid ${statusColor(sel.status)}`,
+                borderRadius:3, color:statusColor(sel.status) }}>
+                {sel.status}
+              </span>
+              {sel.disabled && (
+                <span style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+                  background:T.bgBase, border:`1px solid ${T.border}`,
+                  borderRadius:3, color:T.tx3 }}>disabled</span>
+              )}
+            </div>
+          </div>
+
+          {/* Status / Action matrix */}
+          <div style={{ flexShrink:0, borderBottom:`1px solid ${T.border}` }}>
+            <div style={{ padding:'4px 14px', fontSize:9, fontFamily:MONO, color:T.tx3,
+              backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+              STATUS / ACTION MATRIX
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+              <thead>
+                <tr style={{ backgroundColor:T.bgBase }}>
+                  {['#','Token','Description','Action','Target'].map(h=>(
+                    <th key={h} style={{ padding:'4px 10px', textAlign:'left',
+                      fontFamily:MONO, fontSize:9, color:T.tx3,
+                      borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sel.statuses.map(s=>(
+                  <tr key={s.ord} style={{ borderBottom:`1px solid ${T.border}` }}>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.tx3 }}>{s.ord}</td>
+                    <td style={{ padding:'5px 10px' }}>
+                      <span style={{ fontFamily:MONO, fontSize:10, fontWeight:700,
+                        color:T.tx1 }}>{s.tok}</span>
+                    </td>
+                    <td style={{ padding:'5px 10px', fontSize:11, color:T.tx2 }}>{s.desc}</td>
+                    <td style={{ padding:'5px 10px' }}>
+                      <span style={{ fontFamily:MONO, fontSize:10,
+                        color:s.action==='none' ? T.tx3 : s.action==='reject' ? T.red : T.amber }}>
+                        {s.action}
+                      </span>
+                    </td>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.accent }}>
+                      {s.target ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Function Editor host */}
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${T.border}`,
+              backgroundColor:T.bgBase, padding:'0 14px', flexShrink:0 }}>
+              <span style={{ fontSize:9, fontFamily:MONO, color:T.tx3, alignSelf:'center',
+                marginRight:10 }}>FUNCTION EDITOR</span>
+              {(['attrs','fields'] as const).map(t=>(
+                <button key={t} onClick={()=>setFnTab(t)}
+                  style={{ fontSize:10, padding:'5px 12px', border:'none',
+                    borderBottom:fnTab===t ? `2px solid ${T.accent}` : '2px solid transparent',
+                    background:'transparent', color:fnTab===t ? T.tx1 : T.tx3,
+                    cursor:'pointer', fontFamily:MONO }}>
+                  {t==='attrs' ? 'Attributes' : 'Field Bindings'}
+                </button>
+              ))}
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:'10px 14px' }}>
+              {fnTab==='attrs' ? (
+                Object.keys(sel.attrs).length === 0
+                  ? <div style={{ fontSize:11, color:T.tx3 }}>No attributes defined for this rule.</div>
+                  : <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                      <tbody>
+                        {Object.entries(sel.attrs).map(([k,v])=>(
+                          <tr key={k} style={{ borderBottom:`1px solid ${T.border}` }}>
+                            <td style={{ padding:'5px 8px', fontFamily:MONO, fontSize:10,
+                              color:T.tx3, width:'30%' }}>{k}</td>
+                            <td style={{ padding:'5px 8px', fontFamily:MONO, fontSize:10,
+                              color:T.accent }}>{v}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+              ) : (
+                sel.fields.length === 0
+                  ? <div style={{ fontSize:11, color:T.tx3 }}>No field bindings for this rule.</div>
+                  : <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                      {sel.fields.map(f=>(
+                        <div key={f} style={{ display:'flex', alignItems:'center', gap:8,
+                          padding:'5px 8px', backgroundColor:T.bgPanel,
+                          border:`1px solid ${T.border}`, borderRadius:4 }}>
+                          <Layers size={11} color={T.accent} />
+                          <span style={{ fontFamily:MONO, fontSize:10, color:T.tx1 }}>{f}</span>
+                        </div>
+                      ))}
+                    </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right — Description, refs, diagnostics */}
+        <div style={{ width:200, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          display:'flex', flexDirection:'column', overflowY:'auto' }}>
+          <div style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border}`,
+            fontSize:9, fontFamily:MONO, color:T.tx3, backgroundColor:T.bgBase }}>
+            DESCRIPTION
+          </div>
+          <div style={{ padding:'8px 10px', fontSize:11, color:T.tx2, lineHeight:1.6,
+            borderBottom:`1px solid ${T.border}` }}>
+            Invokes <span style={{ fontFamily:MONO, color:T.accent }}>{sel.fn}</span> to
+            evaluate the <em>{sel.name}</em> rule. On match the extraction proceeds;
+            on mismatch the configured action fires.
+          </div>
+          <div style={{ padding:'6px 10px 2px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+            FIELD REFERENCES
+          </div>
+          {sel.fields.length===0
+            ? <div style={{ padding:'8px 10px', fontSize:11, color:T.tx3 }}>None</div>
+            : sel.fields.map(f=>(
+                <div key={f} style={{ padding:'5px 10px', display:'flex',
+                  alignItems:'center', gap:6, borderBottom:`1px solid ${T.border}` }}>
+                  <Layers size={10} color={T.accent} />
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx1 }}>{f}</span>
+                </div>
+              ))
+          }
+          <div style={{ padding:'6px 10px 2px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+            DIAGNOSTICS
+          </div>
+          {sel.status==='warn'
+            ? <div style={{ padding:'8px 10px', display:'flex', gap:6, alignItems:'flex-start' }}>
+                <AlertTriangle size={11} color={T.amber} style={{ flexShrink:0, marginTop:1 }} />
+                <span style={{ fontSize:11, color:T.tx2 }}>
+                  {sel.id==='rn3'
+                    ? 'Tolerance threshold not set; using default (0.01)'
+                    : 'Regex pattern may be too broad — add anchors'}
+                </span>
+              </div>
+            : <div style={{ padding:'8px 10px', fontSize:11, color:T.tx3 }}>No issues.</div>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Phase 3: Process Scope Matrix ──────────────────────────────────────── */
+function ProcessScopeView({ processName }:{ processName:string }) {
+  const procDesc: Record<string,{scope:string;target:string;description:string}> = {
+    AC:  { scope:'Page',     target:'PAGE_INVOICE_HEADER', description:'Automated Capture — extracts structured fields from page regions using rule-based pattern matching.' },
+    FIP: { scope:'Page Variant', target:'Default / Alt1',  description:'Form Image Processing — pre-processes raw scan images, applies dropout and normalisation before field extraction.' },
+    OCR: { scope:'Page',     target:'PAGE_INVOICE_HEADER', description:'Optical Character Recognition — converts image regions to text; result fed downstream to AC.' },
+  };
+  const info = procDesc[processName] ?? procDesc['AC'];
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ flexShrink:0, padding:'8px 14px', borderBottom:`1px solid ${T.border}`,
+        backgroundColor:T.bgPanel, display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3,
+          background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+          padding:'2px 6px' }}>process</span>
+        <span style={{ fontSize:11, color:T.tx1, fontWeight:600 }}>{processName}</span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>
+          scope: <span style={{ color:T.accent }}>{info.scope}</span>
+        </span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>
+          target: <span style={{ color:T.tx1 }}>{info.target}</span>
+        </span>
+        <span style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+          {['Edit Scope','Open Rules'].map(a=>(
+            <button key={a} style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+              background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+              color:T.tx2, cursor:'pointer' }}>{a}</button>
+          ))}
+        </span>
+      </div>
+
+      {/* Two-column body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+
+        {/* Main area */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflowY:'auto' }}>
+          {/* Scope matrix */}
+          <div style={{ flexShrink:0 }}>
+            <div style={{ padding:'4px 14px', fontSize:9, fontFamily:MONO, color:T.tx3,
+              backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+              SCOPE MATRIX
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+              <thead>
+                <tr style={{ backgroundColor:T.bgBase }}>
+                  {['Scope','Object','Configured','Refs','Rules','Warn',''].map(h=>(
+                    <th key={h} style={{ padding:'4px 10px', textAlign:'left',
+                      fontFamily:MONO, fontSize:9, color:T.tx3,
+                      borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {PROCESS_SCOPES.map((row,i)=>(
+                  <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.tx3 }}>{row.scope}</td>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.accent }}>{row.obj}</td>
+                    <td style={{ padding:'5px 10px' }}>
+                      <span style={{ fontFamily:MONO, fontSize:10,
+                        color:row.configured ? T.green : T.tx3 }}>
+                        {row.configured ? 'Yes' : 'No'}
+                      </span>
+                    </td>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.tx2 }}>{row.refs || '—'}</td>
+                    <td style={{ padding:'5px 10px', fontFamily:MONO, fontSize:10, color:T.tx2 }}>{row.rules || '—'}</td>
+                    <td style={{ padding:'5px 10px' }}>
+                      {row.warn>0
+                        ? <span style={{ display:'flex', alignItems:'center', gap:4, fontFamily:MONO, fontSize:10, color:T.amber }}>
+                            <AlertTriangle size={10} color={T.amber}/>{row.warn}
+                          </span>
+                        : <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>—</span>}
+                    </td>
+                    <td style={{ padding:'5px 10px' }}>
+                      {row.configured && (
+                        <button style={{ fontFamily:MONO, fontSize:9, padding:'1px 6px',
+                          background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+                          color:T.accent, cursor:'pointer' }}>Open ›</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Linked resources + reverse refs row */}
+          <div style={{ display:'flex', borderTop:`1px solid ${T.border}`, flexShrink:0 }}>
+            <div style={{ flex:1, borderRight:`1px solid ${T.border}` }}>
+              <div style={{ padding:'4px 14px', fontSize:9, fontFamily:MONO, color:T.tx3,
+                backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+                LINKED RESOURCES ({PROC_LINKED_RES.length})
+              </div>
+              {PROC_LINKED_RES.map(r=>(
+                <div key={r.name} style={{ padding:'6px 14px', display:'flex',
+                  alignItems:'center', gap:8, borderBottom:`1px solid ${T.border}` }}>
+                  <Database size={11} color={T.accent} />
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx1 }}>{r.name}</span>
+                  <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginLeft:4 }}>{r.type}</span>
+                  <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9, color:T.tx3 }}>{r.refs} refs</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ padding:'4px 14px', fontSize:9, fontFamily:MONO, color:T.tx3,
+                backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+                REVERSE REFERENCES ({PROC_REVERSE_REFS.length})
+              </div>
+              {PROC_REVERSE_REFS.map((r,i)=>(
+                <div key={i} style={{ padding:'6px 14px', display:'flex',
+                  alignItems:'center', gap:8, borderBottom:`1px solid ${T.border}` }}>
+                  <NodeIcon kind={r.kind} size={11} />
+                  <span style={{ fontSize:11, color:T.tx2 }}>{r.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes / diagnostics */}
+          <div style={{ flexShrink:0 }}>
+            <div style={{ padding:'4px 14px', fontSize:9, fontFamily:MONO, color:T.tx3,
+              backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+              NOTES &amp; DIAGNOSTICS
+            </div>
+            <div style={{ padding:'10px 14px', display:'flex', flexDirection:'column', gap:6 }}>
+              <div style={{ display:'flex', gap:6, alignItems:'flex-start' }}>
+                <Info size={11} color={T.blue} style={{ flexShrink:0, marginTop:1 }} />
+                <span style={{ fontSize:11, color:T.tx2 }}>
+                  {processName} is configured for <strong style={{ color:T.tx1 }}>3 of 3</strong> pages.
+                </span>
+              </div>
+              <div style={{ display:'flex', gap:6, alignItems:'flex-start' }}>
+                <AlertTriangle size={11} color={T.amber} style={{ flexShrink:0, marginTop:1 }} />
+                <span style={{ fontSize:11, color:T.tx2 }}>
+                  PAGE_INVOICE_HEADER has 2 rule-level warnings that may affect extraction accuracy.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right metadata rail */}
+        <div style={{ width:200, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          display:'flex', flexDirection:'column', overflowY:'auto' }}>
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+            PROCESS METADATA
+          </div>
+          {[
+            { k:'Name',      v:processName },
+            { k:'Version',   v:'3.1.4' },
+            { k:'Scope',     v:info.scope },
+            { k:'Target',    v:info.target },
+            { k:'Rules',     v:'29 active · 1 disabled' },
+            { k:'Functions', v:'12' },
+          ].map(({k,v})=>(
+            <div key={k} style={{ padding:'5px 10px', borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ fontSize:9, fontFamily:MONO, color:T.tx3 }}>{k}</div>
+              <div style={{ fontSize:11, color:T.tx1, marginTop:1 }}>{v}</div>
+            </div>
+          ))}
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}`,
+            borderTop:`1px solid ${T.border}` }}>
+            PRIVATE NODE PATH
+          </div>
+          <div style={{ padding:'8px 10px', fontFamily:MONO, fontSize:9, color:T.accent,
+            wordBreak:'break-all', borderBottom:`1px solid ${T.border}` }}>
+            /Root/WFProcess[@name="{processName}"]/WFScope/
+          </div>
+          <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:6 }}>
+            {['Export XML','Copy Path','Copy JSON'].map(a=>(
+              <button key={a} style={{ fontFamily:MONO, fontSize:10, padding:'4px 8px',
+                background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+                color:T.tx2, cursor:'pointer', textAlign:'left' }}>{a}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Phase 3: Variant Inspector ─────────────────────────────────────────── */
+function VariantInspectorView({ variantName }:{ variantName:string }) {
+  const [overlays, setOverlays] = useState({ fields:true, dropout:true, omr:true, diags:false });
+  const [proc, setProc]         = useState<'FIP'|'OCR'>('FIP');
+
+  function toggle(k: keyof typeof overlays) {
+    setOverlays(o=>({...o,[k]:!o[k]}));
+  }
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ flexShrink:0, padding:'8px 14px', borderBottom:`1px solid ${T.border}`,
+        backgroundColor:T.bgPanel, display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3,
+          background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+          padding:'2px 6px' }}>variant</span>
+        <span style={{ fontSize:11, color:T.tx1, fontWeight:600 }}>
+          PAGE_INVOICE_HEADER.<span style={{ color:T.accent }}>{variantName}</span>
+        </span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3 }}>
+          FormID: <span style={{ color:T.tx1 }}>1042</span>
+        </span>
+        <div style={{ display:'flex', gap:4, marginLeft:'auto' }}>
+          {(['FIP','OCR'] as const).map(p=>(
+            <button key={p} onClick={()=>setProc(p)}
+              style={{ fontFamily:MONO, fontSize:10, padding:'2px 10px',
+                background:proc===p ? T.accent : T.bgBase,
+                border:`1px solid ${proc===p ? T.accent : T.border}`,
+                borderRadius:3, color:proc===p ? '#000' : T.tx2, cursor:'pointer' }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+
+        {/* Canvas area */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden',
+          borderRight:`1px solid ${T.border}` }}>
+          {/* Overlay toggles */}
+          <div style={{ flexShrink:0, padding:'6px 12px', borderBottom:`1px solid ${T.border}`,
+            backgroundColor:T.bgBase, display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginRight:4 }}>OVERLAYS</span>
+            {([['fields','Fields',T.accent],['dropout','Dropout','#6366f1'],['omr','OMR','#f59e0b'],['diags','Diags',T.red]] as const).map(
+              ([k,label,col])=>(
+                <button key={k} onClick={()=>toggle(k as keyof typeof overlays)}
+                  style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+                    background: overlays[k as keyof typeof overlays] ? `${col}22` : T.bgPanel,
+                    border:`1px solid ${overlays[k as keyof typeof overlays] ? col : T.border}`,
+                    borderRadius:3,
+                    color: overlays[k as keyof typeof overlays] ? col : T.tx3,
+                    cursor:'pointer' }}>
+                  {label}
+                </button>
+              )
+            )}
+            <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+              2550×3300 px · 300dpi
+            </span>
+          </div>
+
+          {/* Canvas */}
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center',
+            overflow:'hidden', padding:'16px', backgroundColor:T.bgBase }}>
+            <div style={{ position:'relative', width:280, height:360,
+              backgroundColor:'#f8f8f8', border:`1px solid ${T.border}`,
+              boxShadow:'0 4px 20px rgba(0,0,0,0.4)' }}>
+
+              {/* Simulated page content lines */}
+              {[14,20,26,32,38,44,52,58,64,70,76,82,88,94].map(y=>(
+                <div key={y} style={{ position:'absolute', left:'8%', right:'8%',
+                  top:`${y}%`, height:1, backgroundColor:'#ddd' }} />
+              ))}
+
+              {/* Dropout region overlays */}
+              {overlays.dropout && DROPOUT_REGIONS.map(d=>(
+                <div key={d.id} style={{ position:'absolute',
+                  left:`${d.x}%`, top:`${d.y}%`, width:`${d.w}%`, height:`${d.h}%`,
+                  backgroundColor:`${d.color}33`, border:`1px dashed ${d.color}`,
+                  boxSizing:'border-box' }}>
+                  <span style={{ position:'absolute', top:1, left:2, fontFamily:MONO,
+                    fontSize:7, color:d.color, background:'rgba(0,0,0,0.3)',
+                    padding:'0 2px', borderRadius:1 }}>{d.name}</span>
+                </div>
+              ))}
+
+              {/* OMR field overlays */}
+              {overlays.omr && OMR_FIELDS.map((o,i)=>(
+                <div key={i} style={{ position:'absolute',
+                  left:`${o.x}%`, top:`${o.y}%`, width:`${o.w}%`, height:`${o.h}%`,
+                  backgroundColor:'#f59e0b22', border:'1px solid #f59e0b',
+                  boxSizing:'border-box' }}>
+                  <span style={{ position:'absolute', top:1, left:2, fontFamily:MONO,
+                    fontSize:7, color:'#f59e0b', background:'rgba(0,0,0,0.3)',
+                    padding:'0 2px', borderRadius:1 }}>{o.name}</span>
+                </div>
+              ))}
+
+              {/* Field overlays */}
+              {overlays.fields && [
+                {n:'InvoiceDate',x:55,y:16,w:35,h:6},
+                {n:'VendorName', x:8, y:22,w:45,h:6},
+                {n:'Total',      x:55,y:28,w:35,h:6},
+                {n:'LineRef',    x:8, y:34,w:25,h:6},
+              ].map(f=>(
+                <div key={f.n} style={{ position:'absolute',
+                  left:`${f.x}%`, top:`${f.y}%`, width:`${f.w}%`, height:`${f.h}%`,
+                  backgroundColor:'#2dd4bf22', border:`1px solid ${T.accent}`,
+                  boxSizing:'border-box' }}>
+                  <span style={{ position:'absolute', top:1, left:2, fontFamily:MONO,
+                    fontSize:7, color:T.accent, background:'rgba(0,0,0,0.3)',
+                    padding:'0 2px', borderRadius:1 }}>{f.n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right panel */}
+        <div style={{ width:220, flexShrink:0, display:'flex', flexDirection:'column',
+          overflowY:'auto' }}>
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}` }}>
+            VARIANT METADATA
+          </div>
+          {[
+            { k:'Page',      v:'PAGE_INVOICE_HEADER' },
+            { k:'Variant',   v:variantName },
+            { k:'FormID',    v:'1042' },
+            { k:'Source',    v:'bytes' },
+            { k:'Dimensions',v:'2550 × 3300 px' },
+            { k:'Resolution',v:'300 dpi' },
+            { k:'Process',   v:proc },
+          ].map(({k,v})=>(
+            <div key={k} style={{ padding:'5px 10px', borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ fontSize:9, fontFamily:MONO, color:T.tx3 }}>{k}</div>
+              <div style={{ fontSize:11, color:T.tx1, marginTop:1 }}>{v}</div>
+            </div>
+          ))}
+
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}`,
+            borderTop:`1px solid ${T.border}` }}>
+            DROPOUT REGIONS ({DROPOUT_REGIONS.length})
+          </div>
+          {DROPOUT_REGIONS.map(d=>(
+            <div key={d.id} style={{ padding:'6px 10px',
+              borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ width:10, height:10, borderRadius:2, flexShrink:0,
+                backgroundColor:d.color, opacity:0.7 }} />
+              <div>
+                <div style={{ fontFamily:MONO, fontSize:10, color:T.tx1 }}>{d.name}</div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{d.process}</div>
+              </div>
+            </div>
+          ))}
+
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}`,
+            borderTop:`1px solid ${T.border}` }}>
+            OMR FIELDS ({OMR_FIELDS.length})
+          </div>
+          {OMR_FIELDS.map(o=>(
+            <div key={o.name} style={{ padding:'6px 10px',
+              borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ width:10, height:10, border:'2px solid #f59e0b',
+                borderRadius:1, flexShrink:0 }} />
+              <div>
+                <div style={{ fontFamily:MONO, fontSize:10, color:T.tx1 }}>{o.name}</div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+                  {o.type} · threshold {o.threshold}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div style={{ padding:'6px 10px', fontSize:9, fontFamily:MONO, color:T.tx3,
+            backgroundColor:T.bgBase, borderBottom:`1px solid ${T.border}`,
+            borderTop:`1px solid ${T.border}` }}>
+            DIAGNOSTICS
+          </div>
+          <div style={{ padding:'8px 10px', fontSize:11, color:T.tx3 }}>No issues.</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Phase 3: Diagnostics View ──────────────────────────────────────────── */
+function DiagnosticsView() {
+  const [sevFilter,  setSevFilter]  = useState<string>('all');
+  const [srcFilter,  setSrcFilter]  = useState<string>('all');
+  const [expandedId, setExpandedId] = useState<string|null>(null);
+
+  const filtered = DIAG_FULL.filter(d=>
+    (sevFilter==='all' || d.sev===sevFilter) &&
+    (srcFilter==='all' || d.source===srcFilter)
+  );
+  const sources = ['all',...Array.from(new Set(DIAG_FULL.map(d=>d.source)))];
+
+  const sevColor = (s:string) =>
+    s==='error' ? T.red : s==='warn' ? T.amber : T.blue;
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ flexShrink:0, padding:'8px 14px', borderBottom:`1px solid ${T.border}`,
+        backgroundColor:T.bgPanel, display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:11, color:T.tx1, fontWeight:600 }}>Diagnostics</span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.amber }}>
+          {DIAG_FULL.filter(d=>d.sev==='warn').length} warnings
+        </span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.blue }}>
+          {DIAG_FULL.filter(d=>d.sev==='info').length} info
+        </span>
+        <span style={{ fontFamily:MONO, fontSize:10, color:T.red }}>
+          {DIAG_FULL.filter(d=>d.sev==='error').length} errors
+        </span>
+        <button style={{ marginLeft:'auto', fontFamily:MONO, fontSize:10, padding:'2px 8px',
+          background:T.bgBase, border:`1px solid ${T.border}`, borderRadius:3,
+          color:T.tx2, cursor:'pointer' }}>Export</button>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ flexShrink:0, padding:'6px 14px', borderBottom:`1px solid ${T.border}`,
+        backgroundColor:T.bgBase, display:'flex', alignItems:'center', gap:12 }}>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>SEV</span>
+        {['all','error','warn','info'].map(s=>(
+          <button key={s} onClick={()=>setSevFilter(s)}
+            style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+              background:sevFilter===s ? (s==='all' ? T.bgPanel : `${sevColor(s)}22`) : 'transparent',
+              border:`1px solid ${sevFilter===s ? (s==='all' ? T.border : sevColor(s)) : T.border}`,
+              borderRadius:3,
+              color:sevFilter===s ? (s==='all' ? T.tx1 : sevColor(s)) : T.tx3,
+              cursor:'pointer' }}>
+            {s}
+          </button>
+        ))}
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginLeft:8 }}>SOURCE</span>
+        {sources.map(s=>(
+          <button key={s} onClick={()=>setSrcFilter(s)}
+            style={{ fontFamily:MONO, fontSize:10, padding:'2px 8px',
+              background:srcFilter===s ? T.bgPanel : 'transparent',
+              border:`1px solid ${srcFilter===s ? T.accent : T.border}`,
+              borderRadius:3, color:srcFilter===s ? T.accent : T.tx3, cursor:'pointer' }}>
+            {s}
+          </button>
+        ))}
+        <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+          {filtered.length} / {DIAG_FULL.length} items
+        </span>
+      </div>
+
+      {/* Diagnostics table */}
+      <div style={{ flex:1, overflowY:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+          <thead>
+            <tr style={{ backgroundColor:T.bgBase, position:'sticky', top:0, zIndex:1 }}>
+              {['Sev','Source','Title','Message','Object Path','Time'].map(h=>(
+                <th key={h} style={{ padding:'5px 10px', textAlign:'left',
+                  fontFamily:MONO, fontSize:9, color:T.tx3,
+                  borderBottom:`1px solid ${T.border}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(d=>(
+              <>
+                <tr key={d.id} onClick={()=>setExpandedId(expandedId===d.id ? null : d.id)}
+                  style={{ borderBottom:`1px solid ${T.border}`, cursor:'pointer',
+                    backgroundColor:expandedId===d.id ? T.bgHover : 'transparent' }}>
+                  <td style={{ padding:'6px 10px' }}>
+                    <SevIcon sev={d.sev} size={12}/>
+                  </td>
+                  <td style={{ padding:'6px 10px' }}>
+                    <span style={{ fontFamily:MONO, fontSize:9, padding:'1px 5px',
+                      background:`${sevColor(d.sev)}15`,
+                      border:`1px solid ${sevColor(d.sev)}`,
+                      borderRadius:3, color:sevColor(d.sev) }}>{d.source}</span>
+                  </td>
+                  <td style={{ padding:'6px 10px', color:T.tx1, fontWeight:500 }}>{d.title}</td>
+                  <td style={{ padding:'6px 10px', color:T.tx2, maxWidth:280,
+                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.msg}</td>
+                  <td style={{ padding:'6px 10px', fontFamily:MONO, fontSize:9, color:T.accent }}>
+                    {d.path || '—'}
+                  </td>
+                  <td style={{ padding:'6px 10px', fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+                    {d.ts}
+                  </td>
+                </tr>
+                {expandedId===d.id && (
+                  <tr key={`${d.id}-exp`} style={{ backgroundColor:T.bgHover }}>
+                    <td colSpan={6} style={{ padding:'8px 16px 10px 36px' }}>
+                      <div style={{ fontSize:11, color:T.tx2, lineHeight:1.7 }}>{d.msg}</div>
+                      {d.path && (
+                        <div style={{ marginTop:4, fontFamily:MONO, fontSize:9, color:T.accent }}>
+                          path: {d.path}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length===0 && (
+          <div style={{ padding:'40px', textAlign:'center', color:T.tx3, fontSize:12 }}>
+            No diagnostics match the current filter.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Right Inspector Rail ───────────────────────────────────────────────── */
 function RightInspectorRail({ selectedFieldId, activeTab }:{
   selectedFieldId:string|null; activeTab:WorkspaceTab|null;
@@ -1811,7 +2678,9 @@ export function DarkPro() {
           {activeTab?.kind==='page' && (
             <PageInspectorView pageName={activeTab.label}
               selectedFieldId={selectedFieldId}
-              onSelectField={setSelectedFieldId} />
+              onSelectField={setSelectedFieldId}
+              onOpenRules={label=>openTab('rule',label)}
+              onOpenVariant={label=>openTab('variant',label)} />
           )}
           {activeTab?.kind==='document' && (
             <DocumentInspectorView docName={activeTab.label}
@@ -1824,6 +2693,16 @@ export function DarkPro() {
             <ResourceInspectorView resName={activeTab.label} />
           )}
           {activeTab?.kind==='raw' && <RawNodeInspectorView />}
+          {activeTab?.kind==='rule' && (
+            <RuleEditorView processName={activeTab.label.includes('/') ? activeTab.label.split('/')[1]?.trim() : activeTab.label} />
+          )}
+          {activeTab?.kind==='process' && (
+            <ProcessScopeView processName={activeTab.label} />
+          )}
+          {activeTab?.kind==='variant' && (
+            <VariantInspectorView variantName={activeTab.label} />
+          )}
+          {activeTab?.kind==='diagnostics' && <DiagnosticsView />}
         </main>
 
         {/* Right inspector rail */}
