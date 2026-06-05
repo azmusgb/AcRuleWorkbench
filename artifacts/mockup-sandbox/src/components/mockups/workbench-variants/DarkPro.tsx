@@ -1,753 +1,1168 @@
 import React, { useState, useMemo } from 'react';
 import {
-  Search, ChevronRight, ChevronDown, ChevronUp,
-  HelpCircle, Moon, Sun, FileText, Layers, GitBranch,
-  Database, Code, Hash, AlertTriangle, CheckCircle, XCircle,
-  Info, Copy, Download, Shield, Zap, BarChart2, Settings,
-  ArrowRight, Eye, Terminal, Package, X, Filter,
-  ArrowUpDown, TrendingUp,
+  Search, FileText, GitBranch, Database, Code, Hash,
+  AlertTriangle, CheckCircle, XCircle, Info, Copy, Download,
+  Zap, Settings, Eye, Terminal, Package, X,
+  ChevronRight, ChevronDown, Layers, BarChart2,
+  ZoomIn, ZoomOut, Maximize2, HelpCircle, Moon,
+  Plus, Filter, Clock, MoreHorizontal, ChevronUp,
+  RefreshCw, Shield, FolderOpen, Folder, Image,
+  ArrowRight, List, Grid3X3, AlignLeft, Binary,
 } from 'lucide-react';
 
 /* ─── Design tokens ──────────────────────────────────────────────────────── */
 const T = {
-  /* surface */
-  bgBase:      '#0d1117',
-  bgPanel:     '#161b22',
-  bgPanel2:    '#191f2e',
-  bgSurface:   '#1c2333',
-  bgSurface2:  '#20293c',
-  bgHover:     '#1e2638',
-  /* accent */
-  accent:      '#2dd4bf',
-  accentLo:    'rgba(45,212,191,0.11)',
-  accentMid:   'rgba(45,212,191,0.22)',
-  accentGlow:  'rgba(45,212,191,0.35)',
-  /* text */
-  tx1:         '#e2e8f0',
-  tx2:         '#8b96aa',
-  tx3:         '#4a5568',
-  /* semantic */
-  green:       '#34d399',  greenLo: 'rgba(52,211,153,0.12)',
-  amber:       '#fbbf24',  amberLo: 'rgba(251,191,36,0.12)',
-  red:         '#f87171',  redLo:   'rgba(248,113,113,0.12)',
-  blue:        '#60a5fa',  blueLo:  'rgba(96,165,250,0.12)',
-  violet:      '#a78bfa',  violetLo:'rgba(167,139,250,0.12)',
-  /* structure */
-  border:      '#252e40',
-  border2:     '#1a2130',
-  /* type tag */
-  tagPage: { bg:'rgba(96,165,250,0.12)',  tx:'#60a5fa' },
-  tagUdf:  { bg:'rgba(167,139,250,0.12)', tx:'#a78bfa' },
-  tagDoc:  { bg:'rgba(52,211,153,0.12)',  tx:'#34d399' },
+  bgBase:     '#0d1117',
+  bgPanel:    '#161b22',
+  bgPanel2:   '#191f2e',
+  bgSurface:  '#1c2333',
+  bgSurface2: '#20293c',
+  bgHover:    '#1e2638',
+  accent:     '#2dd4bf',
+  accentLo:   'rgba(45,212,191,0.11)',
+  accentMid:  'rgba(45,212,191,0.22)',
+  accentGlow: 'rgba(45,212,191,0.35)',
+  tx1:        '#e2e8f0',
+  tx2:        '#8b96aa',
+  tx3:        '#4a5568',
+  green:      '#34d399', greenLo:  'rgba(52,211,153,0.12)',
+  amber:      '#fbbf24', amberLo:  'rgba(251,191,36,0.12)',
+  red:        '#f87171', redLo:    'rgba(248,113,113,0.12)',
+  blue:       '#60a5fa', blueLo:   'rgba(96,165,250,0.12)',
+  violet:     '#a78bfa', violetLo: 'rgba(167,139,250,0.12)',
+  border:     '#252e40',
+  border2:    '#1a2130',
 };
-const MONO = "'JetBrains Mono', ui-monospace, 'Cascadia Code', Menlo, monospace";
+const MONO = "'JetBrains Mono', ui-monospace, Menlo, monospace";
 const SANS = "Inter, ui-sans-serif, system-ui, sans-serif";
 
 /* ─── Static data ────────────────────────────────────────────────────────── */
-interface TreeNode {
-  id:string; name:string; fn:string; result:string; ordinal:number;
-  guid:string; level:number; status:'ok'|'warn'|'error'; params:number;
-  children:TreeNode[];
+interface FwdNode {
+  id: string;
+  kind: 'root'|'group'|'page'|'pageVariant'|'field'|'document'|'batch'
+       |'process'|'resourceType'|'resource'|'diagnosticGroup'|'diagnostic'|'rawNode';
+  label: string;
+  meta?: string;
+  warn?: number; err?: number;
+  children?: FwdNode[];
+  tabKind?: TabKind;
 }
-const TREE: TreeNode[] = [
-  { id:'r1', name:'ExtractInvoiceDate',  fn:'MatchField',   result:'invoice_date',   ordinal:1,   guid:'a1b2c3d4', level:1, status:'ok',   params:3, children:[
-    { id:'r1a', name:'ValidateDateFormat', fn:'RegexCheck',   result:'format_ok',      ordinal:1.1, guid:'e5f6a7b8', level:2, status:'warn', params:1, children:[] },
-  ]},
-  { id:'r2', name:'ExtractVendorName',   fn:'RegexCapture', result:'vendor_name',    ordinal:2,   guid:'c9d0e1f2', level:1, status:'ok',   params:2, children:[] },
-  { id:'r3', name:'ValidateTotal',       fn:'NumericCheck', result:'total_ok',       ordinal:3,   guid:'g3h4i5j6', level:1, status:'warn', params:4, children:[
-    { id:'r3a', name:'CheckCurrencyCode', fn:'LookupTable',  result:'currency_ok',   ordinal:3.1, guid:'k7l8m9n0', level:2, status:'ok',   params:2, children:[] },
-    { id:'r3b', name:'RoundingVerify',    fn:'NumericCheck', result:'round_ok',      ordinal:3.2, guid:'o1p2q3r4', level:2, status:'ok',   params:1, children:[] },
-  ]},
-  { id:'r4', name:'CaptureLineRef',      fn:'MatchField',   result:'line_reference', ordinal:4,   guid:'s5t6u7v8', level:1, status:'ok',   params:2, children:[] },
+
+const FWD_TREE: FwdNode[] = [{
+  id:'root', kind:'root', label:'fwd.cfd', meta:'Read-only · 142ms',
+  children:[
+    { id:'pages', kind:'group', label:'Pages', meta:'3',
+      children:[
+        { id:'page-inv', kind:'page', label:'PAGE_INVOICE_HEADER', warn:1, tabKind:'page',
+          children:[
+            { id:'page-inv-vars', kind:'group', label:'Variants', meta:'2',
+              children:[
+                { id:'var-default', kind:'pageVariant', label:'Default' },
+                { id:'var-alt1',    kind:'pageVariant', label:'Alt1' },
+              ]},
+            { id:'page-inv-flds', kind:'group', label:'Fields', meta:'4',
+              children:[
+                { id:'fld-date',   kind:'field', label:'InvoiceDate' },
+                { id:'fld-vendor', kind:'field', label:'VendorName' },
+                { id:'fld-total',  kind:'field', label:'Total', warn:1 },
+                { id:'fld-line',   kind:'field', label:'LineRef' },
+              ]},
+          ]},
+        { id:'page-line',   kind:'page', label:'PAGE_LINE_ITEMS',  tabKind:'page' },
+        { id:'page-footer', kind:'page', label:'PAGE_FOOTER',       tabKind:'page' },
+      ]},
+    { id:'documents', kind:'group', label:'Documents', meta:'1',
+      children:[
+        { id:'doc-main', kind:'document', label:'DOC_CAPTURE_MAIN', warn:2, tabKind:'document' },
+      ]},
+    { id:'batches', kind:'group', label:'Batches', meta:'1',
+      children:[
+        { id:'batch-std', kind:'batch', label:'BATCH_STANDARD', tabKind:'batch' },
+      ]},
+    { id:'processes', kind:'group', label:'Processes', meta:'3',
+      children:[
+        { id:'proc-ac',  kind:'process', label:'AC' },
+        { id:'proc-fip', kind:'process', label:'FIP' },
+        { id:'proc-ocr', kind:'process', label:'OCR' },
+      ]},
+    { id:'resources', kind:'group', label:'Resources', meta:'3 types',
+      children:[
+        { id:'res-tables',   kind:'resourceType', label:'Tables',    meta:'0' },
+        { id:'res-functions',kind:'resourceType', label:'Functions', meta:'2',
+          children:[
+            { id:'res-fn-vendor', kind:'resource', label:'VendorLookup', tabKind:'resource' },
+            { id:'res-fn-tax',    kind:'resource', label:'TaxCalc',       tabKind:'resource' },
+          ]},
+        { id:'res-filerefs', kind:'resourceType', label:'Filerefs',  meta:'0' },
+        { id:'res-rules',    kind:'resourceType', label:'Rule DLL',  meta:'1' },
+        { id:'res-dateformat',kind:'resourceType',label:'DateFormat', meta:'0' },
+      ]},
+    { id:'diagnostics', kind:'diagnosticGroup', label:'Diagnostics', warn:2,
+      children:[
+        { id:'diag-1', kind:'diagnostic', label:'Regex pattern may be too broad',    warn:1 },
+        { id:'diag-2', kind:'diagnostic', label:'Tolerance threshold uses default',  warn:1 },
+        { id:'diag-3', kind:'diagnostic', label:'2 unresolved WFFileRef references', warn:1 },
+      ]},
+    { id:'raw', kind:'rawNode', label:'Raw Nodes', tabKind:'raw',
+      children:[
+        { id:'raw-root',      kind:'rawNode', label:'/Root' },
+        { id:'raw-processes', kind:'rawNode', label:'/Root/Processes' },
+        { id:'raw-resources', kind:'rawNode', label:'/Root/Resources' },
+      ]},
+  ],
+}];
+
+const FIELDS = [
+  { id:'fld-date',   name:'InvoiceDate', type:'Date',    x:42,  y:88,  w:162, h:26, src:'OCR', rules:3, warn:0 },
+  { id:'fld-vendor', name:'VendorName',  type:'String',  x:42,  y:128, w:210, h:26, src:'OCR', rules:2, warn:0 },
+  { id:'fld-total',  name:'Total',       type:'Numeric', x:330, y:88,  w:120, h:26, src:'OCR', rules:4, warn:1 },
+  { id:'fld-line',   name:'LineRef',     type:'String',  x:42,  y:178, w:138, h:26, src:'DB',  rules:2, warn:0 },
 ];
 
-const FLAT_RULES: TreeNode[] = [];
-function flatten(nodes: TreeNode[]) { nodes.forEach(n => { FLAT_RULES.push(n); flatten(n.children); }); }
-flatten(TREE);
-
-const FUNCTIONS = [
-  { name:'MatchField',   cat:'Extraction', usages:14, params:'(field, pattern, opts?)', status:'ok'   },
-  { name:'RegexCapture', cat:'Extraction', usages:8,  params:'(pattern, group?)',       status:'ok'   },
-  { name:'NumericCheck', cat:'Validation', usages:6,  params:'(value, tolerance)',      status:'warn' },
-  { name:'LookupTable',  cat:'Reference',  usages:4,  params:'(table, key)',            status:'ok'   },
-  { name:'RegexCheck',   cat:'Validation', usages:11, params:'(pattern, flags?)',       status:'ok'   },
-  { name:'DateParse',    cat:'Transform',  usages:3,  params:'(value, format)',         status:'ok'   },
+const RAW_CHILDREN = [
+  { name:'AC',         size:'4.2 KB', type:'Collection' },
+  { name:'FIP',        size:'1.8 KB', type:'Collection' },
+  { name:'OCR',        size:'2.1 KB', type:'Collection' },
+  { name:'Store',      size:'0.9 KB', type:'Collection' },
+  { name:'Inventory',  size:'0.4 KB', type:'Blob' },
 ];
 
-const SCOPES = [
-  { name:'PAGE_INVOICE_HEADER', type:'page', rules:4, warnings:1 },
-  { name:'PAGE_LINE_ITEMS',     type:'page', rules:7, warnings:0 },
-  { name:'PAGE_FOOTER',         type:'page', rules:2, warnings:0 },
-  { name:'DOC_CAPTURE_MAIN',    type:'doc',  rules:11,warnings:2 },
-  { name:'UDF_VENDOR_LOOKUP',   type:'udf',  rules:3, warnings:0 },
-  { name:'UDF_TAX_CALC',        type:'udf',  rules:2, warnings:0 },
+const HEX_ROWS = [
+  { off:'0000', bytes:'3C 72 75 6C 65 20 69 64 3D 22 72 75 6C 65 5F 30', ascii:'<rule id="rule_0' },
+  { off:'0010', bytes:'30 31 22 20 6E 61 6D 65 3D 22 45 78 74 72 61 63', ascii:'01" name="Extrac' },
+  { off:'0020', bytes:'74 49 6E 76 6F 69 63 65 44 61 74 65 22 20 66 6E', ascii:'tInvoiceDate" fn' },
+  { off:'0030', bytes:'3D 22 4D 61 74 63 68 46 69 65 6C 64 22 20 6F 72', ascii:'="MatchField" or' },
+  { off:'0040', bytes:'64 69 6E 61 6C 3D 22 31 22 20 72 65 73 75 6C 74', ascii:'dinal="1" result' },
+  { off:'0050', bytes:'3D 22 69 6E 76 6F 69 63 65 5F 64 61 74 65 22 3E', ascii:'="invoice_date">' },
 ];
 
-const DIAGS = [
-  { id:'d1', sev:'warn',  scope:'PAGE_INVOICE_HEADER', rule:'ValidateDateFormat', msg:'Regex pattern may be too broad — consider adding anchors' },
-  { id:'d2', sev:'warn',  scope:'PAGE_INVOICE_HEADER', rule:'ValidateTotal',      msg:'Tolerance threshold not set, using default (0.01)' },
-  { id:'d3', sev:'info',  scope:'DOC_CAPTURE_MAIN',    rule:'',                  msg:'2 unresolved WFFileRef references detected' },
-  { id:'d4', sev:'info',  scope:'',                    rule:'',                  msg:'Parse completed in 142ms · 29 rules · 12 functions · 6 UDFs' },
+const MESSAGES = [
+  { id:'m1', sev:'info',  src:'parser',  msg:'Parse completed in 142ms · 29 rules · 12 functions · 6 UDFs', ts:'09:14:02' },
+  { id:'m2', sev:'warn',  src:'rules',   msg:'PAGE_INVOICE_HEADER / ValidateDateFormat — Regex pattern may be too broad', ts:'09:14:02' },
+  { id:'m3', sev:'warn',  src:'rules',   msg:'PAGE_INVOICE_HEADER / ValidateTotal — Tolerance threshold not set (default 0.01)', ts:'09:14:02' },
+  { id:'m4', sev:'info',  src:'resource',msg:'2 unresolved WFFileRef references detected in DOC_CAPTURE_MAIN', ts:'09:14:02' },
 ];
 
-const VIEWS = [
-  { id:'overview',    label:'Overview',     icon:BarChart2 },
-  { id:'rule-tree',   label:'Rule Tree',    icon:GitBranch },
-  { id:'rule-table',  label:'Rule Table',   icon:Layers },
-  { id:'functions',   label:'AC Functions', icon:Zap },
-  { id:'udfs',        label:'UDFs',         icon:Code },
-  { id:'diagnostics', label:'Diagnostics',  icon:AlertTriangle },
-  { id:'exports',     label:'Exports',      icon:Package },
+const RECENT = [
+  { label:'PAGE_INVOICE_HEADER', kind:'page',     path:'/pages/PAGE_INVOICE_HEADER', ts:'Just now' },
+  { label:'DOC_CAPTURE_MAIN',    kind:'document',  path:'/documents/DOC_CAPTURE_MAIN', ts:'3 min ago' },
+  { label:'VendorLookup',        kind:'resource',  path:'/resources/Functions/VendorLookup', ts:'1 hr ago' },
+  { label:'BATCH_STANDARD',      kind:'batch',     path:'/batches/BATCH_STANDARD', ts:'Yesterday' },
 ];
+
+/* ─── Tab types ──────────────────────────────────────────────────────────── */
+type TabKind = 'overview'|'page'|'document'|'batch'|'resource'|'raw';
+interface WorkspaceTab { id:string; kind:TabKind; label:string; nodeId?:string }
 
 /* ─── Primitives ─────────────────────────────────────────────────────────── */
-function TypeChip({ type }: { type:string }) {
-  const s = type==='page'?T.tagPage : type==='udf'?T.tagUdf : T.tagDoc;
-  return <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700,
-    letterSpacing:'0.08em', textTransform:'uppercase', padding:'2px 5px',
-    borderRadius:3, backgroundColor:s.bg, color:s.tx }}>{type}</span>;
+function SevIcon({ sev, size=12 }:{ sev:string; size?:number }) {
+  if (sev==='error') return <XCircle size={size} color={T.red} />;
+  if (sev==='warn')  return <AlertTriangle size={size} color={T.amber} />;
+  return <Info size={size} color={T.blue} />;
 }
 
-function SevIcon({ sev }: { sev:string }) {
-  if (sev==='error') return <XCircle size={12} color={T.red} />;
-  if (sev==='warn')  return <AlertTriangle size={12} color={T.amber} />;
-  return <Info size={12} color={T.blue} />;
+function Tag({ label, color, bg }:{ label:string; color:string; bg:string }) {
+  return <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.07em',
+    textTransform:'uppercase', padding:'2px 5px', borderRadius:3, color, backgroundColor:bg }}>
+    {label}</span>;
 }
 
-function StatusBadge({ status }: { status:string }) {
-  const cfg = status==='ok'
-    ? { c:T.green, bg:T.greenLo, label:'OK' }
-    : status==='warn'
-    ? { c:T.amber, bg:T.amberLo, label:'Warn' }
-    : { c:T.red,   bg:T.redLo,   label:'Error' };
-  return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontFamily:MONO,
-      fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4,
-      backgroundColor:cfg.bg, color:cfg.c }}>
-      <span style={{ width:5, height:5, borderRadius:'50%', backgroundColor:cfg.c,
-        boxShadow:`0 0 5px ${cfg.c}` }} />
-      {cfg.label}
-    </span>
-  );
+function KindTag({ kind }:{ kind:string }) {
+  const cfg: Record<string,{c:string;bg:string}> = {
+    page:     { c:T.blue,   bg:T.blueLo },
+    document: { c:T.violet, bg:T.violetLo },
+    batch:    { c:T.amber,  bg:T.amberLo },
+    process:  { c:T.accent, bg:T.accentLo },
+    resource: { c:T.green,  bg:T.greenLo },
+    field:    { c:T.tx2,    bg:T.bgSurface2 },
+    raw:      { c:T.tx3,    bg:T.bgSurface },
+  };
+  const s = cfg[kind] ?? { c:T.tx3, bg:T.bgSurface };
+  return <Tag label={kind} color={s.c} bg={s.bg} />;
 }
 
-function Pill({ color, n, label }: { color:string; n:number; label:string }) {
-  return <span style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:10,
-    fontFamily:MONO, color, backgroundColor:`${color}18`, border:`1px solid ${color}28`,
-    borderRadius:4, padding:'1px 6px' }}>{n} {label}</span>;
+function WarnBadge({ n, err }:{ n?:number; err?:number }) {
+  if (err) return <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.redLo,
+    color:T.red, borderRadius:3, padding:'1px 5px' }}>{err}e</span>;
+  if (n)   return <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.amberLo,
+    color:T.amber, borderRadius:3, padding:'1px 5px' }}>{n}w</span>;
+  return null;
 }
 
-function KV({ k, v, mono, vc }: { k:string; v:string; mono?:boolean; vc?:string }) {
-  return (
-    <div style={{ display:'grid', gridTemplateColumns:'96px 1fr',
-      padding:'5px 10px', borderBottom:`1px solid ${T.border2}`, alignItems:'start' }}>
-      <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3, paddingTop:1 }}>{k}</span>
-      <span style={{ fontFamily:mono?MONO:SANS, fontSize:11, color:vc??T.tx2,
-        wordBreak:'break-all', lineHeight:1.5 }}>{v}</span>
-    </div>
-  );
+function SectionLabel({ children }:{ children:React.ReactNode }) {
+  return <div style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
+    textTransform:'uppercase', color:T.tx3, padding:'8px 10px 4px' }}>{children}</div>;
 }
 
-function InspSection({ label, children }: { label:string; children:React.ReactNode }) {
-  return (
-    <div style={{ marginBottom:14 }}>
-      <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.1em',
-        textTransform:'uppercase', color:T.tx3, padding:'10px 10px 5px' }}>{label}</div>
-      <div style={{ borderRadius:6, margin:'0 8px', border:`1px solid ${T.border2}`,
-        overflow:'hidden', backgroundColor:T.bgSurface }}>
-        {children}
-      </div>
-    </div>
-  );
+/* ─── Node icon ──────────────────────────────────────────────────────────── */
+function NodeIcon({ kind, size=12, active=false }:{ kind:string; size?:number; active?:boolean }) {
+  const c = active ? T.accent : T.tx3;
+  switch(kind) {
+    case 'root':          return <Database size={size} color={c} />;
+    case 'group':         return <Folder size={size} color={c} />;
+    case 'page':          return <FileText size={size} color={active?T.blue:T.tx3} />;
+    case 'pageVariant':   return <Image size={size} color={active?T.accent:T.tx3} />;
+    case 'field':         return <AlignLeft size={size} color={active?T.violet:T.tx3} />;
+    case 'document':      return <Layers size={size} color={active?T.violet:T.tx3} />;
+    case 'batch':         return <Package size={size} color={active?T.amber:T.tx3} />;
+    case 'process':       return <Zap size={size} color={active?T.accent:T.tx3} />;
+    case 'resourceType':  return <FolderOpen size={size} color={c} />;
+    case 'resource':      return <Grid3X3 size={size} color={active?T.green:T.tx3} />;
+    case 'diagnosticGroup':return <Terminal size={size} color={active?T.amber:T.tx3} />;
+    case 'diagnostic':    return <AlertTriangle size={size} color={T.amber} />;
+    case 'rawNode':       return <Binary size={size} color={active?T.violet:T.tx3} />;
+    default:              return <FileText size={size} color={c} />;
+  }
 }
 
-/* ─── Tree row ───────────────────────────────────────────────────────────── */
-function TreeRow({ node, depth=0, selectedId, onSelect, expanded, onToggle, searchQ }:{
-  node:TreeNode; depth?:number; selectedId:string|null;
+/* ─── FWD Tree ───────────────────────────────────────────────────────────── */
+function TreeNode({ node, depth, selected, onSelect, expanded, onToggle, onOpen }:{
+  node:FwdNode; depth:number; selected:string|null;
   onSelect:(id:string)=>void; expanded:Set<string>;
-  onToggle:(id:string)=>void; searchQ:string;
+  onToggle:(id:string)=>void; onOpen:(node:FwdNode)=>void;
 }) {
-  const isSelected = node.id === selectedId;
+  const isSelected = node.id === selected;
   const isExpanded = expanded.has(node.id);
-  const hasKids    = node.children.length > 0;
-  const matchSearch = searchQ && node.name.toLowerCase().includes(searchQ.toLowerCase());
+  const hasKids    = (node.children?.length ?? 0) > 0;
 
   return (
     <>
       <button
-        aria-selected={isSelected}
         onClick={() => { onSelect(node.id); if (hasKids) onToggle(node.id); }}
+        onDoubleClick={() => node.tabKind && onOpen(node)}
+        title={node.tabKind ? `Double-click to open in tab` : undefined}
         style={{
           width:'100%', display:'flex', alignItems:'center',
-          padding:`7px 10px 7px ${depth*18+10}px`,
-          backgroundColor: isSelected ? T.accentLo : matchSearch ? 'rgba(45,212,191,0.05)' : 'transparent',
-          borderLeft:`2px solid ${isSelected ? T.accent : 'transparent'}`,
-          borderBottom:`1px solid ${T.border2}`,
-          textAlign:'left', gap:0, cursor:'pointer',
-        }}
-      >
-        {/* depth guide lines */}
-        {depth > 0 && <span style={{ position:'absolute', left:depth*18+8,
-          width:1, height:'100%', backgroundColor:T.border2 }} />}
-
-        {/* chevron */}
-        <span style={{ width:16, height:16, display:'flex', alignItems:'center',
-          justifyContent:'center', flexShrink:0, color:T.tx3 }}>
+          padding:`4px 8px 4px ${depth*14+8}px`,
+          backgroundColor: isSelected ? T.accentLo : 'transparent',
+          borderLeft:`2px solid ${isSelected?T.accent:'transparent'}`,
+          textAlign:'left', cursor:'pointer', gap:0, minHeight:26,
+        }}>
+        <span style={{ width:14, flexShrink:0, display:'flex', alignItems:'center',
+          justifyContent:'center', color:T.tx3 }}>
           {hasKids
-            ? (isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>)
-            : <span style={{ width:4, height:4, borderRadius:'50%',
-                backgroundColor:T.border, display:'inline-block' }} />}
+            ? (isExpanded ? <ChevronDown size={10}/> : <ChevronRight size={10}/>)
+            : <span style={{ width:3, height:3, borderRadius:'50%', backgroundColor:T.border2,
+                display:'inline-block' }} />}
         </span>
-
-        {/* name */}
-        <span style={{ flex:1, minWidth:0, marginLeft:6 }}>
-          <span style={{ display:'block', fontFamily:MONO, fontSize:11, fontWeight:isSelected?700:400,
-            color: matchSearch ? T.accent : isSelected ? T.tx1 : T.tx2,
+        <span style={{ marginLeft:4, flexShrink:0 }}>
+          <NodeIcon kind={node.kind} size={11} active={isSelected} />
+        </span>
+        <span style={{ flex:1, minWidth:0, marginLeft:5, display:'flex',
+          alignItems:'center', gap:5 }}>
+          <span style={{ fontFamily: node.kind==='group'||node.kind==='root'?SANS:MONO,
+            fontSize: node.kind==='root'?11:10,
+            fontWeight: isSelected?600:node.kind==='root'?600:400,
+            color: isSelected?T.tx1:node.kind==='root'?T.tx1:T.tx2,
             overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-            {node.name}
+            {node.label}
           </span>
-          <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>
-            ord {node.ordinal} · {node.params}p · lvl {node.level}
-          </span>
-        </span>
-
-        {/* result */}
-        <span style={{ fontFamily:MONO, fontSize:10, color:T.accent, width:130,
-          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-          flexShrink:0, paddingRight:8 }}>
-          {node.result}
-        </span>
-
-        {/* status */}
-        <span style={{ flexShrink:0 }}>
-          <StatusBadge status={node.status} />
-        </span>
-
-        {/* child count */}
-        <span style={{ width:28, flexShrink:0, textAlign:'center' }}>
-          {hasKids && <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
-            backgroundColor:T.bgSurface2, borderRadius:3, padding:'1px 5px' }}>
-            {node.children.length}
+          {node.meta && <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+            {node.meta}
           </span>}
         </span>
+        <span style={{ display:'flex', alignItems:'center', gap:3, flexShrink:0 }}>
+          <WarnBadge n={node.warn} err={node.err} />
+          {node.tabKind && isSelected &&
+            <span onClick={e=>{e.stopPropagation();onOpen(node);}} title="Open in tab"
+              style={{ padding:'1px 3px', borderRadius:3, color:T.tx3, display:'flex',
+              alignItems:'center', opacity:0.8 }}>
+              <ArrowRight size={9}/>
+            </span>}
+        </span>
       </button>
-
-      {isExpanded && node.children.map(c => (
-        <TreeRow key={c.id} node={c} depth={depth+1}
-          selectedId={selectedId} onSelect={onSelect}
-          expanded={expanded} onToggle={onToggle} searchQ={searchQ} />
-      ))}
+      {isExpanded && node.children?.map(c =>
+        <TreeNode key={c.id} node={c} depth={depth+1}
+          selected={selected} onSelect={onSelect}
+          expanded={expanded} onToggle={onToggle} onOpen={onOpen} />
+      )}
     </>
   );
 }
 
-/* ─── View: Overview ─────────────────────────────────────────────────────── */
-function OverviewView({ warnCount, onNav }: { warnCount:number; onNav:(v:string)=>void }) {
-  const stats = [
-    { label:'Parse Health', value:'Valid', sub:'142ms · fwd.cfd', color:T.green, bg:T.greenLo, icon:<CheckCircle size={18} color={T.green}/> },
-    { label:'Rules',        value:'29',    sub:'across 6 scopes',   color:T.blue,  bg:T.blueLo,  icon:<GitBranch size={18} color={T.blue}/> },
-    { label:'Functions',    value:'12',    sub:'6 categories',      color:T.accent,bg:T.accentLo,icon:<Zap size={18} color={T.accent}/> },
-    { label:'UDFs',         value:'6',     sub:'2 referenced',      color:T.violet,bg:T.violetLo,icon:<Code size={18} color={T.violet}/> },
-    { label:'Warnings',     value:String(warnCount), sub:'0 errors', color:warnCount?T.amber:T.green, bg:warnCount?T.amberLo:T.greenLo, icon:<AlertTriangle size={18} color={warnCount?T.amber:T.green}/> },
-    { label:'Export Ready', value:'Yes',   sub:'All refs resolved',  color:T.green, bg:T.greenLo, icon:<Package size={18} color={T.green}/> },
-  ];
+/* ─── Top Command Bar ────────────────────────────────────────────────────── */
+function TopCommandBar({ warnCount, errCount }:{ warnCount:number; errCount:number }) {
   return (
-    <div style={{ padding:20, overflow:'auto', flex:1 }}>
-      <div style={{ marginBottom:16 }}>
-        <h2 style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:T.tx1, marginBottom:4 }}>
-          Loaded Overview
-        </h2>
-        <p style={{ fontSize:12, color:T.tx2 }}>fwd.cfd · PAGE_INVOICE_HEADER and 5 more scopes</p>
-      </div>
-
-      {/* Stat cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:20 }}>
-        {stats.map(s => (
-          <div key={s.label} style={{ borderRadius:8, border:`1px solid ${T.border}`,
-            backgroundColor:T.bgPanel, padding:'14px 16px', display:'flex',
-            flexDirection:'column', gap:10 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-              <span style={{ fontSize:11, color:T.tx2 }}>{s.label}</span>
-              <div style={{ padding:6, borderRadius:6, backgroundColor:s.bg }}>{s.icon}</div>
-            </div>
-            <div>
-              <div style={{ fontFamily:MONO, fontSize:22, fontWeight:700, color:s.color,
-                lineHeight:1 }}>{s.value}</div>
-              <div style={{ fontSize:10, color:T.tx3, marginTop:4 }}>{s.sub}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Problem areas */}
-      <div style={{ borderRadius:8, border:`1px solid ${T.border}`,
-        backgroundColor:T.bgPanel, marginBottom:16, overflow:'hidden' }}>
-        <div style={{ padding:'10px 16px', borderBottom:`1px solid ${T.border}`,
-          display:'flex', alignItems:'center', gap:6 }}>
-          <AlertTriangle size={13} color={T.amber} />
-          <span style={{ fontSize:12, fontWeight:600, color:T.tx1 }}>Problem Areas</span>
-          <span style={{ marginLeft:'auto', fontSize:11, color:T.tx2, cursor:'pointer' }}
-            onClick={() => onNav('diagnostics')}>
-            View all →
-          </span>
+    <header style={{ height:48, flexShrink:0, display:'flex', alignItems:'center',
+      padding:'0 14px', borderBottom:`1px solid ${T.border}`,
+      backgroundColor:T.bgPanel, gap:10, zIndex:20 }}>
+      {/* Brand */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0, marginRight:4 }}>
+        <div style={{ width:26, height:26, borderRadius:5, display:'flex', alignItems:'center',
+          justifyContent:'center', backgroundColor:T.accentLo, border:`1px solid ${T.accentGlow}` }}>
+          <span style={{ fontFamily:MONO, fontSize:9, fontWeight:700, color:T.accent }}>FW</span>
         </div>
-        {DIAGS.filter(d=>d.sev==='warn').map(d => (
-          <div key={d.id} style={{ display:'flex', alignItems:'flex-start', gap:10,
-            padding:'8px 16px', borderBottom:`1px solid ${T.border2}` }}>
-            <SevIcon sev={d.sev} />
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:11, color:T.tx2 }}>{d.msg}</div>
-              {d.scope && <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
-                marginTop:2 }}>{d.scope} · {d.rule}</div>}
-            </div>
+        <div>
+          <div style={{ fontSize:12, fontWeight:600, letterSpacing:'-0.01em', color:T.tx1 }}>
+            FormWorks Editor
           </div>
-        ))}
+          <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>fwd.cfd</div>
+        </div>
       </div>
 
-      {/* Quick navigation */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8 }}>
-        {[
-          { label:'Open Rule Tree', icon:<GitBranch size={13}/>, view:'rule-tree' },
-          { label:'Browse Functions', icon:<Zap size={13}/>, view:'functions' },
-          { label:'Rule Table', icon:<Layers size={13}/>, view:'rule-table' },
-          { label:'Full Diagnostics', icon:<Terminal size={13}/>, view:'diagnostics' },
-        ].map(item => (
-          <button key={item.label} onClick={() => onNav(item.view)}
-            style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px',
-              borderRadius:6, border:`1px solid ${T.border}`, backgroundColor:T.bgSurface,
-              fontSize:12, color:T.tx2, textAlign:'left', cursor:'pointer' }}>
-            <span style={{ color:T.tx3 }}>{item.icon}</span>
-            {item.label}
-            <ArrowRight size={11} style={{ marginLeft:'auto' }} color={T.tx3} />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+      {/* Divider */}
+      <div style={{ width:1, height:20, backgroundColor:T.border }} />
 
-/* ─── View: Rule Table ───────────────────────────────────────────────────── */
-function RuleTableView({ selectedId, onSelect }: { selectedId:string|null; onSelect:(id:string)=>void }) {
-  const [sortCol, setSortCol] = useState<string>('ordinal');
-  const cols = ['Name','Ordinal','Level','Function','Result','Status'];
-  return (
-    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
-      <div style={{ padding:'10px 18px', borderBottom:`1px solid ${T.border}`,
-        display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, backgroundColor:T.bgSurface,
-          border:`1px solid ${T.border}`, borderRadius:5, padding:'4px 10px', flex:1, maxWidth:320 }}>
+      {/* DB commands */}
+      <div style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
+        <button style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px',
+          borderRadius:4, fontSize:11, color:T.tx2, border:`1px solid ${T.border}`,
+          backgroundColor:T.bgSurface }}>
+          <FolderOpen size={11} color={T.tx3}/> Open DB
+        </button>
+        <button style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px',
+          borderRadius:4, fontSize:11, color:T.tx3 }}>
+          <Clock size={11}/> Recent
+        </button>
+        <button style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 8px',
+          borderRadius:4, fontSize:11, color:T.tx3 }}>
+          <RefreshCw size={11}/> Reload
+        </button>
+      </div>
+
+      <div style={{ width:1, height:20, backgroundColor:T.border }} />
+
+      {/* Global search */}
+      <div style={{ flex:1, maxWidth:440 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, backgroundColor:T.bgBase,
+          border:`1px solid ${T.border}`, borderRadius:5, padding:'0 10px', height:28 }}>
           <Search size={11} color={T.tx3} />
-          <input placeholder="Filter rules…" style={{ fontSize:11, color:T.tx2,
-            background:'none', border:'none', outline:'none', width:'100%' }} />
+          <input type="search" placeholder="Search objects, GUIDs, rules, attributes…"
+            style={{ flex:1, fontSize:11, color:T.tx1 }} />
+          <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3, border:`1px solid ${T.border}`,
+            borderRadius:3, padding:'0px 4px', flexShrink:0 }}>⌘K</span>
         </div>
-        <span style={{ fontSize:11, color:T.tx3, fontFamily:MONO }}>
-          {FLAT_RULES.length} rules
+      </div>
+
+      {/* Session status */}
+      <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, marginLeft:'auto' }}>
+        <span style={{ display:'inline-flex', alignItems:'center', gap:3,
+          backgroundColor:T.greenLo, border:`1px solid ${T.green}28`,
+          borderRadius:4, padding:'2px 6px' }}>
+          <CheckCircle size={8} color={T.green} />
+          <span style={{ fontFamily:MONO, fontSize:9, color:T.green }}>Loaded</span>
         </span>
+        {warnCount>0 && <span style={{ display:'inline-flex', alignItems:'center', gap:3,
+          backgroundColor:T.amberLo, border:`1px solid ${T.amber}28`,
+          borderRadius:4, padding:'2px 6px' }}>
+          <AlertTriangle size={8} color={T.amber} />
+          <span style={{ fontFamily:MONO, fontSize:9, color:T.amber }}>{warnCount}w</span>
+        </span>}
+        <div style={{ width:1, height:18, backgroundColor:T.border }} />
+        <button style={{ padding:5, borderRadius:4, color:T.tx3 }}><Settings size={13}/></button>
+        <button style={{ padding:5, borderRadius:4, color:T.tx3 }}><HelpCircle size={13}/></button>
+        <button style={{ padding:5, borderRadius:4, color:T.tx3 }}><Moon size={13}/></button>
       </div>
-      <div style={{ flex:1, overflow:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-          <thead>
-            <tr style={{ backgroundColor:T.bgPanel, position:'sticky', top:0, zIndex:2 }}>
-              {cols.map(c => (
-                <th key={c} onClick={() => setSortCol(c.toLowerCase())}
-                  style={{ padding:'7px 12px', textAlign:'left', fontFamily:MONO, fontSize:9,
-                    fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase',
-                    color: sortCol===c.toLowerCase() ? T.accent : T.tx3,
-                    borderBottom:`1px solid ${T.border}`, cursor:'pointer', whiteSpace:'nowrap' }}>
-                  <span style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    {c}
-                    <ArrowUpDown size={9} color={sortCol===c.toLowerCase()?T.accent:T.tx3} />
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {FLAT_RULES.map((r, i) => {
-              const sel = r.id === selectedId;
-              return (
-                <tr key={r.id} onClick={() => onSelect(r.id)}
-                  style={{ backgroundColor: sel ? T.accentLo : i%2===0 ? 'transparent' : T.bgPanel2+'60',
-                    borderLeft:`2px solid ${sel ? T.accent : 'transparent'}`,
-                    cursor:'pointer' }}>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                    fontFamily:MONO, fontSize:11, color: sel ? T.tx1 : T.tx2, fontWeight:sel?600:400 }}>
-                    {r.name}
-                  </td>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                    fontFamily:MONO, fontSize:11, color:T.tx3 }}>{r.ordinal}</td>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                    fontFamily:MONO, fontSize:11, color:T.tx3 }}>{r.level}</td>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                    fontFamily:MONO, fontSize:11, color:T.accent }}>{r.fn}</td>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                    fontFamily:MONO, fontSize:11, color:T.tx2 }}>{r.result}</td>
-                  <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}` }}>
-                    <StatusBadge status={r.status} />
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </header>
   );
 }
 
-/* ─── View: Functions ────────────────────────────────────────────────────── */
-function FunctionsView() {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
-      <div style={{ padding:'10px 18px', borderBottom:`1px solid ${T.border}`,
-        display:'flex', alignItems:'center', gap:8, flexShrink:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:6, backgroundColor:T.bgSurface,
-          border:`1px solid ${T.border}`, borderRadius:5, padding:'4px 10px', flex:1, maxWidth:320 }}>
-          <Search size={11} color={T.tx3} />
-          <input placeholder="Search functions…" style={{ fontSize:11, color:T.tx2,
-            background:'none', border:'none', outline:'none', width:'100%' }} />
-        </div>
-        {['All','Extraction','Validation','Reference','Transform'].map(f => (
-          <button key={f} style={{ fontSize:10, padding:'3px 8px', borderRadius:4,
-            border:`1px solid ${f==='All'?T.accent:T.border}`,
-            backgroundColor:f==='All'?T.accentLo:'transparent',
-            color:f==='All'?T.accent:T.tx3, cursor:'pointer' }}>{f}</button>
-        ))}
-      </div>
-      <div style={{ flex:1, overflow:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
-          <thead>
-            <tr style={{ backgroundColor:T.bgPanel, position:'sticky', top:0 }}>
-              {['Name','Category','Usages','Signature','Status'].map(c => (
-                <th key={c} style={{ padding:'7px 12px', textAlign:'left', fontFamily:MONO,
-                  fontSize:9, fontWeight:700, letterSpacing:'0.08em', textTransform:'uppercase',
-                  color:T.tx3, borderBottom:`1px solid ${T.border}` }}>{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {FUNCTIONS.map((f, i) => (
-              <tr key={f.name}
-                style={{ backgroundColor:i%2===0?'transparent':T.bgPanel2+'60', cursor:'pointer' }}>
-                <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                  fontFamily:MONO, fontSize:11, color:T.accent }}>{f.name}</td>
-                <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                  fontSize:11, color:T.tx2 }}>{f.cat}</td>
-                <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                  fontFamily:MONO, fontSize:11, color:T.tx3 }}>{f.usages}</td>
-                <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}`,
-                  fontFamily:MONO, fontSize:10, color:T.tx3 }}>{f.params}</td>
-                <td style={{ padding:'7px 12px', borderBottom:`1px solid ${T.border2}` }}>
-                  <StatusBadge status={f.status} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-/* ─── View: Diagnostics ──────────────────────────────────────────────────── */
-function DiagnosticsView() {
-  const [filter, setFilter] = useState('all');
-  const shown = filter==='all' ? DIAGS : DIAGS.filter(d=>d.sev===filter);
-  return (
-    <div style={{ flex:1, overflow:'auto', padding:20 }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}>
-        {['all','error','warn','info'].map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            style={{ fontSize:10, padding:'3px 9px', borderRadius:4,
-              border:`1px solid ${filter===f?T.accent:T.border}`,
-              backgroundColor:filter===f?T.accentLo:'transparent',
-              color:filter===f?T.accent:T.tx3, cursor:'pointer',
-              fontFamily:MONO, textTransform:'uppercase', letterSpacing:'0.06em' }}>{f}</button>
-        ))}
-        <span style={{ fontSize:11, color:T.tx3, fontFamily:MONO, marginLeft:4 }}>
-          {shown.length} items
-        </span>
-      </div>
-      <div style={{ borderRadius:8, border:`1px solid ${T.border}`, overflow:'hidden' }}>
-        {shown.map((d, i) => (
-          <div key={d.id} style={{ display:'flex', alignItems:'flex-start', gap:10,
-            padding:'10px 14px', borderBottom:i<shown.length-1?`1px solid ${T.border2}`:'none',
-            backgroundColor: d.sev==='warn'?T.amberLo : d.sev==='error'?T.redLo : 'transparent' }}>
-            <span style={{ marginTop:1, flexShrink:0 }}><SevIcon sev={d.sev} /></span>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:12, color:T.tx1, marginBottom:3 }}>{d.msg}</div>
-              {d.scope && <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>
-                {d.scope}{d.rule ? ` · ${d.rule}` : ''}
-              </div>}
-            </div>
-            <button style={{ padding:4, borderRadius:4, color:T.tx3 }}
-              title="Copy"><Copy size={11} /></button>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Inspector ──────────────────────────────────────────────────────────── */
-function Inspector({ selectedId, inspTab, setInspTab }: {
-  selectedId:string|null; inspTab:string; setInspTab:(t:string)=>void;
+/* ─── Left Explorer Pane ─────────────────────────────────────────────────── */
+function LeftExplorerPane({ selected, expanded, onSelect, onToggle, onOpen }:{
+  selected:string|null; expanded:Set<string>;
+  onSelect:(id:string)=>void; onToggle:(id:string)=>void; onOpen:(n:FwdNode)=>void;
 }) {
-  const node = selectedId ? findNode(TREE, selectedId) : null;
-  const TABS = ['Summary','Evidence','Attributes','Functions','Children','Source','Diagnostics'];
-
+  const [q, setQ] = useState('');
   return (
-    <aside aria-label="Evidence Inspector"
-      style={{ width:348, flexShrink:0, backgroundColor:T.bgPanel,
-        borderLeft:`1px solid ${T.border}`, display:'flex',
-        flexDirection:'column', overflow:'hidden' }}>
-
-      {/* header */}
-      <div style={{ padding:'12px 14px 0', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-        {node ? (
-          <>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-              <div style={{ width:26, height:26, borderRadius:5, display:'flex',
-                alignItems:'center', justifyContent:'center',
-                backgroundColor:T.accentLo, border:`1px solid ${T.accentGlow}` }}>
-                <Eye size={12} color={T.accent} />
-              </div>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:T.tx1,
-                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                  {node.name}
-                </div>
-                <div style={{ fontSize:9, fontFamily:MONO, textTransform:'uppercase',
-                  letterSpacing:'0.07em', color:T.tx3, marginTop:1 }}>
-                  Extraction Rule · ord {node.ordinal} · lvl {node.level}
-                </div>
-              </div>
-              <StatusBadge status={node.status} />
-            </div>
-            <div style={{ display:'flex', overflowX:'auto', gap:0 }}>
-              {TABS.map(tab => (
-                <button key={tab} onClick={() => setInspTab(tab)}
-                  aria-selected={inspTab===tab}
-                  style={{ padding:'5px 8px', fontSize:10, whiteSpace:'nowrap',
-                    fontWeight:inspTab===tab?600:400,
-                    color:inspTab===tab?T.accent:T.tx3,
-                    borderBottom:`2px solid ${inspTab===tab?T.accent:'transparent'}`,
-                    marginBottom:-1, cursor:'pointer' }}>{tab}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div style={{ padding:'8px 0 14px', fontSize:12, color:T.tx3 }}>
-            Evidence Inspector
-          </div>
+    <nav style={{ width:262, flexShrink:0, backgroundColor:T.bgPanel,
+      borderRight:`1px solid ${T.border}`, display:'flex',
+      flexDirection:'column', overflow:'hidden' }}>
+      {/* Filter */}
+      <div style={{ padding:'7px 8px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:5, backgroundColor:T.bgSurface,
+          border:`1px solid ${T.border}`, borderRadius:4, padding:'3px 8px' }}>
+          <Search size={10} color={T.tx3} />
+          <input value={q} onChange={e=>setQ(e.target.value)}
+            placeholder="Filter tree…"
+            style={{ fontSize:10, color:T.tx2, flex:1 }} />
+        </div>
+      </div>
+      {/* Tree */}
+      <div style={{ flex:1, overflow:'auto' }}>
+        {FWD_TREE.map(n =>
+          <TreeNode key={n.id} node={n} depth={0}
+            selected={selected} onSelect={onSelect}
+            expanded={expanded} onToggle={onToggle} onOpen={onOpen} />
         )}
       </div>
+    </nav>
+  );
+}
 
-      {/* body */}
-      <div style={{ flex:1, overflow:'auto' }}>
-        {!node ? (
-          /* ── Empty state ── */
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
-            justifyContent:'center', height:'100%', padding:24, gap:12, textAlign:'center' }}>
-            <div style={{ width:48, height:48, borderRadius:12, display:'flex',
-              alignItems:'center', justifyContent:'center',
-              backgroundColor:T.bgSurface, border:`1px solid ${T.border}` }}>
-              <Eye size={20} color={T.tx3} />
-            </div>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:T.tx2, marginBottom:6 }}>
-                Nothing selected
-              </div>
-              <div style={{ fontSize:11, color:T.tx3, lineHeight:1.6 }}>
-                Select a rule, function, UDF, or diagnostic to inspect its evidence.
-              </div>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:4, width:'100%', marginTop:4 }}>
-              {[
-                { label:'Open Rule Tree', icon:<GitBranch size={11}/> },
-                { label:'View Diagnostics', icon:<AlertTriangle size={11}/> },
-                { label:'Browse Functions', icon:<Zap size={11}/> },
-              ].map(a => (
-                <button key={a.label} style={{ display:'flex', alignItems:'center', gap:8,
-                  padding:'7px 10px', borderRadius:5, border:`1px solid ${T.border}`,
-                  backgroundColor:T.bgSurface, fontSize:11, color:T.tx3, cursor:'pointer',
-                  textAlign:'left' }}>
-                  <span style={{ color:T.tx3 }}>{a.icon}</span>{a.label}
-                </button>
-              ))}
+/* ─── Workspace Tab Strip ────────────────────────────────────────────────── */
+function TabStrip({ tabs, activeId, onActivate, onClose, onNew }:{
+  tabs:WorkspaceTab[]; activeId:string|null;
+  onActivate:(id:string)=>void; onClose:(id:string)=>void; onNew:()=>void;
+}) {
+  const icons: Record<TabKind,React.ReactNode> = {
+    overview: <BarChart2 size={10}/>,
+    page:     <FileText size={10}/>,
+    document: <Layers size={10}/>,
+    batch:    <Package size={10}/>,
+    resource: <Grid3X3 size={10}/>,
+    raw:      <Binary size={10}/>,
+  };
+  return (
+    <div style={{ height:34, flexShrink:0, display:'flex', alignItems:'stretch',
+      borderBottom:`1px solid ${T.border}`, backgroundColor:T.bgBase, paddingLeft:4 }}>
+      {tabs.map(tab => {
+        const active = tab.id===activeId;
+        return (
+          <div key={tab.id}
+            style={{ display:'flex', alignItems:'center', gap:5, padding:'0 10px',
+              borderRight:`1px solid ${T.border}`,
+              backgroundColor:active?T.bgPanel:T.bgBase,
+              borderBottom:`2px solid ${active?T.accent:'transparent'}`,
+              cursor:'pointer', flexShrink:0, maxWidth:170 }}
+            onClick={()=>onActivate(tab.id)}>
+            <span style={{ color:active?T.accent:T.tx3, flexShrink:0 }}>{icons[tab.kind]}</span>
+            <span style={{ fontFamily:MONO, fontSize:10, color:active?T.tx1:T.tx2,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
+              {tab.label}
+            </span>
+            {tab.kind!=='overview' &&
+              <span onClick={e=>{e.stopPropagation();onClose(tab.id);}}
+                style={{ color:T.tx3, display:'flex', alignItems:'center',
+                  padding:2, borderRadius:3, flexShrink:0 }}>
+                <X size={9}/>
+              </span>}
+          </div>
+        );
+      })}
+      <button onClick={onNew}
+        style={{ padding:'0 10px', color:T.tx3, display:'flex', alignItems:'center' }}>
+        <Plus size={11}/>
+      </button>
+    </div>
+  );
+}
+
+/* ─── View: Overview ─────────────────────────────────────────────────────── */
+function OverviewView({ onOpen }:{ onOpen:(kind:TabKind,label:string)=>void }) {
+  const counts = [
+    { label:'Pages',      value:'3',  icon:<FileText size={15} color={T.blue}/>,   color:T.blue },
+    { label:'Documents',  value:'1',  icon:<Layers size={15} color={T.violet}/>,   color:T.violet },
+    { label:'Batches',    value:'1',  icon:<Package size={15} color={T.amber}/>,   color:T.amber },
+    { label:'Processes',  value:'3',  icon:<Zap size={15} color={T.accent}/>,      color:T.accent },
+    { label:'Resources',  value:'7',  icon:<Grid3X3 size={15} color={T.green}/>,   color:T.green },
+    { label:'Warnings',   value:'2',  icon:<AlertTriangle size={15} color={T.amber}/>, color:T.amber },
+  ];
+  return (
+    <div style={{ flex:1, overflow:'auto', padding:18 }}>
+      {/* FWD Metadata */}
+      <div style={{ borderRadius:7, border:`1px solid ${T.border}`, backgroundColor:T.bgPanel,
+        padding:'12px 16px', marginBottom:14, display:'flex', alignItems:'center', gap:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <Database size={16} color={T.accent} />
+          <div>
+            <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:T.tx1 }}>fwd.cfd</div>
+            <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginTop:2 }}>
+              FormWorks Database · Release 4.2.1 · 2024-01-15
             </div>
           </div>
-        ) : inspTab==='Summary' ? (
-          <>
-            <InspSection label="Identity">
-              <KV k="name"    v={node.name}            mono vc={T.tx1} />
-              <KV k="guid"    v={node.guid}            mono vc={T.blue} />
-              <KV k="ordinal" v={String(node.ordinal)} mono />
-              <KV k="level"   v={String(node.level)}   mono />
-              <KV k="fn"      v={node.fn}              mono vc={T.accent} />
-              <KV k="result"  v={node.result}          mono />
-              <KV k="params"  v={`${node.params} parameters`} />
-            </InspSection>
-            {node.children.length > 0 && (
-              <InspSection label={`Children (${node.children.length})`}>
-                {node.children.map(c => (
-                  <div key={c.id} style={{ display:'flex', alignItems:'center',
-                    justifyContent:'space-between', padding:'6px 10px',
-                    borderBottom:`1px solid ${T.border2}` }}>
-                    <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{c.name}</span>
-                    <StatusBadge status={c.status} />
-                  </div>
-                ))}
-              </InspSection>
-            )}
-            <InspSection label="Quick Actions">
-              {[
-                { icon:<Copy size={11}/>,       label:'Copy GUID' },
-                { icon:<ArrowRight size={11}/>, label:'Go to function definition' },
-                { icon:<Eye size={11}/>,        label:'View in Rule Table' },
-                { icon:<Download size={11}/>,   label:'Export rule as JSON' },
-              ].map(a => (
-                <button key={a.label} style={{ width:'100%', display:'flex', alignItems:'center',
-                  gap:8, padding:'7px 10px', borderBottom:`1px solid ${T.border2}`,
-                  fontSize:11, color:T.tx2, cursor:'pointer', textAlign:'left' }}>
-                  <span style={{ color:T.tx3 }}>{a.icon}</span>{a.label}
-                </button>
-              ))}
-            </InspSection>
-          </>
-        ) : inspTab==='Attributes' ? (
-          <InspSection label="Attributes">
-            {[
-              ['regex',      String.raw`\d{2}/\d{2}/\d{4}`],
-              ['ignoreCase', 'true'],
-              ['required',   'true'],
-              ['confidence', '0.85'],
-              ['multiLine',  'false'],
-            ].map(([k, v]) => (
-              <div key={k} style={{ display:'grid', gridTemplateColumns:'96px 1fr',
-                padding:'5px 10px', borderBottom:`1px solid ${T.border2}`, alignItems:'start' }}>
-                <span style={{ fontFamily:MONO, fontSize:10, color:T.accent }}>{k}</span>
-                <span style={{ fontFamily:MONO, fontSize:11, color:T.tx2,
-                  wordBreak:'break-all' }}>{v}</span>
-              </div>
-            ))}
-          </InspSection>
-        ) : inspTab==='Evidence' ? (
-          <InspSection label="Source Evidence">
-            <div style={{ padding:'5px 10px', borderBottom:`1px solid ${T.border2}`,
-              fontFamily:MONO, fontSize:9, color:T.tx3 }}>
-              fwd.cfd · PAGE_INVOICE_HEADER · line 142
+        </div>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:3,
+            backgroundColor:T.greenLo, borderRadius:4, padding:'3px 8px' }}>
+            <CheckCircle size={9} color={T.green} />
+            <span style={{ fontFamily:MONO, fontSize:9, color:T.green }}>Parse OK · 142ms</span>
+          </span>
+          <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
+            backgroundColor:T.bgSurface, border:`1px solid ${T.border}`,
+            borderRadius:4, padding:'3px 8px' }}>Read-only</span>
+        </div>
+      </div>
+
+      {/* Counts strip */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:8, marginBottom:14 }}>
+        {counts.map(c => (
+          <div key={c.label} style={{ borderRadius:6, border:`1px solid ${T.border}`,
+            backgroundColor:T.bgPanel, padding:'10px 12px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+              marginBottom:6 }}>
+              {c.icon}
+              <span style={{ fontFamily:MONO, fontSize:17, fontWeight:700, color:c.color }}>
+                {c.value}
+              </span>
             </div>
-            <pre style={{ padding:'10px 12px', fontFamily:MONO, fontSize:10,
-              lineHeight:1.8, color:T.tx2, backgroundColor:'#080c12',
-              overflowX:'auto', margin:0 }}>{`<rule id="rule_001"
+            <div style={{ fontSize:10, color:T.tx3 }}>{c.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Recent objects + Diagnostics */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+        {/* Recent */}
+        <div style={{ borderRadius:7, border:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'hidden' }}>
+          <div style={{ padding:'9px 14px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', gap:6 }}>
+            <Clock size={12} color={T.tx3}/>
+            <span style={{ fontSize:11, fontWeight:600, color:T.tx1 }}>Recent Objects</span>
+          </div>
+          {RECENT.map(r => (
+            <div key={r.label} style={{ display:'flex', alignItems:'center', gap:8,
+              padding:'7px 14px', borderBottom:`1px solid ${T.border2}`, cursor:'pointer' }}
+              onClick={()=>onOpen(r.kind as TabKind, r.label)}>
+              <NodeIcon kind={r.kind} size={11}/>
+              <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2, flex:1,
+                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.label}</span>
+              <KindTag kind={r.kind} />
+              <span style={{ fontSize:9, color:T.tx3, flexShrink:0 }}>{r.ts}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Diagnostics summary */}
+        <div style={{ borderRadius:7, border:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'hidden' }}>
+          <div style={{ padding:'9px 14px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', gap:6 }}>
+            <Terminal size={12} color={T.amber}/>
+            <span style={{ fontSize:11, fontWeight:600, color:T.tx1 }}>Diagnostics</span>
+            <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9,
+              backgroundColor:T.amberLo, color:T.amber, borderRadius:3,
+              padding:'1px 5px' }}>2 warnings</span>
+          </div>
+          {MESSAGES.filter(m=>m.sev==='warn').map(m => (
+            <div key={m.id} style={{ display:'flex', alignItems:'flex-start', gap:8,
+              padding:'7px 14px', borderBottom:`1px solid ${T.border2}` }}>
+              <SevIcon sev={m.sev} size={11}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:10, color:T.tx2, lineHeight:1.5 }}>{m.msg}</div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginTop:2 }}>
+                  {m.src}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div style={{ padding:'7px 14px' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:8 }}>
+              <SevIcon sev="info" size={11}/>
+              <div style={{ fontSize:10, color:T.tx2 }}>2 unresolved WFFileRef references</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Relationship summary */}
+      <div style={{ borderRadius:7, border:`1px solid ${T.border}`, backgroundColor:T.bgPanel,
+        padding:'10px 14px', marginTop:12 }}>
+        <div style={{ fontSize:11, fontWeight:600, color:T.tx1, marginBottom:8,
+          display:'flex', alignItems:'center', gap:6 }}>
+          <GitBranch size={12} color={T.tx3}/> Relationship Summary
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+          {[
+            ['DOC_CAPTURE_MAIN', '→ 3 pages', 'document'],
+            ['BATCH_STANDARD',   '→ 1 doc',   'batch'],
+            ['AC process',       '→ 3 scopes', 'process'],
+            ['VendorLookup',     '→ 4 rules',  'resource'],
+          ].map(([obj, rel, kind]) => (
+            <div key={obj} style={{ borderRadius:5, border:`1px solid ${T.border2}`,
+              backgroundColor:T.bgSurface, padding:'7px 10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:3 }}>
+                <NodeIcon kind={kind} size={10}/>
+                <span style={{ fontFamily:MONO, fontSize:9, color:T.tx1,
+                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {obj}
+                </span>
+              </div>
+              <div style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{rel}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── View: Page Inspector ───────────────────────────────────────────────── */
+function PageInspectorView({ pageName, selectedFieldId, onSelectField }:{
+  pageName:string; selectedFieldId:string|null; onSelectField:(id:string|null)=>void;
+}) {
+  const [variant, setVariant] = useState('Default');
+  const [zoom, setZoom] = useState(100);
+  const [showFields, setShowFields] = useState(true);
+  const [showDropout, setShowDropout] = useState(false);
+
+  const scale = zoom / 100;
+  const PAGE_W = 480;
+  const PAGE_H = 310;
+
+  const FIELD_COLORS: Record<string,string> = {
+    Date:T.blue, String:T.accent, Numeric:T.amber,
+  };
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+      {/* Page header */}
+      <div style={{ padding:'8px 16px', borderBottom:`1px solid ${T.border}`,
+        flexShrink:0, display:'flex', alignItems:'center', gap:10 }}>
+        {/* Breadcrumb */}
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>Pages</span>
+        <ChevronRight size={10} color={T.tx3}/>
+        <span style={{ fontFamily:MONO, fontSize:11, fontWeight:600, color:T.tx1 }}>{pageName}</span>
+        {/* Variant selector */}
+        <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:12 }}>
+          <span style={{ fontSize:10, color:T.tx3 }}>Variant:</span>
+          {['Default','Alt1'].map(v => (
+            <button key={v} onClick={()=>setVariant(v)}
+              style={{ fontSize:10, padding:'2px 8px', borderRadius:4,
+                border:`1px solid ${variant===v?T.accent:T.border}`,
+                backgroundColor:variant===v?T.accentLo:'transparent',
+                color:variant===v?T.accent:T.tx3 }}>{v}</button>
+          ))}
+        </div>
+        {/* Process shortcuts */}
+        <div style={{ display:'flex', alignItems:'center', gap:3, marginLeft:'auto' }}>
+          {['AC','FIP','OCR'].map(p => (
+            <button key={p} style={{ fontSize:10, padding:'2px 7px', borderRadius:4,
+              border:`1px solid ${T.border}`, backgroundColor:T.bgSurface, color:T.tx3 }}>
+              {p}
+            </button>
+          ))}
+          <div style={{ width:1, height:16, backgroundColor:T.border, margin:'0 4px' }}/>
+          <WarnBadge n={1} />
+        </div>
+      </div>
+
+      {/* Body: canvas + field grid */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+        {/* Canvas area */}
+        <div style={{ flex:'0 0 66%', display:'flex', flexDirection:'column',
+          borderRight:`1px solid ${T.border}`, overflow:'hidden' }}>
+          {/* Canvas toolbar */}
+          <div style={{ padding:'5px 10px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <button style={{ display:'flex', alignItems:'center', gap:3, fontSize:10,
+              padding:'2px 6px', color:T.tx3, border:`1px solid ${T.border}`,
+              borderRadius:3, backgroundColor:T.bgSurface }}
+              onClick={()=>setZoom(z=>Math.min(z+25,200))}>
+              <ZoomIn size={10}/> {zoom}%
+            </button>
+            <button onClick={()=>setZoom(z=>Math.max(z-25,50))}
+              style={{ fontSize:10, padding:'2px 6px', color:T.tx3, border:`1px solid ${T.border}`,
+                borderRadius:3, backgroundColor:T.bgSurface }}>
+              <ZoomOut size={10}/>
+            </button>
+            <button onClick={()=>setZoom(100)}
+              style={{ fontSize:10, padding:'2px 6px', color:T.tx3, border:`1px solid ${T.border}`,
+                borderRadius:3, backgroundColor:T.bgSurface }}>
+              <Maximize2 size={10}/>
+            </button>
+            <div style={{ width:1, height:16, backgroundColor:T.border }}/>
+            <button onClick={()=>setShowFields(f=>!f)}
+              style={{ fontSize:10, padding:'2px 6px', borderRadius:3,
+                border:`1px solid ${showFields?T.accent:T.border}`,
+                backgroundColor:showFields?T.accentLo:'transparent',
+                color:showFields?T.accent:T.tx3 }}>
+              Fields
+            </button>
+            <button onClick={()=>setShowDropout(d=>!d)}
+              style={{ fontSize:10, padding:'2px 6px', borderRadius:3,
+                border:`1px solid ${showDropout?T.violet:T.border}`,
+                backgroundColor:showDropout?T.violetLo:'transparent',
+                color:showDropout?T.violet:T.tx3 }}>
+              Dropout
+            </button>
+            <span style={{ marginLeft:'auto', fontFamily:MONO, fontSize:9, color:T.tx3 }}>
+              {pageName} · {variant}
+            </span>
+          </div>
+
+          {/* Canvas viewport */}
+          <div style={{ flex:1, overflow:'auto', display:'flex',
+            alignItems:'center', justifyContent:'center',
+            backgroundColor:'#080c12', padding:20 }}>
+            <div style={{ position:'relative', transform:`scale(${scale})`,
+              transformOrigin:'top center', transition:'transform 0.15s' }}>
+              {/* Page background */}
+              <div style={{ width:PAGE_W, height:PAGE_H, backgroundColor:'#f8f7f4',
+                borderRadius:2, boxShadow:'0 4px 24px rgba(0,0,0,0.6)',
+                position:'relative', overflow:'hidden' }}>
+                {/* Fake page content lines */}
+                {[20,40,52,64,76,100,112,148,160,172,196,208,220,232,260,272].map(y => (
+                  <div key={y} style={{ position:'absolute', left:36, right:36, top:y,
+                    height:1, backgroundColor:'rgba(0,0,0,0.08)' }}/>
+                ))}
+                {/* Header block */}
+                <div style={{ position:'absolute', top:12, left:36, right:36, height:24,
+                  backgroundColor:'rgba(0,0,0,0.06)', borderRadius:2 }}/>
+                <div style={{ position:'absolute', top:14, left:44, fontSize:8,
+                  fontFamily:'serif', color:'rgba(0,0,0,0.45)', letterSpacing:'0.05em',
+                  textTransform:'uppercase' }}>INVOICE</div>
+                <div style={{ position:'absolute', top:14, right:44, fontSize:7,
+                  fontFamily:'serif', color:'rgba(0,0,0,0.3)' }}>Page 1 of 1</div>
+
+                {/* Field overlays */}
+                {showFields && FIELDS.map(f => {
+                  const selected = f.id === selectedFieldId;
+                  const fc = FIELD_COLORS[f.type] ?? T.accent;
+                  return (
+                    <div key={f.id} onClick={()=>onSelectField(selected?null:f.id)}
+                      title={f.name}
+                      style={{
+                        position:'absolute', left:f.x, top:f.y, width:f.w, height:f.h,
+                        border:`${selected?2:1}px solid ${fc}${selected?'':'88'}`,
+                        backgroundColor:`${fc}${selected?'22':'0a'}`,
+                        borderRadius:2, cursor:'pointer', transition:'all 0.1s',
+                        boxShadow: selected?`0 0 0 2px ${fc}44`:undefined,
+                      }}>
+                      <span style={{ position:'absolute', top:-13, left:0,
+                        fontFamily:MONO, fontSize:8, color:fc,
+                        backgroundColor:'#f8f7f4', padding:'0 3px',
+                        borderRadius:2, whiteSpace:'nowrap' }}>
+                        {f.name}
+                      </span>
+                    </div>
+                  );
+                })}
+
+                {/* Dropout regions */}
+                {showDropout && <>
+                  <div style={{ position:'absolute', left:36, top:280, width:100, height:20,
+                    border:`1px dashed ${T.violet}88`, backgroundColor:T.violetLo,
+                    borderRadius:2 }}>
+                    <span style={{ fontFamily:MONO, fontSize:8, color:T.violet, padding:'2px 4px',
+                      display:'block' }}>Dropout 1</span>
+                  </div>
+                </>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Field grid */}
+        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          <div style={{ padding:'6px 10px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            <span style={{ fontSize:10, color:T.tx2 }}>4 fields</span>
+            <button style={{ marginLeft:'auto', fontSize:10, padding:'2px 6px', color:T.tx3,
+              border:`1px solid ${T.border}`, borderRadius:3, backgroundColor:T.bgSurface,
+              display:'flex', alignItems:'center', gap:3 }}>
+              <Filter size={9}/> Filter
+            </button>
+          </div>
+          <div style={{ flex:1, overflow:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
+              <thead>
+                <tr style={{ backgroundColor:T.bgPanel, position:'sticky', top:0, zIndex:1 }}>
+                  {['Name','Type','X','Y','W','H','Src','Rules','Warn'].map(h => (
+                    <th key={h} style={{ padding:'5px 8px', fontFamily:MONO, fontSize:8,
+                      textAlign:'left', color:T.tx3, fontWeight:700,
+                      letterSpacing:'0.07em', textTransform:'uppercase',
+                      borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {FIELDS.map(f => {
+                  const sel = f.id===selectedFieldId;
+                  return (
+                    <tr key={f.id} onClick={()=>onSelectField(sel?null:f.id)}
+                      style={{ backgroundColor:sel?T.accentLo:'transparent',
+                        borderLeft:`2px solid ${sel?T.accent:'transparent'}`,
+                        cursor:'pointer' }}>
+                      {[f.name,f.type,f.x,f.y,f.w,f.h,f.src,f.rules].map((v,i) => (
+                        <td key={i} style={{ padding:'5px 8px', fontFamily:MONO, fontSize:10,
+                          color:i===0?(sel?T.tx1:T.accent):i===1?T.blue:T.tx3,
+                          borderBottom:`1px solid ${T.border2}` }}>{v}</td>
+                      ))}
+                      <td style={{ padding:'5px 8px', borderBottom:`1px solid ${T.border2}` }}>
+                        {f.warn>0 && <WarnBadge n={f.warn}/>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── View: Raw Node Inspector ───────────────────────────────────────────── */
+function RawNodeInspectorView() {
+  const [mode, setMode] = useState<'Hex'|'Text'|'Attrs'|'Parsed'>('Hex');
+  const [rawSelected, setRawSelected] = useState<string|null>('AC');
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', flex:1, overflow:'hidden' }}>
+      {/* Header */}
+      <div style={{ padding:'8px 14px', borderBottom:`1px solid ${T.border}`,
+        flexShrink:0, display:'flex', alignItems:'center', gap:10 }}>
+        <Binary size={13} color={T.violet}/>
+        <span style={{ fontFamily:MONO, fontSize:11, color:T.tx1 }}>
+          /Root/Processes
+        </span>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
+          backgroundColor:T.bgSurface, border:`1px solid ${T.border}`,
+          borderRadius:3, padding:'1px 5px', marginLeft:4 }}>
+          Collection · 5 children
+        </span>
+        <div style={{ display:'flex', alignItems:'center', gap:2, marginLeft:'auto' }}>
+          {(['Hex','Text','Attrs','Parsed'] as const).map(m => (
+            <button key={m} onClick={()=>setMode(m)}
+              style={{ fontSize:10, padding:'3px 8px', borderRadius:4,
+                border:`1px solid ${mode===m?T.violet:T.border}`,
+                backgroundColor:mode===m?T.violetLo:'transparent',
+                color:mode===m?T.violet:T.tx3, fontFamily:MONO }}>
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body: child tree + viewer + metadata */}
+      <div style={{ flex:1, display:'flex', overflow:'hidden' }}>
+        {/* Child node tree */}
+        <div style={{ width:180, flexShrink:0, borderRight:`1px solid ${T.border}`,
+          overflow:'auto', backgroundColor:T.bgPanel }}>
+          <SectionLabel>Children</SectionLabel>
+          {RAW_CHILDREN.map(c => (
+            <div key={c.name} onClick={()=>setRawSelected(c.name)}
+              style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px',
+                cursor:'pointer', borderLeft:`2px solid ${rawSelected===c.name?T.violet:'transparent'}`,
+                backgroundColor:rawSelected===c.name?T.violetLo:'transparent' }}>
+              <Binary size={10} color={rawSelected===c.name?T.violet:T.tx3}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontFamily:MONO, fontSize:10,
+                  color:rawSelected===c.name?T.tx1:T.tx2 }}>{c.name}</div>
+                <div style={{ fontFamily:MONO, fontSize:8, color:T.tx3 }}>{c.type}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Viewer */}
+        <div style={{ flex:1, overflow:'auto', backgroundColor:'#080c12' }}>
+          {mode==='Hex' && (
+            <div style={{ fontFamily:MONO, fontSize:10, padding:14 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'60px 1fr 1fr',
+                gap:'0 16px', borderBottom:`1px solid ${T.border2}`, paddingBottom:6,
+                marginBottom:6 }}>
+                {['OFFSET','BYTES (16)','ASCII'].map(h => (
+                  <span key={h} style={{ fontSize:8, color:T.tx3, fontWeight:700,
+                    letterSpacing:'0.08em', textTransform:'uppercase' }}>{h}</span>
+                ))}
+              </div>
+              {HEX_ROWS.map(row => (
+                <div key={row.off} style={{ display:'grid',
+                  gridTemplateColumns:'60px 1fr 1fr', gap:'0 16px',
+                  padding:'2px 0', borderBottom:`1px solid ${T.border2}20` }}>
+                  <span style={{ color:T.tx3 }}>{row.off}</span>
+                  <span style={{ color:T.blue, letterSpacing:'0.04em' }}>{row.bytes}</span>
+                  <span style={{ color:T.green }}>{row.ascii}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {mode==='Text' && (
+            <pre style={{ fontFamily:MONO, fontSize:10, color:T.tx2, padding:14,
+              lineHeight:1.7, margin:0 }}>
+{`<rule id="rule_001"
   name="ExtractInvoiceDate"
   function="MatchField"
   ordinal="1"
   result="invoice_date">
-  <attribute key="regex"
-    value="\\d{2}/\\d{2}/\\d{4}"/>
-  <attribute key="required"
-    value="true"/>
-</rule>`}</pre>
-          </InspSection>
-        ) : inspTab==='Functions' ? (
-          <>
-            <InspSection label="Function Reference">
-              <KV k="name"     v={node.fn}   mono vc={T.accent} />
-              <KV k="category" v="Extraction" />
-              <KV k="usages"   v="14 rules" />
-              <KV k="returns"  v="String | null" mono />
-            </InspSection>
-            <InspSection label="Referenced By">
-              {['ExtractInvoiceDate','CaptureLineRef','ExtractVendorCode'].map(n => (
-                <div key={n} style={{ display:'flex', alignItems:'center',
-                  justifyContent:'space-between', padding:'5px 10px',
-                  borderBottom:`1px solid ${T.border2}` }}>
-                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{n}</span>
-                  <ChevronRight size={10} color={T.tx3} />
+  <attribute key="regex" value="\\d{2}/\\d{2}/\\d{4}"/>
+  <attribute key="required" value="true"/>
+  <attribute key="confidence" value="0.85"/>
+</rule>`}
+            </pre>
+          )}
+          {mode==='Attrs' && (
+            <div style={{ padding:14 }}>
+              {[['id','rule_001'],['name','ExtractInvoiceDate'],['function','MatchField'],
+                ['ordinal','1'],['result','invoice_date'],['type','Collection']].map(([k,v])=>(
+                <div key={k} style={{ display:'grid', gridTemplateColumns:'130px 1fr',
+                  padding:'4px 8px', borderBottom:`1px solid ${T.border2}` }}>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.accent }}>{k}</span>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{v}</span>
                 </div>
               ))}
-            </InspSection>
-          </>
-        ) : inspTab==='Children' ? (
-          node.children.length === 0 ? (
-            <div style={{ padding:20, textAlign:'center', color:T.tx3, fontSize:11 }}>
-              No child rules.
             </div>
-          ) : (
-            <InspSection label={`${node.children.length} children`}>
-              {node.children.map(c => (
-                <div key={c.id} style={{ padding:'8px 10px', borderBottom:`1px solid ${T.border2}` }}>
-                  <div style={{ fontFamily:MONO, fontSize:11, color:T.tx2, marginBottom:3 }}>{c.name}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>
-                      ord {c.ordinal} · {c.fn}
-                    </span>
-                    <StatusBadge status={c.status} />
-                  </div>
-                </div>
-              ))}
-            </InspSection>
-          )
-        ) : inspTab==='Diagnostics' ? (
-          node.status==='ok' ? (
-            <div style={{ padding:24, textAlign:'center', display:'flex', flexDirection:'column',
-              alignItems:'center', gap:8 }}>
-              <CheckCircle size={20} color={T.green} />
-              <span style={{ fontSize:11, color:T.tx2 }}>No diagnostics for this rule.</span>
-            </div>
-          ) : (
-            <InspSection label="Warnings">
-              <div style={{ padding:'10px', display:'flex', alignItems:'flex-start', gap:8 }}>
-                <AlertTriangle size={12} color={T.amber} style={{ flexShrink:0, marginTop:1 }} />
-                <div>
-                  <div style={{ fontSize:11, color:T.amber, fontWeight:600, marginBottom:3 }}>Warning</div>
-                  <div style={{ fontSize:10, color:T.tx2, lineHeight:1.6 }}>
-                    Regex pattern may be too broad. Consider adding anchors (^ and $).
-                  </div>
-                </div>
+          )}
+          {mode==='Parsed' && (
+            <div style={{ padding:14 }}>
+              <div style={{ display:'inline-flex', alignItems:'center', gap:6,
+                backgroundColor:T.greenLo, border:`1px solid ${T.green}28`,
+                borderRadius:4, padding:'4px 10px', marginBottom:12 }}>
+                <CheckCircle size={10} color={T.green}/>
+                <span style={{ fontFamily:MONO, fontSize:10, color:T.green }}>
+                  Known structure · Full decode
+                </span>
               </div>
-            </InspSection>
-          )
+              <div style={{ fontFamily:MONO, fontSize:10, color:T.tx2, lineHeight:2 }}>
+                <div><span style={{ color:T.accent }}>type</span>: RuleNode</div>
+                <div><span style={{ color:T.accent }}>name</span>: ExtractInvoiceDate</div>
+                <div><span style={{ color:T.accent }}>fn</span>: MatchField</div>
+                <div><span style={{ color:T.accent }}>ordinal</span>: 1</div>
+                <div><span style={{ color:T.accent }}>children</span>: 0</div>
+                <div><span style={{ color:T.accent }}>attrs</span>: 3</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right metadata */}
+        <div style={{ width:190, flexShrink:0, borderLeft:`1px solid ${T.border}`,
+          backgroundColor:T.bgPanel, overflow:'auto' }}>
+          <SectionLabel>Node Metadata</SectionLabel>
+          {[['Path','/Root/Processes/'+rawSelected],['Type','Collection'],
+            ['Size','4.2 KB'],['Children','5'],['Parse','Known']].map(([k,v])=>(
+            <div key={k} style={{ display:'grid', gridTemplateColumns:'60px 1fr',
+              padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+              <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+              <span style={{ fontFamily:MONO, fontSize:9, color:T.tx2,
+                wordBreak:'break-all' }}>{v}</span>
+            </div>
+          ))}
+          <SectionLabel>Export</SectionLabel>
+          <div style={{ padding:'4px 10px', display:'flex', flexDirection:'column', gap:4 }}>
+            {[['Save as file',<Download size={10}/>],['Copy hex',<Copy size={10}/>]].map(([l,ic])=>(
+              <button key={l as string} style={{ display:'flex', alignItems:'center', gap:6,
+                padding:'5px 8px', borderRadius:4, border:`1px solid ${T.border}`,
+                backgroundColor:T.bgSurface, fontSize:10, color:T.tx2 }}>
+                <span style={{ color:T.tx3 }}>{ic as React.ReactNode}</span>{l as string}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Right Inspector Rail ───────────────────────────────────────────────── */
+function RightInspectorRail({ selectedFieldId, activeTab }:{
+  selectedFieldId:string|null; activeTab:WorkspaceTab|null;
+}) {
+  const [mode, setMode] = useState<'metadata'|'type'|'route'>('metadata');
+  const field = FIELDS.find(f=>f.id===selectedFieldId);
+
+  return (
+    <aside style={{ width:258, flexShrink:0, backgroundColor:T.bgPanel,
+      borderLeft:`1px solid ${T.border}`, display:'flex',
+      flexDirection:'column', overflow:'hidden' }}>
+      {/* Mode tabs */}
+      <div style={{ display:'flex', borderBottom:`1px solid ${T.border}`,
+        padding:'0 6px', flexShrink:0 }}>
+        {(['metadata','type','route'] as const).map(m => (
+          <button key={m} onClick={()=>setMode(m)}
+            style={{ padding:'8px 8px', fontSize:10, fontFamily:MONO,
+              textTransform:'uppercase', letterSpacing:'0.06em',
+              color:mode===m?T.accent:T.tx3,
+              borderBottom:`2px solid ${mode===m?T.accent:'transparent'}`,
+              marginBottom:-1 }}>{m}</button>
+        ))}
+      </div>
+
+      <div style={{ flex:1, overflow:'auto' }}>
+        {field ? (
+          <>
+            <SectionLabel>Field</SectionLabel>
+            <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+              overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+              {[['name',field.name],['type',field.type],['x',field.x],['y',field.y],
+                ['width',field.w],['height',field.h],['source',field.src],
+                ['rules',field.rules],['warnings',field.warn]].map(([k,v])=>(
+                <div key={k} style={{ display:'grid', gridTemplateColumns:'72px 1fr',
+                  padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                  <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                  <span style={{ fontFamily:MONO, fontSize:10,
+                    color:k==='name'?T.tx1:k==='type'?T.blue:T.tx2 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <SectionLabel>Actions</SectionLabel>
+            <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+              overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+              {['Open field rules','Show references','Open raw metadata','Copy field ID'].map(a=>(
+                <button key={a} style={{ width:'100%', display:'flex', alignItems:'center',
+                  gap:7, padding:'6px 10px', borderBottom:`1px solid ${T.border2}`,
+                  fontSize:10, color:T.tx2, textAlign:'left' }}>
+                  <ArrowRight size={9} color={T.tx3}/>{a}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : activeTab?.kind==='page' ? (
+          <>
+            <SectionLabel>Page</SectionLabel>
+            <div style={{ margin:'0 8px', borderRadius:5, border:`1px solid ${T.border2}`,
+              overflow:'hidden', backgroundColor:T.bgSurface, marginBottom:10 }}>
+              {[['name',activeTab.label],['variants','2'],['fields','4'],
+                ['processes','3'],['warnings','1']].map(([k,v])=>(
+                <div key={k} style={{ display:'grid', gridTemplateColumns:'72px 1fr',
+                  padding:'4px 10px', borderBottom:`1px solid ${T.border2}` }}>
+                  <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{k}</span>
+                  <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:12, textAlign:'center', color:T.tx3, fontSize:10 }}>
+              Click a field on the canvas or in the grid to inspect it
+            </div>
+          </>
         ) : (
-          /* Source tab */
-          <InspSection label="Source Location">
-            <KV k="file"   v="fwd.cfd" mono />
-            <KV k="scope"  v="PAGE_INVOICE_HEADER" mono />
-            <KV k="line"   v="142" mono />
-            <KV k="offset" v="5840" mono />
-          </InspSection>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center',
+            justifyContent:'center', height:'100%', padding:20, gap:10, textAlign:'center' }}>
+            <div style={{ width:40, height:40, borderRadius:10, display:'flex',
+              alignItems:'center', justifyContent:'center',
+              backgroundColor:T.bgSurface, border:`1px solid ${T.border}` }}>
+              <Eye size={16} color={T.tx3}/>
+            </div>
+            <div style={{ fontSize:11, color:T.tx2, fontWeight:600 }}>No selection</div>
+            <div style={{ fontSize:10, color:T.tx3, lineHeight:1.6 }}>
+              Select a page, field, or object in the tree to inspect it here.
+            </div>
+          </div>
         )}
       </div>
     </aside>
   );
 }
 
-/* ─── Root ───────────────────────────────────────────────────────────────── */
-export function DarkPro() {
-  const [activeView,  setActiveView]  = useState('overview');
-  const [activeScope, setActiveScope] = useState('PAGE_INVOICE_HEADER');
-  const [selectedId,  setSelectedId]  = useState<string|null>(null);
-  const [inspTab,     setInspTab]     = useState('Summary');
-  const [expanded,    setExpanded]    = useState<Set<string>>(new Set(['r1','r3']));
-  const [bottomOpen,  setBottomOpen]  = useState(true);
-  const [treeSearch,  setTreeSearch]  = useState('');
-
-  function toggleExpanded(id:string) {
-    setExpanded(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
-  }
-  function expandAll() {
-    setExpanded(new Set(FLAT_RULES.map(r=>r.id)));
-  }
-
-  const warnCount  = DIAGS.filter(d=>d.sev==='warn').length;
-  const errCount   = DIAGS.filter(d=>d.sev==='error').length;
-  const activeViewLabel = VIEWS.find(v=>v.id===activeView)?.label ?? '';
+/* ─── Bottom Message Window ──────────────────────────────────────────────── */
+function BottomMessagePane({ collapsed, onToggle }:{ collapsed:boolean; onToggle:()=>void }) {
+  const [filter, setFilter] = useState('all');
+  const shown = filter==='all' ? MESSAGES : MESSAGES.filter(m=>m.sev===filter);
 
   return (
-    <div role="application" aria-label="AC Rule Workbench"
+    <div style={{ flexShrink:0, borderTop:`1px solid ${T.border}`,
+      backgroundColor:T.bgPanel, display:'flex', flexDirection:'column',
+      height:collapsed?32:180 }}>
+      {/* Pane header */}
+      <div style={{ height:32, display:'flex', alignItems:'center', gap:6,
+        padding:'0 12px', flexShrink:0, borderBottom:collapsed?'none':`1px solid ${T.border}` }}>
+        <Terminal size={11} color={T.tx3}/>
+        <span style={{ fontSize:11, fontWeight:600, color:T.tx1 }}>Messages</span>
+        <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.amberLo,
+          color:T.amber, borderRadius:3, padding:'1px 5px' }}>2w</span>
+        {!collapsed && <>
+          <div style={{ display:'flex', alignItems:'center', gap:2, marginLeft:10 }}>
+            {['all','error','warn','info'].map(f=>(
+              <button key={f} onClick={()=>setFilter(f)}
+                style={{ fontSize:9, padding:'1px 6px', borderRadius:3, fontFamily:MONO,
+                  textTransform:'uppercase', letterSpacing:'0.05em',
+                  border:`1px solid ${filter===f?T.accent:T.border}`,
+                  backgroundColor:filter===f?T.accentLo:'transparent',
+                  color:filter===f?T.accent:T.tx3 }}>{f}</button>
+            ))}
+          </div>
+          <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3, marginLeft:4 }}>
+            {shown.length} items
+          </span>
+        </>}
+        <button onClick={onToggle} style={{ marginLeft:'auto', color:T.tx3,
+          display:'flex', alignItems:'center', padding:4 }}>
+          {collapsed ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+        </button>
+      </div>
+      {/* Messages */}
+      {!collapsed && (
+        <div style={{ flex:1, overflow:'auto' }}>
+          {shown.map(m => (
+            <div key={m.id} style={{ display:'flex', alignItems:'flex-start', gap:8,
+              padding:'5px 12px', borderBottom:`1px solid ${T.border2}` }}>
+              <SevIcon sev={m.sev} size={11}/>
+              <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3, flexShrink:0 }}>{m.ts}</span>
+              <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
+                backgroundColor:T.bgSurface, borderRadius:3, padding:'0 4px',
+                flexShrink:0 }}>{m.src}</span>
+              <span style={{ fontSize:10, color:T.tx2, flex:1, lineHeight:1.5 }}>{m.msg}</span>
+              <button style={{ color:T.tx3, flexShrink:0, display:'flex' }}>
+                <Copy size={9}/>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Status Bar ─────────────────────────────────────────────────────────── */
+function StatusBar({ warnCount }:{ warnCount:number }) {
+  return (
+    <div style={{ height:22, flexShrink:0, display:'flex', alignItems:'center',
+      padding:'0 12px', backgroundColor:T.bgBase, borderTop:`1px solid ${T.border2}`,
+      gap:14 }}>
+      {[
+        ['fwd.cfd',    <Database size={9} color={T.tx3}/>],
+        ['29 rules',   <GitBranch size={9} color={T.tx3}/>],
+        ['12 functions',<Zap size={9} color={T.tx3}/>],
+        ['6 UDFs',     <Code size={9} color={T.tx3}/>],
+      ].map(([label, icon]) => (
+        <div key={label as string} style={{ display:'flex', alignItems:'center', gap:4 }}>
+          {icon as React.ReactNode}
+          <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{label as string}</span>
+        </div>
+      ))}
+      {warnCount>0 && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+        <AlertTriangle size={9} color={T.amber}/>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.amber }}>{warnCount} warnings</span>
+      </div>}
+      <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:12 }}>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>142ms</span>
+        <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
+          backgroundColor:T.bgSurface, border:`1px solid ${T.border}`,
+          borderRadius:3, padding:'0 5px' }}>Read-only</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Root ───────────────────────────────────────────────────────────────── */
+let tabCounter = 10;
+function makeTab(kind: TabKind, label: string): WorkspaceTab {
+  return { id: `tab-${++tabCounter}`, kind, label };
+}
+
+export function DarkPro() {
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([
+    { id:'tab-overview', kind:'overview', label:'Overview' },
+  ]);
+  const [activeTabId, setActiveTabId]     = useState('tab-overview');
+  const [explorerSel, setExplorerSel]     = useState<string|null>('root');
+  const [expanded, setExpanded]           = useState<Set<string>>(
+    new Set(['root','pages','page-inv','documents','processes','resources'])
+  );
+  const [selectedFieldId, setSelectedFieldId] = useState<string|null>(null);
+  const [bottomCollapsed, setBottomCollapsed] = useState(false);
+
+  const warnCount = MESSAGES.filter(m=>m.sev==='warn').length;
+
+  function toggleExpanded(id: string) {
+    setExpanded(prev => { const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+  }
+
+  function openTab(kind: TabKind, label: string, nodeId?: string) {
+    const existing = tabs.find(t=>t.kind===kind && t.label===label);
+    if (existing) { setActiveTabId(existing.id); return; }
+    const tab = { ...makeTab(kind, label), nodeId };
+    setTabs(prev=>[...prev, tab]);
+    setActiveTabId(tab.id);
+  }
+
+  function openNodeTab(node: FwdNode) {
+    if (!node.tabKind) return;
+    openTab(node.tabKind, node.label, node.id);
+  }
+
+  function closeTab(id: string) {
+    setTabs(prev => prev.filter(t=>t.id!==id));
+    if (activeTabId===id) setActiveTabId(tabs.find(t=>t.id!==id)?.id ?? 'tab-overview');
+  }
+
+  const activeTab = tabs.find(t=>t.id===activeTabId) ?? null;
+
+  return (
+    <div role="application" aria-label="FormWorks Editor"
       style={{ width:'100vw', height:'100vh', display:'flex', flexDirection:'column',
         overflow:'hidden', backgroundColor:T.bgBase, color:T.tx1, fontFamily:SANS, fontSize:13 }}>
 
@@ -760,310 +1175,61 @@ export function DarkPro() {
         ::-webkit-scrollbar-thumb:hover{background:#3a4560}
         button{background:none;border:none;cursor:pointer;color:inherit;font-family:inherit}
         input{background:none;border:none;outline:none;color:inherit;font-family:inherit}
-        button:focus-visible,a:focus-visible{outline:2px solid ${T.accent};outline-offset:2px;border-radius:4px}
-        @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+        button:focus-visible{outline:2px solid ${T.accent};outline-offset:2px;border-radius:3px}
         tr:hover td{background-color:${T.bgHover}!important}
+        @media(prefers-reduced-motion:reduce){*{transition:none!important}}
       `}</style>
 
-      {/* ══ TOP COMMAND BAR ═══════════════════════════════════════════════ */}
-      <header role="banner"
-        style={{ height:56, flexShrink:0, display:'flex', alignItems:'center',
-          padding:'0 16px', borderBottom:`1px solid ${T.border}`,
-          backgroundColor:T.bgPanel, gap:12, zIndex:20 }}>
+      {/* Top command bar */}
+      <TopCommandBar warnCount={warnCount} errCount={0} />
 
-        {/* Brand */}
-        <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          <div style={{ width:28, height:28, borderRadius:6, display:'flex', alignItems:'center',
-            justifyContent:'center', backgroundColor:T.accentLo, border:`1px solid ${T.accentGlow}` }}>
-            <span style={{ fontFamily:MONO, fontSize:10, fontWeight:700, color:T.accent }}>AC</span>
-          </div>
-          <div>
-            <div style={{ fontSize:13, fontWeight:600, letterSpacing:'-0.01em' }}>AC Rule Workbench</div>
-            <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:1 }}>
-              <FileText size={9} color={T.tx3} />
-              <span style={{ fontFamily:MONO, fontSize:9, color:T.tx2 }}>fwd.cfd</span>
-              <span style={{ fontSize:9, color:T.tx3 }}>·</span>
-              <span style={{ display:'inline-flex', alignItems:'center', gap:3,
-                backgroundColor:T.greenLo, border:`1px solid ${T.green}28`,
-                borderRadius:4, padding:'1px 5px' }}>
-                <CheckCircle size={7} color={T.green} />
-                <span style={{ fontFamily:MONO, fontSize:8, color:T.green }}>Parse OK</span>
-              </span>
-              {warnCount>0 && <span style={{ display:'inline-flex', alignItems:'center', gap:3,
-                backgroundColor:T.amberLo, border:`1px solid ${T.amber}28`,
-                borderRadius:4, padding:'1px 5px' }}>
-                <AlertTriangle size={7} color={T.amber} />
-                <span style={{ fontFamily:MONO, fontSize:8, color:T.amber }}>{warnCount}w</span>
-              </span>}
-            </div>
-          </div>
-        </div>
+      {/* Tab strip — full width above body */}
+      <TabStrip tabs={tabs} activeId={activeTabId}
+        onActivate={setActiveTabId} onClose={closeTab}
+        onNew={()=>openTab('overview','Overview')} />
 
-        {/* Global search */}
-        <div style={{ flex:1, maxWidth:520 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, backgroundColor:T.bgBase,
-            border:`1px solid ${T.border}`, borderRadius:6, padding:'0 10px', height:32 }}>
-            <Search size={12} color={T.tx3} />
-            <input type="search" aria-label="Global search"
-              placeholder="Search rules, functions, UDFs, GUIDs, attributes…"
-              style={{ flex:1, fontSize:12, color:T.tx1 }} />
-            <span style={{ fontFamily:MONO, fontSize:10, color:T.tx3, border:`1px solid ${T.border}`,
-              borderRadius:3, padding:'1px 5px', flexShrink:0 }}>⌘K</span>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-          <button aria-label="Validate" style={{ display:'flex', alignItems:'center', gap:5,
-            padding:'5px 10px', borderRadius:5, fontSize:11, fontWeight:500,
-            backgroundColor:T.accentLo, border:`1px solid ${T.accentGlow}`, color:T.accent }}>
-            <Shield size={12}/> Validate
-          </button>
-          <button aria-label="Export" style={{ display:'flex', alignItems:'center', gap:5,
-            padding:'5px 10px', borderRadius:5, fontSize:11, fontWeight:500,
-            backgroundColor:T.bgSurface, border:`1px solid ${T.border}`, color:T.tx2 }}>
-            <Download size={12}/> Export
-          </button>
-          <div style={{ width:1, height:20, backgroundColor:T.border, margin:'0 2px' }} />
-          <button aria-label="Settings" style={{ padding:6, borderRadius:5, color:T.tx3 }}><Settings size={14}/></button>
-          <button aria-label="Help"     style={{ padding:6, borderRadius:5, color:T.tx3 }}><HelpCircle size={14}/></button>
-          <button aria-label="Toggle theme" style={{ padding:6, borderRadius:5, color:T.tx3 }}><Moon size={14}/></button>
-        </div>
-      </header>
-
-      {/* ══ BODY ══════════════════════════════════════════════════════════ */}
+      {/* Main body */}
       <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
+        {/* Left explorer */}
+        <LeftExplorerPane
+          selected={explorerSel} expanded={expanded}
+          onSelect={id=>{ setExplorerSel(id); setSelectedFieldId(null); }}
+          onToggle={toggleExpanded}
+          onOpen={openNodeTab} />
 
-        {/* ── LEFT NAVIGATION ───────────────────────────────────────────── */}
-        <nav aria-label="Primary navigation"
-          style={{ width:268, flexShrink:0, backgroundColor:T.bgPanel,
-            borderRight:`1px solid ${T.border}`, display:'flex',
-            flexDirection:'column', overflow:'hidden' }}>
-
-          {/* A. Loaded source */}
-          <div style={{ padding:'10px 12px', borderBottom:`1px solid ${T.border}`,
-            backgroundColor:T.bgPanel2 }}>
-            <div style={{ fontFamily:MONO, fontSize:9, fontWeight:700, letterSpacing:'0.1em',
-              textTransform:'uppercase', color:T.tx3, marginBottom:7 }}>Loaded Source</div>
-            <div style={{ fontFamily:MONO, fontSize:11, color:T.tx2, marginBottom:7,
-              display:'flex', alignItems:'center', gap:5 }}>
-              <FileText size={11} color={T.tx3} /> fwd.cfd
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'3px 10px', marginBottom:5 }}>
-              {[['Rules','29'],['Functions','12'],['UDFs','6'],['Warnings',String(warnCount)]].map(([k,v]) => (
-                <div key={k} style={{ display:'flex', justifyContent:'space-between', fontSize:10 }}>
-                  <span style={{ color:T.tx3 }}>{k}</span>
-                  <span style={{ fontFamily:MONO, fontWeight:600,
-                    color:k==='Warnings'&&parseInt(v)?T.amber:T.tx2 }}>{v}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize:9, fontFamily:MONO, color:T.tx3 }}>142ms · 3 days ago</div>
-          </div>
-
-          {/* B. Primary views */}
-          <div style={{ padding:'7px 8px', borderBottom:`1px solid ${T.border}` }}>
-            {VIEWS.map(v => {
-              const active = v.id===activeView;
-              const Icon = v.icon;
-              return (
-                <button key={v.id} onClick={() => setActiveView(v.id)}
-                  aria-current={active?'page':undefined}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:8,
-                    padding:'6px 8px', borderRadius:5, marginBottom:1, textAlign:'left',
-                    backgroundColor:active?T.accentLo:'transparent',
-                    borderLeft:`2px solid ${active?T.accent:'transparent'}`,
-                    color:active?T.tx1:T.tx2, fontSize:12, transition:'background 0.1s' }}>
-                  <Icon size={13} color={active?T.accent:T.tx3} />
-                  <span style={{ flex:1 }}>{v.label}</span>
-                  {v.id==='diagnostics'&&warnCount>0 &&
-                    <span style={{ fontFamily:MONO, fontSize:9, backgroundColor:T.amberLo,
-                      color:T.amber, borderRadius:3, padding:'1px 4px' }}>{warnCount}</span>}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* C. Object index */}
-          <div style={{ flex:1, overflow:'auto', padding:'7px 8px' }}>
-            <div style={{ fontSize:9, fontWeight:700, letterSpacing:'0.1em', textTransform:'uppercase',
-              color:T.tx3, marginBottom:6, paddingLeft:4 }}>Object Index</div>
-            {SCOPES.map(scope => {
-              const active = scope.name===activeScope;
-              return (
-                <button key={scope.name} onClick={() => setActiveScope(scope.name)}
-                  aria-pressed={active}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:7,
-                    padding:'6px 8px', borderRadius:5, marginBottom:2, textAlign:'left',
-                    backgroundColor:active?T.accentLo:'transparent',
-                    borderLeft:`2px solid ${active?T.accent:'transparent'}` }}>
-                  <span style={{ color:active?T.accent:T.tx3, flexShrink:0 }}>
-                    {scope.type==='udf'?<Code size={12}/>:scope.type==='doc'?<Hash size={12}/>:<FileText size={12}/>}
-                  </span>
-                  <span style={{ fontFamily:MONO, fontSize:10, color:active?T.tx1:T.tx2, flex:1,
-                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                    {scope.name}
-                  </span>
-                  <div style={{ display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
-                    {scope.warnings>0 && <AlertTriangle size={9} color={T.amber}/>}
-                    <TypeChip type={scope.type} />
-                    <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3 }}>{scope.rules}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-
-        {/* ── CENTER + RIGHT COLUMN ─────────────────────────────────────── */}
-        <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-          <div style={{ flex:1, display:'flex', overflow:'hidden', minHeight:0 }}>
-
-            {/* ── MAIN WORK SURFACE ──────────────────────────────────────── */}
-            <main role="main" aria-label={activeViewLabel}
-              style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', backgroundColor:T.bgBase }}>
-
-              {/* View header */}
-              <div style={{ padding:'11px 18px 0', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:7 }}>
-                  <span style={{ fontSize:10, color:T.tx3 }}>{activeViewLabel}</span>
-                  {activeView!=='overview' && <>
-                    <ChevronRight size={11} color={T.tx3}/>
-                    <span style={{ fontFamily:MONO, fontSize:10, color:T.accent }}>{activeScope}</span>
-                    <TypeChip type={SCOPES.find(s=>s.name===activeScope)?.type??'page'} />
-                  </>}
-                </div>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-                  <h2 style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:T.tx1 }}>
-                    {activeViewLabel}
-                  </h2>
-                  {activeView==='rule-tree' && (
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:6,
-                        backgroundColor:T.bgSurface, border:`1px solid ${T.border}`,
-                        borderRadius:5, padding:'3px 8px' }}>
-                        <Search size={10} color={T.tx3} />
-                        <input aria-label="Search tree" placeholder="Search tree…"
-                          value={treeSearch} onChange={e => setTreeSearch(e.target.value)}
-                          style={{ fontSize:11, width:130, color:T.tx1 }} />
-                        {treeSearch && <button onClick={() => setTreeSearch('')}
-                          aria-label="Clear search">
-                          <X size={10} color={T.tx3} />
-                        </button>}
-                      </div>
-                      <button onClick={expandAll}
-                        style={{ fontSize:11, color:T.tx2, padding:'3px 8px', borderRadius:4,
-                          border:`1px solid ${T.border}`, backgroundColor:T.bgSurface }}>
-                        Expand all
-                      </button>
-                      <button onClick={() => setExpanded(new Set())}
-                        style={{ fontSize:11, color:T.tx2, padding:'3px 8px', borderRadius:4,
-                          border:`1px solid ${T.border}`, backgroundColor:T.bgSurface }}>
-                        Collapse
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {/* Tree column headers */}
-                {activeView==='rule-tree' && (
-                  <div style={{ display:'grid',
-                    gridTemplateColumns:'16px 1fr 130px 72px 28px',
-                    padding:'0 10px 6px', fontFamily:MONO, fontSize:9, fontWeight:700,
-                    letterSpacing:'0.08em', textTransform:'uppercase', color:T.tx3, gap:6 }}>
-                    <span/>
-                    <span>Rule Name</span>
-                    <span>Result</span>
-                    <span>Status</span>
-                    <span>Ch</span>
-                  </div>
-                )}
+        {/* Center workspace */}
+        <main style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+          {activeTab?.kind==='overview' && (
+            <OverviewView onOpen={(kind,label)=>openTab(kind,label)} />
+          )}
+          {activeTab?.kind==='page' && (
+            <PageInspectorView pageName={activeTab.label}
+              selectedFieldId={selectedFieldId}
+              onSelectField={setSelectedFieldId} />
+          )}
+          {activeTab?.kind==='raw' && <RawNodeInspectorView />}
+          {activeTab && !['overview','page','raw'].includes(activeTab.kind) && (
+            <div style={{ flex:1, display:'flex', flexDirection:'column',
+              alignItems:'center', justifyContent:'center', gap:10, color:T.tx3 }}>
+              <NodeIcon kind={activeTab.kind} size={24}/>
+              <div style={{ fontFamily:MONO, fontSize:12, color:T.tx2 }}>{activeTab.label}</div>
+              <div style={{ fontSize:11, color:T.tx3 }}>
+                {activeTab.kind} inspector — Phase 2
               </div>
-
-              {/* View body */}
-              {activeView==='overview' && (
-                <OverviewView warnCount={warnCount} onNav={setActiveView} />
-              )}
-              {activeView==='rule-tree' && (
-                <div style={{ flex:1, overflow:'auto' }}>
-                  {TREE.map(node => (
-                    <TreeRow key={node.id} node={node} depth={0}
-                      selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setInspTab('Summary'); }}
-                      expanded={expanded} onToggle={toggleExpanded} searchQ={treeSearch} />
-                  ))}
-                </div>
-              )}
-              {activeView==='rule-table' && (
-                <RuleTableView selectedId={selectedId}
-                  onSelect={(id) => { setSelectedId(id); setInspTab('Summary'); }} />
-              )}
-              {activeView==='functions' && <FunctionsView />}
-              {activeView==='diagnostics' && <DiagnosticsView />}
-              {(activeView==='udfs'||activeView==='exports') && (
-                <div style={{ flex:1, display:'flex', flexDirection:'column',
-                  alignItems:'center', justifyContent:'center', gap:10, color:T.tx3 }}>
-                  <Package size={28} color={T.tx3} />
-                  <span style={{ fontSize:12 }}>
-                    {activeView==='udfs' ? 'UDF inventory' : 'Export review'} view — coming soon
-                  </span>
-                </div>
-              )}
-            </main>
-
-            {/* ── RIGHT INSPECTOR ────────────────────────────────────────── */}
-            <Inspector selectedId={selectedId} inspTab={inspTab} setInspTab={setInspTab} />
-          </div>
-
-          {/* ══ BOTTOM DIAGNOSTICS CONSOLE ═══════════════════════════════ */}
-          <div role="complementary" aria-label="Diagnostics console"
-            style={{ flexShrink:0, borderTop:`1px solid ${T.border}`,
-              backgroundColor:T.bgPanel2, overflow:'hidden',
-              height:bottomOpen?164:32, transition:'height 0.15s ease' }}>
-
-            <div style={{ height:32, display:'flex', alignItems:'center', padding:'0 14px',
-              gap:10, borderBottom:bottomOpen?`1px solid ${T.border}`:'none', cursor:'pointer' }}
-              onClick={() => setBottomOpen(o=>!o)}
-              role="button" aria-expanded={bottomOpen} aria-controls="diag-body"
-              tabIndex={0} onKeyDown={e=>e.key==='Enter'&&setBottomOpen(o=>!o)}>
-              <Terminal size={12} color={T.tx3} />
-              <span style={{ fontSize:11, fontWeight:600, color:T.tx2 }}>Diagnostics</span>
-              <div style={{ display:'flex', gap:5, marginLeft:4 }}>
-                {errCount>0  && <Pill color={T.red}   n={errCount}  label="error" />}
-                {warnCount>0 && <Pill color={T.amber} n={warnCount} label="warn"  />}
-                <Pill color={T.green} n={2} label="info" />
-              </div>
-              <span style={{ marginLeft:'auto', color:T.tx3 }}>
-                {bottomOpen ? <ChevronDown size={13}/> : <ChevronUp size={13}/>}
-              </span>
             </div>
+          )}
+        </main>
 
-            {bottomOpen && (
-              <div id="diag-body" style={{ overflow:'auto', height:132 }}>
-                {DIAGS.map(d => (
-                  <div key={d.id} style={{ display:'flex', alignItems:'flex-start', gap:8,
-                    padding:'5px 14px', borderBottom:`1px solid ${T.border2}` }}>
-                    <span style={{ marginTop:1, flexShrink:0 }}><SevIcon sev={d.sev}/></span>
-                    <span style={{ fontFamily:MONO, fontSize:10, color:T.tx2, flex:1,
-                      lineHeight:1.6 }}>{d.msg}</span>
-                    {d.scope && <span style={{ fontFamily:MONO, fontSize:9, color:T.tx3,
-                      flexShrink:0, paddingTop:1 }}>{d.scope}</span>}
-                    <button aria-label="Copy diagnostic" style={{ padding:'2px 4px',
-                      borderRadius:3, color:T.tx3 }}><Copy size={10}/></button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Right inspector rail */}
+        <RightInspectorRail selectedFieldId={selectedFieldId} activeTab={activeTab} />
       </div>
+
+      {/* Bottom message pane */}
+      <BottomMessagePane collapsed={bottomCollapsed}
+        onToggle={()=>setBottomCollapsed(c=>!c)} />
+
+      {/* Status bar */}
+      <StatusBar warnCount={warnCount} />
     </div>
   );
-}
-
-function findNode(nodes:TreeNode[], id:string): TreeNode|null {
-  for (const n of nodes) {
-    if (n.id===id) return n;
-    const f = findNode(n.children, id);
-    if (f) return f;
-  }
-  return null;
 }
