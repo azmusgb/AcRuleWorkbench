@@ -1,0 +1,12 @@
+AcRuleWorkbench package-source-clean script update
+=================================================
+
+Files included:
+- scripts/package-source-clean.ps1
+- install-update-files.ps1
+
+Purpose:
+- Adds -OutDir support.
+- Creates both .\artifacts\source-clean and .\artifacts\AcRuleWorkbench_source_clean.zip.
+- Removes use of [System.IO.Path]::GetRelativePath for Windows PowerShell 5.1 compatibility.
+- Keeps older -OutputZip usage working.

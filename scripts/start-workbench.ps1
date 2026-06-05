@@ -11,19 +11,37 @@ param(
 
     [string]$Platform = "x86",
 
+    [ValidateSet("viewer-safe", "diagnostic", "full-evidence")]
+    [string]$Profile = "viewer-safe",
+
     [switch]$KillExisting,
     [switch]$NoBuild,
     [switch]$Clean,
     [switch]$NoBrowser,
+    [switch]$NoOpenWhenReady,
+    [switch]$WaitForReadyBeforeOpen,
     [switch]$CopyNativeToOutput,
     [switch]$SkipViewerRefresh,
+    [switch]$ForceViewerRefresh,
     [switch]$NoAutoPort,
+    [switch]$SkipRuntimeValidation,
+    [switch]$CheckWorkingTree,
+    [switch]$Detached,
+    [switch]$NoWaitReady,
+    [switch]$EnableDebugApi,
+    [switch]$AllowPathQuery,
+    [switch]$EnableCors,
+    [switch]$DisableSnapshotCache,
+    [switch]$AllowRefresh,
 
     [ValidateRange(1, 200)]
     [int]$PortSearchLimit = 25,
 
+    [ValidateRange(5, 600)]
+    [int]$ReadyTimeoutSeconds = 90,
+
     [ValidateSet("Pascal", "Kebab", "None")]
-    [string]$ArgumentStyle = "Pascal",
+    [string]$ArgumentStyle = "Kebab",
 
     [string[]]$ExtraArgs = @()
 )
@@ -31,286 +49,160 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-function Write-Section {
-    param([Parameter(Mandatory = $true)][string]$Text)
-    Write-Host ""
-    Write-Host "== $Text ==" -ForegroundColor Cyan
+if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    $scriptRoot = $PSScriptRoot
 }
-
-function Write-Ok {
-    param([Parameter(Mandatory = $true)][string]$Text)
-    Write-Host "[OK] $Text" -ForegroundColor Green
+else {
+    $scriptRoot = Split-Path -Parent $PSCommandPath
 }
+$commonRoot = Join-Path $scriptRoot "common"
 
-function Resolve-RepoRoot {
-    $scriptPath = $PSCommandPath
-    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
-        $scriptPath = $MyInvocation.MyCommand.Path
-    }
+. (Join-Path $commonRoot "workbench-logging.ps1")
+. (Join-Path $commonRoot "workbench-paths.ps1")
+. (Join-Path $commonRoot "workbench-runtime.ps1")
+. (Join-Path $commonRoot "workbench-health.ps1")
 
-    $scriptDir = Split-Path -Parent $scriptPath
-    return (Resolve-Path -LiteralPath (Join-Path $scriptDir "..")).Path
-}
 
-function Get-ListeningProcessIdsOnPort {
-    param([Parameter(Mandatory = $true)][int]$Port)
-
-    $pids = @()
-
-    $getNetTcpConnection = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
-    if ($null -ne $getNetTcpConnection) {
-        $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
-        $pids += $connections | Select-Object -ExpandProperty OwningProcess -Unique
-    }
-    else {
-        $lines = @(netstat -ano -p tcp | Select-String -Pattern "LISTENING" | Where-Object { $_.Line -match ":$Port\s" })
-        foreach ($line in $lines) {
-            $parts = @($line.Line -split "\s+" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            if ($parts.Count -ge 5) {
-                $parsedPid = 0
-                if ([int]::TryParse($parts[$parts.Count - 1], [ref]$parsedPid)) {
-                    $pids += $parsedPid
-                }
-            }
-        }
-    }
-
-    return @($pids | Where-Object { $_ -gt 0 } | Sort-Object -Unique)
-}
-
-function Get-ProcessLabel {
-    param([Parameter(Mandatory = $true)][int]$ProcessId)
-
-    try {
-        $process = Get-Process -Id $ProcessId -ErrorAction Stop
-        return "$($process.ProcessName) PID $ProcessId"
-    }
-    catch {
-        return "PID $ProcessId"
-    }
-}
-
-function Get-PortUsageSummary {
-    param([Parameter(Mandatory = $true)][int]$Port)
-
-    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
-    if ($pids.Count -eq 0) {
-        return "no active TCP listener was detected"
-    }
-
-    $labels = @()
-    foreach ($pidValue in $pids) {
-        $labels += (Get-ProcessLabel -ProcessId $pidValue)
-    }
-
-    return ($labels -join ", ")
-}
-
-function Test-LocalPortAvailable {
+function Start-WbViewerOpenHelper {
     param(
-        [Parameter(Mandatory = $true)][int]$Port,
-        [Parameter(Mandatory = $true)][string]$HostName
+        [Parameter(Mandatory = $true)][string]$LiveHealthUrl,
+        [Parameter(Mandatory = $true)][string]$ReadyHealthUrl,
+        [Parameter(Mandatory = $true)][string]$ViewerUrl,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+        [Parameter(Mandatory = $false)][bool]$WaitForReady = $false
     )
 
-    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
-    if ($pids.Count -gt 0) {
-        return $false
-    }
+    $helperPath = Join-Path $env:TEMP ("acrw-open-viewer-" + [guid]::NewGuid().ToString("N") + ".ps1")
 
-    $ipAddress = [System.Net.IPAddress]::Loopback
-    if (-not [string]::IsNullOrWhiteSpace($HostName) -and $HostName -ne "localhost") {
-        [System.Net.IPAddress]$parsedAddress = $null
-        if ([System.Net.IPAddress]::TryParse($HostName, [ref]$parsedAddress)) {
-            $ipAddress = $parsedAddress
-        }
-    }
+    $helper = @'
+param(
+    [Parameter(Mandatory = $true)][string]$LiveHealthUrl,
+    [Parameter(Mandatory = $true)][string]$ReadyHealthUrl,
+    [Parameter(Mandatory = $true)][string]$ViewerUrl,
+    [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+    [Parameter(Mandatory = $false)][switch]$WaitForReady
+)
 
-    $listener = $null
+function Test-EndpointOk {
+    param([Parameter(Mandatory = $true)][string]$Url)
+
     try {
-        $listener = New-Object System.Net.Sockets.TcpListener($ipAddress, $Port)
-        $listener.Start()
+        Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 4 -ErrorAction Stop | Out-Null
         return $true
     }
     catch {
         return $false
     }
-    finally {
-        if ($null -ne $listener) {
-            $listener.Stop()
+}
+
+$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+$liveSeen = $false
+
+while ((Get-Date) -lt $deadline) {
+    if (-not $liveSeen) {
+        $liveSeen = Test-EndpointOk -Url $LiveHealthUrl
+    }
+
+    if ($liveSeen -and -not $WaitForReady) {
+        Start-Process $ViewerUrl
+        exit 0
+    }
+
+    if ($liveSeen -and $WaitForReady -and (Test-EndpointOk -Url $ReadyHealthUrl)) {
+        Start-Process $ViewerUrl
+        exit 0
+    }
+
+    Start-Sleep -Milliseconds 500
+}
+
+# If the API became live but readiness is still building, open the viewer anyway so the
+# browser can show its loading/error state rather than leaving the user with no UI.
+if ($liveSeen) {
+    Start-Process $ViewerUrl
+    exit 0
+}
+
+# Last-resort behavior: open the viewer URL even when health did not respond. The main
+# console still shows the health URLs for manual diagnosis.
+Start-Process $ViewerUrl
+exit 0
+'@
+
+    Set-Content -LiteralPath $helperPath -Value $helper -Encoding UTF8
+
+    $args = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $helperPath,
+        "-LiveHealthUrl", $LiveHealthUrl,
+        "-ReadyHealthUrl", $ReadyHealthUrl,
+        "-ViewerUrl", $ViewerUrl,
+        "-TimeoutSeconds", "$TimeoutSeconds"
+    )
+
+    if ($WaitForReady) {
+        $args += "-WaitForReady"
+    }
+
+    try {
+        Start-Process -FilePath "powershell.exe" -ArgumentList $args -WindowStyle Hidden | Out-Null
+        if ($WaitForReady) {
+            Write-WbOk "Viewer open helper started. It will open after ready health responds, or after timeout if the API is live."
         }
+        else {
+            Write-WbOk "Viewer open helper started. It will open as soon as live health responds; snapshot readiness can continue in the background."
+        }
+    }
+    catch {
+        Write-WbWarn "Could not start viewer open helper: $($_.Exception.Message)"
+        Write-WbWarn "Open manually after the server starts: $ViewerUrl"
     }
 }
 
-function Stop-ListenersOnPort {
-    param([Parameter(Mandatory = $true)][int]$Port)
 
-    $pids = @(Get-ListeningProcessIdsOnPort -Port $Port)
+function Get-WbViewerArtifactStatus {
+    param(
+        [Parameter(Mandatory = $true)][string]$ViewerOutputPath,
+        [Parameter(Mandatory = $true)][string]$FwdPath
+    )
 
-    if ($pids.Count -eq 0) {
-        Write-Ok "No existing listener on port $Port"
-        return @()
+    $viewerDir = Split-Path -Parent $ViewerOutputPath
+    if ([string]::IsNullOrWhiteSpace($viewerDir)) {
+        $viewerDir = (Get-Location).Path
     }
 
-    foreach ($pidValue in $pids) {
-        if ($pidValue -eq 4) {
-            Write-Warning "Port $Port is owned by HTTP.sys/System PID 4. It cannot be stopped by this script."
+    $requiredFiles = @(
+        $ViewerOutputPath,
+        (Join-Path $viewerDir "ac-rule-viewer.rules.json"),
+        (Join-Path $viewerDir "ac-rule-viewer.rel.json"),
+        (Join-Path $viewerDir "ac-rule-viewer.tree.json")
+    )
+
+    $missing = New-Object System.Collections.Generic.List[string]
+    $stale = New-Object System.Collections.Generic.List[string]
+    $fwdItem = Get-Item -LiteralPath $FwdPath -ErrorAction Stop
+
+    foreach ($filePath in $requiredFiles) {
+        if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+            $missing.Add($filePath)
             continue
         }
 
-        if ($pidValue -eq $PID) {
-            Write-Warning "Port $Port appears to be owned by the current PowerShell process PID $PID. It will not be stopped."
-            continue
-        }
-
-        try {
-            $process = Get-Process -Id $pidValue -ErrorAction Stop
-            Write-Warning "Stopping listener on port ${Port}: $($process.ProcessName) PID $pidValue"
-            Stop-Process -Id $pidValue -Force -ErrorAction Stop
-        }
-        catch {
-            Write-Warning "Could not stop PID $pidValue on port ${Port}: $($_.Exception.Message)"
+        $item = Get-Item -LiteralPath $filePath -ErrorAction Stop
+        if ($item.LastWriteTimeUtc -lt $fwdItem.LastWriteTimeUtc) {
+            $stale.Add($filePath)
         }
     }
 
-    Start-Sleep -Milliseconds 300
-    return @(Get-ListeningProcessIdsOnPort -Port $Port)
+    return [pscustomobject]@{
+        IsComplete = ($missing.Count -eq 0)
+        IsCurrent = ($missing.Count -eq 0 -and $stale.Count -eq 0)
+        Missing = @($missing)
+        Stale = @($stale)
+        RequiredFiles = @($requiredFiles)
+    }
 }
-
-function Resolve-ApiPort {
-    param(
-        [Parameter(Mandatory = $true)][int]$RequestedPort,
-        [Parameter(Mandatory = $true)][string]$HostName,
-        [Parameter(Mandatory = $true)][bool]$KillExisting,
-        [Parameter(Mandatory = $true)][bool]$AutoPort,
-        [Parameter(Mandatory = $true)][int]$SearchLimit
-    )
-
-    if ($KillExisting) {
-        Write-Section "Kill existing listener"
-        [void](Stop-ListenersOnPort -Port $RequestedPort)
-    }
-    else {
-        Write-Section "Port check"
-    }
-
-    if (Test-LocalPortAvailable -Port $RequestedPort -HostName $HostName) {
-        Write-Ok "Port $RequestedPort is available."
-        return $RequestedPort
-    }
-
-    $usage = Get-PortUsageSummary -Port $RequestedPort
-
-    if (-not $AutoPort) {
-        throw "Port $RequestedPort is not available ($usage). Use -Port with another value, or omit -NoAutoPort so the runner can choose the next open port."
-    }
-
-    Write-Warning "Port $RequestedPort is not available ($usage). Looking for the next open local port."
-
-    $lastCandidate = $RequestedPort + $SearchLimit
-    for ($candidate = $RequestedPort + 1; $candidate -le $lastCandidate; $candidate++) {
-        if (Test-LocalPortAvailable -Port $candidate -HostName $HostName) {
-            Write-Warning "Using port $candidate instead of $RequestedPort."
-            return $candidate
-        }
-    }
-
-    throw "Could not find an available port from $($RequestedPort + 1) through $lastCandidate. Re-run with -Port <openPort> or close the service using port $RequestedPort."
-}
-
-function Find-WorkbenchExe {
-    param(
-        [Parameter(Mandatory = $true)][string]$Root,
-        [Parameter(Mandatory = $true)][string]$Configuration,
-        [Parameter(Mandatory = $true)][string]$Platform
-    )
-
-    $preferred = @(
-        (Join-Path $Root "AcRuleWorkbench\bin\$Platform\$Configuration\net48\AcRuleWorkbench.exe"),
-        (Join-Path $Root "AcRuleWorkbench\bin\$Configuration\net48\AcRuleWorkbench.exe"),
-        (Join-Path $Root "bin\$Platform\$Configuration\net48\AcRuleWorkbench.exe")
-    )
-
-    foreach ($candidate in $preferred) {
-        if (Test-Path -LiteralPath $candidate) {
-            return (Get-Item -LiteralPath $candidate)
-        }
-    }
-
-    $excludedPathPattern = "\\(\.git|\.vs|lib|rri_bin|packages|node_modules)(\\|$)"
-
-    $all = @(Get-ChildItem -LiteralPath $Root -File -Filter "*.exe" -Recurse -Force -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.FullName -notmatch $excludedPathPattern -and
-            $_.FullName -match "\\bin\\" -and
-            $_.FullName -match "\\$([regex]::Escape($Configuration))(\\|$)"
-        })
-
-    $preferredName = $all |
-        Where-Object { $_.Name -eq "AcRuleWorkbench.exe" } |
-        Sort-Object LastWriteTimeUtc -Descending |
-        Select-Object -First 1
-
-    if ($null -ne $preferredName) {
-        return $preferredName
-    }
-
-    return ($all | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1)
-}
-
-function Test-RuntimeFolder {
-    param(
-        [Parameter(Mandatory = $true)][string]$Directory,
-        [Parameter(Mandatory = $true)][string[]]$RequiredDlls,
-        [Parameter(Mandatory = $true)][string]$Label
-    )
-
-    if (-not (Test-Path -LiteralPath $Directory)) {
-        throw "$Label directory not found: $Directory"
-    }
-
-    $actualNames = @(Get-ChildItem -LiteralPath $Directory -File -Filter "*.dll" -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
-    $missing = @($RequiredDlls | Where-Object { $actualNames -notcontains $_ })
-
-    if ($missing.Count -gt 0) {
-        throw "$Label missing required DLLs in $Directory`: $($missing -join ', ')"
-    }
-
-    Write-Ok "$Label validated: $Directory"
-}
-
-function Resolve-FwdFilePath {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    if ($Path -match "^:\\") {
-        throw "Invalid FwdPath '$Path'. You probably meant C:\dev\AcRuleWorkbench\fwd.cfd"
-    }
-
-    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
-    if (-not (Test-Path -LiteralPath $resolved)) {
-        throw "FWD file not found: $resolved"
-    }
-
-    $item = Get-Item -LiteralPath $resolved -ErrorAction Stop
-    if ($item.PSIsContainer) {
-        throw "FwdPath must be a .cfd file, not a directory: $resolved"
-    }
-
-    if ($item.Extension -ne ".cfd") {
-        throw "FwdPath must point to a .cfd file: $resolved"
-    }
-
-    return $item.FullName
-}
-
-$repoRoot = Resolve-RepoRoot
-if ([string]::IsNullOrWhiteSpace($FwdPath)) {
-    $FwdPath = Join-Path $repoRoot "fwd.cfd"
-}
-
-$scriptDir = Join-Path $repoRoot "scripts"
-$managedLibDir = Join-Path $repoRoot "lib"
-$nativeLibDir = Join-Path $repoRoot "rri_bin"
-$runtimeHelperPath = Join-Path $scriptDir "runtime-path.generated.ps1"
 
 $expectedManagedDlls = @(
     "rribase_net.dll",
@@ -328,21 +220,60 @@ $expectedNativeDlls = @(
     "rriwf2.dll"
 )
 
-Write-Section "Start AC Rule Workbench"
-Write-Host "Repo root : $repoRoot"
-Write-Host "FWD path  : $FwdPath"
-Write-Host "Port      : $Port"
-Write-Host "Auto port : $(-not [bool]$NoAutoPort)"
-Write-Host "Config    : $Configuration"
-Write-Host "Platform  : $Platform"
-
-$resolvedFwdPath = Resolve-FwdFilePath -Path $FwdPath
-
-Test-RuntimeFolder -Directory $managedLibDir -RequiredDlls $expectedManagedDlls -Label "Managed DLL folder"
-Test-RuntimeFolder -Directory $nativeLibDir -RequiredDlls $expectedNativeDlls -Label "Native DLL folder"
-
+$repoRoot = Resolve-WbRepoRoot
+$scriptDir = Get-WbScriptDirectory -Root $repoRoot
+$managedLibDir = Get-WbManagedLibDirectory -Root $repoRoot
+$nativeLibDir = Get-WbNativeLibDirectory -Root $repoRoot
 $requestedPort = $Port
-$Port = Resolve-ApiPort `
+
+if ($Profile -eq "full-evidence") {
+    Write-WbWarn "Profile 'full-evidence' enables private/full FWD resource traversal and may generate sensitive local evidence output. Use only for local diagnostics."
+}
+
+Write-WbSection "Start AC Rule Workbench"
+Write-WbKeyValue "Repo root" $repoRoot
+if ([string]::IsNullOrWhiteSpace($FwdPath)) {
+    $displayFwdPath = Join-Path $repoRoot "fwd.cfd"
+}
+else {
+    $displayFwdPath = $FwdPath
+}
+Write-WbKeyValue "FWD path" $displayFwdPath
+Write-WbKeyValue "Port" $Port
+Write-WbKeyValue "Auto port" $(-not [bool]$NoAutoPort)
+Write-WbKeyValue "Config" $Configuration
+Write-WbKeyValue "Platform" $Platform
+Write-WbKeyValue "Profile" $Profile
+Write-WbKeyValue "Detached" ([bool]$Detached)
+Write-WbKeyValue "Open wait mode" $(if ($WaitForReadyBeforeOpen) { "ready" } else { "live" })
+Write-WbKeyValue "Viewer refresh" $(if ($ForceViewerRefresh) { "force" } elseif ($SkipViewerRefresh) { "skip" } else { "auto" })
+
+$resolvedFwdPath = Resolve-WbFwdFilePath -Root $repoRoot -FwdPath $FwdPath
+
+if ($CheckWorkingTree) {
+    Write-WbSection "Working tree inventory"
+    $validator = Join-Path $scriptDir "validate-package-boundaries.ps1"
+    if (Test-Path -LiteralPath $validator -PathType Leaf) {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $validator -Root $repoRoot -Mode WorkingTree
+        if ($LASTEXITCODE -ne 0) {
+            Write-WbWarn "WorkingTree validation returned exit code $LASTEXITCODE. Startup will continue."
+        }
+    }
+    else {
+        Write-WbWarn "Working tree validator not found: $validator"
+    }
+}
+
+if (-not $SkipRuntimeValidation) {
+    Write-WbSection "Runtime preflight"
+    Test-WbRuntimeFolder -Directory $managedLibDir -RequiredDlls $expectedManagedDlls -Label "Managed DLL folder"
+    Test-WbRuntimeFolder -Directory $nativeLibDir -RequiredDlls $expectedNativeDlls -Label "Native DLL folder"
+}
+else {
+    Write-WbSection "Runtime preflight skipped"
+}
+
+$Port = Resolve-WbApiPort `
     -RequestedPort $requestedPort `
     -HostName $HostName `
     -KillExisting ([bool]$KillExisting) `
@@ -350,15 +281,15 @@ $Port = Resolve-ApiPort `
     -SearchLimit $PortSearchLimit
 
 if ($Port -ne $requestedPort) {
-    Write-Host "Requested : http://$HostName`:$requestedPort/" -ForegroundColor DarkGray
-    Write-Host "Selected  : http://$HostName`:$Port/" -ForegroundColor Yellow
+    Write-WbKeyValue "Requested URL" "http://$HostName`:$requestedPort/"
+    Write-WbKeyValue "Selected URL" "http://$HostName`:$Port/"
 }
 
 if (-not $NoBuild) {
-    Write-Section "Build and doctor"
+    Write-WbSection "Build and doctor"
 
     $buildScript = Join-Path $scriptDir "build-and-doctor.ps1"
-    if (-not (Test-Path -LiteralPath $buildScript)) {
+    if (-not (Test-Path -LiteralPath $buildScript -PathType Leaf)) {
         throw "Build script not found: $buildScript"
     }
 
@@ -380,63 +311,71 @@ if (-not $NoBuild) {
     }
 
     & powershell.exe @buildArgs
-    $exitCode = $LASTEXITCODE
+    $buildExitCode = $LASTEXITCODE
 
-    if ($exitCode -ne 0) {
-        throw "build-and-doctor.ps1 failed with exit code $exitCode"
+    if ($buildExitCode -ne 0) {
+        throw "build-and-doctor.ps1 failed with exit code $buildExitCode"
     }
 }
 else {
-    Write-Section "Build skipped"
+    Write-WbSection "Build skipped"
 }
 
-Write-Section "Runtime PATH"
+Write-WbSection "Runtime PATH"
+Initialize-WbRuntimePath -ScriptDirectory $scriptDir -ManagedLibDirectory $managedLibDir -NativeLibDirectory $nativeLibDir
 
-if (Test-Path -LiteralPath $runtimeHelperPath) {
-    Unblock-File -LiteralPath $runtimeHelperPath -ErrorAction SilentlyContinue
-    . $runtimeHelperPath
-    Write-Ok "Loaded runtime PATH helper: $runtimeHelperPath"
-}
-else {
-    $currentPath = [Environment]::GetEnvironmentVariable("PATH", "Process")
-    $pathParts = @($currentPath -split ";" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-
-    if ($pathParts -notcontains $nativeLibDir) {
-        [Environment]::SetEnvironmentVariable("PATH", "$nativeLibDir;$currentPath", "Process")
-        $env:PATH = [Environment]::GetEnvironmentVariable("PATH", "Process")
-    }
-
-    $env:FORMWORKS_NATIVE_BIN = $nativeLibDir
-    Write-Ok "Prepended native runtime folder to PATH: $nativeLibDir"
-}
-
-$workbenchExe = Find-WorkbenchExe -Root $repoRoot -Configuration $Configuration -Platform $Platform
+$workbenchExe = Find-WbExecutable -Root $repoRoot -Configuration $Configuration -Platform $Platform
 if ($null -eq $workbenchExe) {
-    throw "Could not find AcRuleWorkbench executable under bin for configuration '$Configuration'."
+    throw "Could not find AcRuleWorkbench.exe under bin for configuration '$Configuration'. Run dotnet build first, or rerun without -NoBuild."
 }
 
 $viewerOutputPath = Join-Path $repoRoot "ac-rule-viewer-live.html"
 $exeDir = Split-Path -Parent $workbenchExe.FullName
 
-Test-RuntimeFolder -Directory $exeDir -RequiredDlls $expectedManagedDlls -Label "Executable managed DLL folder"
+if (-not $SkipRuntimeValidation) {
+    Test-WbRuntimeFolder -Directory $exeDir -RequiredDlls $expectedManagedDlls -Label "Executable managed DLL folder"
+}
 
 $env:ACRULEWORKBENCH_FWD_PATH = $resolvedFwdPath
 $env:ACRULEWORKBENCH_PORT = "$Port"
+$env:ACRULEWORKBENCH_PROFILE = $Profile
 $env:FW_WORKBENCH_FWD_PATH = $resolvedFwdPath
 $env:FW_WORKBENCH_PORT = "$Port"
 $env:ASPNETCORE_URLS = "http://$HostName`:$Port"
 
-Write-Section "Viewer refresh"
+Write-WbSection "Viewer refresh"
+$viewerStatus = Get-WbViewerArtifactStatus -ViewerOutputPath $viewerOutputPath -FwdPath $resolvedFwdPath
+
 if ($SkipViewerRefresh) {
-    Write-Host "Skipping viewer refresh. Existing file will be used: $viewerOutputPath" -ForegroundColor Yellow
+    if (-not $viewerStatus.IsComplete) {
+        throw "-SkipViewerRefresh was specified, but required viewer artifacts are missing: $($viewerStatus.Missing -join ', '). Rerun without -SkipViewerRefresh to generate them."
+    }
+
+    Write-WbOk "Skipping viewer refresh. Existing viewer artifacts found."
+}
+elseif (-not $ForceViewerRefresh -and $viewerStatus.IsCurrent) {
+    Write-WbOk "Existing viewer artifacts are current; skipping static viewer regeneration. Use -ForceViewerRefresh to rebuild."
 }
 else {
-    # Regenerate an ignored live viewer artifact from the current FWD so source-controlled shell files stay clean.
+    if ($ForceViewerRefresh) {
+        Write-WbInfo "Force refresh requested. Regenerating static viewer: $viewerOutputPath"
+    }
+    elseif (-not $viewerStatus.IsComplete) {
+        Write-WbInfo "Viewer artifacts are incomplete. Missing: $($viewerStatus.Missing -join ', ')"
+    }
+    elseif (-not $viewerStatus.IsCurrent) {
+        Write-WbInfo "Viewer artifacts are older than the FWD file. Stale: $($viewerStatus.Stale -join ', ')"
+    }
+
+    Write-WbInfo "Generating static viewer before API startup: $viewerOutputPath"
+    Write-WbInfo "Large FWD/CFD files can make this step take a while. Future starts will auto-reuse current artifacts unless -ForceViewerRefresh is used."
+
     $viewerArgs = @(
         "ac-viewer",
         "--path", $resolvedFwdPath,
         "--process", "AC",
-        "--out", $viewerOutputPath
+        "--out", $viewerOutputPath,
+        "--profile", $Profile
     )
 
     Push-Location $exeDir
@@ -452,48 +391,124 @@ else {
         throw "Viewer refresh failed with exit code $viewerExitCode"
     }
 
-    if (-not (Test-Path -LiteralPath $viewerOutputPath)) {
-        throw "Viewer refresh completed but output file is missing: $viewerOutputPath"
+    $viewerStatus = Get-WbViewerArtifactStatus -ViewerOutputPath $viewerOutputPath -FwdPath $resolvedFwdPath
+    if (-not $viewerStatus.IsComplete) {
+        throw "Viewer refresh completed but required artifacts are missing: $($viewerStatus.Missing -join ', ')"
     }
 
-    Write-Ok "Viewer refreshed: $viewerOutputPath"
+    Write-WbOk "Viewer refreshed: $viewerOutputPath"
 }
 
-$appArgs = @("api")
+$appArgs = @(
+    "api",
+    "--path", $resolvedFwdPath,
+    "--port", "$Port",
+    "--host", $HostName,
+    "--viewer", $viewerOutputPath,
+    "--profile", $Profile
+)
 
-switch ($ArgumentStyle) {
-    "Pascal" {
-        $appArgs += @("--Path", $resolvedFwdPath, "--Port", "$Port", "--Host", $HostName, "--Viewer", $viewerOutputPath)
-    }
-    "Kebab" {
-        $appArgs += @("--path", $resolvedFwdPath, "--port", "$Port", "--host", $HostName, "--viewer", $viewerOutputPath)
-    }
-    "None" {
-        $appArgs += @("--path", $resolvedFwdPath, "--port", "$Port", "--host", $HostName, "--viewer", $viewerOutputPath)
-    }
+if ($EnableDebugApi) {
+    $appArgs += "--enable-debug-api"
 }
 
-if (-not $NoBrowser) {
-    $appArgs += "--open"
+if ($AllowPathQuery) {
+    $appArgs += "--allow-path-query"
 }
+
+if ($EnableCors) {
+    $appArgs += "--enable-cors"
+}
+
+if ($DisableSnapshotCache) {
+    $appArgs += "--disable-snapshot-cache"
+}
+
+if ($AllowRefresh) {
+    $appArgs += "--allow-refresh"
+}
+
+$viewerUrl = "http://$HostName`:$Port/viewer?ui=readonly-editor-v62-10&nocache=$([guid]::NewGuid().ToString('N'))"
+$liveHealthUrl = "http://$HostName`:$Port/api/v1/health/live"
+$readyHealthUrl = "http://$HostName`:$Port/api/v1/health/ready"
+$statusUrl = "http://$HostName`:$Port/api/v1/status"
+
+# Do not rely on the EXE --open behavior in foreground mode.
+# The EXE opens the base prefix, while this script knows the exact viewer URL.
+# In foreground mode the server process blocks this script, so a small helper opens
+# /viewer directly. Default behavior is fast: open when live health responds and let
+# snapshot readiness continue in the background. Pass -WaitForReadyBeforeOpen when you
+# explicitly want the older conservative behavior.
 
 if ($ExtraArgs.Count -gt 0) {
     $appArgs += $ExtraArgs
 }
 
-Write-Section "Launch"
-Write-Host "Executable : $($workbenchExe.FullName)"
-Write-Host "Working dir: $exeDir"
-Write-Host "Health     : http://$HostName`:$Port/api/v1/health/live"
-Write-Host "Viewer     : http://$HostName`:$Port/viewer?ui=readonly-editor-v62-10&nocache=1"
-Write-Host "Default FWD: $resolvedFwdPath"
-Write-Host "Viewer file: $viewerOutputPath"
+Write-WbSection "Launch"
+Write-WbKeyValue "Executable" $workbenchExe.FullName
+Write-WbKeyValue "Working dir" $exeDir
+Write-WbKeyValue "Profile" $Profile
+Write-WbKeyValue "Live health" $liveHealthUrl
+Write-WbKeyValue "Ready health" $readyHealthUrl
+Write-WbKeyValue "Status" $statusUrl
+Write-WbKeyValue "Viewer" $viewerUrl
+Write-WbKeyValue "Default FWD" $resolvedFwdPath
+Write-WbKeyValue "Viewer file" $viewerOutputPath
+Write-WbKeyValue "Verify command" "powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-workbench-live.ps1 -BaseUrl http://$HostName`:$Port"
+
+if (-not $NoBrowser -and -not $Detached -and -not $NoOpenWhenReady) {
+    Start-WbViewerOpenHelper -LiveHealthUrl $liveHealthUrl -ReadyHealthUrl $readyHealthUrl -ViewerUrl $viewerUrl -TimeoutSeconds $ReadyTimeoutSeconds -WaitForReady ([bool]$WaitForReadyBeforeOpen)
+}
+elseif (-not $NoBrowser -and -not $Detached -and $NoOpenWhenReady) {
+    Write-WbWarn "Automatic viewer open disabled. Open manually after startup: $viewerUrl"
+}
+
+if ($Detached) {
+    $quotedArgs = @()
+    foreach ($arg in $appArgs) {
+        if ($arg -match "\s") {
+            $quotedArgs += ('"' + ($arg -replace '"', '\"') + '"')
+        }
+        else {
+            $quotedArgs += $arg
+        }
+    }
+
+    $process = Start-Process -FilePath $workbenchExe.FullName -ArgumentList $quotedArgs -WorkingDirectory $exeDir -PassThru
+    Write-WbOk "Started detached process: PID $($process.Id)"
+
+    if (-not $NoWaitReady) {
+        Wait-WbHttpEndpoint -Url $liveHealthUrl -TimeoutSeconds $ReadyTimeoutSeconds -Label "Live health"
+        if ($WaitForReadyBeforeOpen) {
+            try {
+                Wait-WbHttpEndpoint -Url $readyHealthUrl -TimeoutSeconds $ReadyTimeoutSeconds -Label "Ready health"
+            }
+            catch {
+                Write-WbWarn $_.Exception.Message
+                Write-WbWarn "Live health responded, but readiness may still be building the snapshot. Open /api/v1/health/ready to monitor."
+            }
+        }
+        else {
+            Write-WbInfo "Not waiting for ready health. Snapshot warm-up can continue in the background. Use -WaitForReadyBeforeOpen for strict readiness waiting."
+        }
+    }
+
+    if (-not $NoBrowser) {
+        Start-Process $viewerUrl
+    }
+
+    Write-WbSection "Running"
+    Write-WbKeyValue "PID" $process.Id
+    Write-WbKeyValue "Viewer" $viewerUrl
+    Write-WbKeyValue "Stop command" "Stop-Process -Id $($process.Id)"
+    exit 0
+}
+
 Write-Host ""
 Write-Host "Press Ctrl+C to stop." -ForegroundColor Yellow
 Write-Host ""
 
 Push-Location $exeDir
-
 try {
     & $workbenchExe.FullName @appArgs
     exit $LASTEXITCODE

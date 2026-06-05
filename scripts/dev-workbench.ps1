@@ -1,29 +1,33 @@
 <#
 .SYNOPSIS
-  One-command local test runner for AC Rule Workbench.
+  Root-friendly one-command launcher for AC Rule Workbench.
 
 .DESCRIPTION
-  This script removes the repeated manual steps normally needed after a fresh ZIP
-  extract:
-    - unblocks downloaded files in the repo;
-    - validates/resolves the FWD file;
-    - runs DCM/FormWorks dependency setup only when the runtime layout is missing;
-    - builds and doctors the x86 harness;
-    - kills an existing local listener on the requested port;
-    - refreshes the viewer and launches the API/viewer.
+  This script restores the original base-folder workflow:
+    .\run-workbench.cmd
 
-  Prefer running scripts\dev-workbench.cmd or the root run-workbench.cmd wrapper.
-  The .cmd wrappers invoke PowerShell with -ExecutionPolicy Bypass so you do not
-  need to change machine/user execution-policy settings.
+  It performs the normal local-dev startup path:
+    - resolves fwd.cfd from the repo root unless -FwdPath is supplied;
+    - unblocks downloaded files unless -SkipUnblock is supplied;
+    - runs dependency setup only when lib/rri_bin/runtime helper appear incomplete;
+    - delegates build/viewer/API/browser startup to scripts\start-workbench.ps1;
+    - opens the viewer by default.
+
+  Root wrappers:
+    .\run-workbench.cmd
+    .\start-workbench.cmd
 
 .EXAMPLE
   .\run-workbench.cmd
 
 .EXAMPLE
-  .\run-workbench.cmd -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787
+  .\run-workbench.cmd -SkipBuild
 
 .EXAMPLE
-  .\run-workbench.cmd -Clean -ForceSetup
+  .\run-workbench.cmd -SkipBuild -Detached
+
+.EXAMPLE
+  .\run-workbench.cmd -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787
 #>
 [CmdletBinding()]
 param(
@@ -38,20 +42,35 @@ param(
 
     [string]$Platform = "x86",
 
+    [ValidateSet("viewer-safe", "diagnostic", "full-evidence")]
+    [string]$Profile = "viewer-safe",
+
     [switch]$Clean,
     [switch]$ForceSetup,
     [switch]$SkipSetup,
     [switch]$SkipBuild,
     [switch]$SkipUnblock,
     [switch]$SkipViewerRefresh,
+    [switch]$ForceViewerRefresh,
     [switch]$CopyNativeToOutput,
     [switch]$PreferNewestDcm,
     [switch]$NoBrowser,
     [switch]$NoKillExisting,
     [switch]$NoAutoPort,
+    [switch]$Detached,
+    [switch]$WaitForReadyBeforeOpen,
+    [switch]$CheckWorkingTree,
+    [switch]$EnableDebugApi,
+    [switch]$AllowPathQuery,
+    [switch]$EnableCors,
+    [switch]$DisableSnapshotCache,
+    [switch]$AllowRefresh,
 
     [ValidateRange(1, 200)]
-    [int]$PortSearchLimit = 25
+    [int]$PortSearchLimit = 25,
+
+    [ValidateRange(5, 600)]
+    [int]$ReadyTimeoutSeconds = 90
 )
 
 Set-StrictMode -Version 2.0
@@ -74,12 +93,17 @@ function Write-Info {
 }
 
 function Resolve-RepoRoot {
-    $scriptPath = $PSCommandPath
-    if ([string]::IsNullOrWhiteSpace($scriptPath)) {
-        $scriptPath = $MyInvocation.MyCommand.Path
+    if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $scriptDir = $PSScriptRoot
+    }
+    else {
+        $scriptPath = $PSCommandPath
+        if ([string]::IsNullOrWhiteSpace($scriptPath)) {
+            $scriptPath = $MyInvocation.MyCommand.Path
+        }
+        $scriptDir = Split-Path -Parent $scriptPath
     }
 
-    $scriptDir = Split-Path -Parent $scriptPath
     return (Resolve-Path -LiteralPath (Join-Path $scriptDir "..")).Path
 }
 
@@ -126,7 +150,7 @@ function Test-RequiredDlls {
     return $true
 }
 
-function Invoke-PowerShellScript {
+function Invoke-LocalPowerShellScript {
     param(
         [Parameter(Mandatory = $true)][string]$ScriptPath,
         [Parameter(Mandatory = $true)][string[]]$Arguments,
@@ -134,7 +158,7 @@ function Invoke-PowerShellScript {
     )
 
     if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
-        throw "$Label script was not found: $ScriptPath"
+        throw "$Label was not found: $ScriptPath"
     }
 
     $powershellArgs = @(
@@ -176,19 +200,23 @@ $managedLibDir = Join-Path $repoRoot "lib"
 $nativeLibDir = Join-Path $repoRoot "rri_bin"
 $runtimeHelperPath = Join-Path $scriptDir "runtime-path.generated.ps1"
 
-Write-Section "AC Rule Workbench fresh test runner"
+Write-Section "AC Rule Workbench local launcher"
 Write-Host "Repo root : $repoRoot"
 Write-Host "FWD path  : $resolvedFwdPath"
 Write-Host "Port      : $Port"
-Write-Host "Auto port : $(-not [bool]$NoAutoPort)"
-Write-Host "Config    : $Configuration"
-Write-Host "Platform  : $Platform"
-Write-Host "Requested : http://$HostName`:$Port/viewer?ui=readonly-editor-v62-10&nocache=1"
+Write-Host "Profile   : $Profile"
+Write-Host "Build     : $(-not [bool]$SkipBuild)"
+Write-Host "Detached  : $([bool]$Detached)"
+Write-Host "Viewer    : http://$HostName`:$Port/viewer?nocache=1"
 
 if (-not $SkipUnblock) {
     Write-Section "Unblock local files"
     $files = @(Get-ChildItem -LiteralPath $repoRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch "\\\.git\\" })
+        Where-Object {
+            $_.FullName -notmatch "\\\.git\\" -and
+            $_.FullName -notmatch "\\bin\\" -and
+            $_.FullName -notmatch "\\obj\\"
+        })
 
     foreach ($file in $files) {
         Unblock-File -LiteralPath $file.FullName -ErrorAction SilentlyContinue
@@ -210,54 +238,47 @@ if ($SkipSetup) {
 }
 elseif ($needsSetup) {
     Write-Section "Dependency setup"
+    $setupScript = Join-Path $scriptDir "setup-dcm-deps.ps1"
     $setupArgs = @()
     if ($PreferNewestDcm) {
         $setupArgs += "-PreferNewest"
     }
 
-    Invoke-PowerShellScript `
-        -ScriptPath (Join-Path $scriptDir "setup-dcm-deps.ps1") `
-        -Arguments $setupArgs `
-        -Label "setup-dcm-deps.ps1"
+    Invoke-LocalPowerShellScript -ScriptPath $setupScript -Arguments $setupArgs -Label "setup-dcm-deps.ps1"
 }
 else {
     Write-Section "Dependency setup"
     Write-Ok "Managed/native runtime layout already looks valid."
 }
 
-Write-Section "Build, refresh, and start"
+Write-Section "Build, refresh if stale, start API, open viewer"
+$startScript = Join-Path $scriptDir "start-workbench.ps1"
 $startArgs = @(
     "-FwdPath", $resolvedFwdPath,
     "-Port", $Port.ToString(),
     "-HostName", $HostName,
     "-Configuration", $Configuration,
     "-Platform", $Platform,
-    "-PortSearchLimit", $PortSearchLimit.ToString()
+    "-Profile", $Profile,
+    "-PortSearchLimit", $PortSearchLimit.ToString(),
+    "-ReadyTimeoutSeconds", $ReadyTimeoutSeconds.ToString()
 )
 
-if (-not $NoKillExisting) {
-    $startArgs += "-KillExisting"
-}
-if ($SkipBuild) {
-    $startArgs += "-NoBuild"
-}
-if ($Clean) {
-    $startArgs += "-Clean"
-}
-if ($CopyNativeToOutput) {
-    $startArgs += "-CopyNativeToOutput"
-}
-if ($SkipViewerRefresh) {
-    $startArgs += "-SkipViewerRefresh"
-}
-if ($NoBrowser) {
-    $startArgs += "-NoBrowser"
-}
-if ($NoAutoPort) {
-    $startArgs += "-NoAutoPort"
-}
+if (-not $NoKillExisting) { $startArgs += "-KillExisting" }
+if ($SkipBuild) { $startArgs += "-NoBuild" }
+if ($Clean) { $startArgs += "-Clean" }
+if ($CopyNativeToOutput) { $startArgs += "-CopyNativeToOutput" }
+if ($SkipViewerRefresh) { $startArgs += "-SkipViewerRefresh" }
+if ($ForceViewerRefresh) { $startArgs += "-ForceViewerRefresh" }
+if ($NoBrowser) { $startArgs += "-NoBrowser" }
+if ($NoAutoPort) { $startArgs += "-NoAutoPort" }
+if ($Detached) { $startArgs += "-Detached" }
+if ($WaitForReadyBeforeOpen) { $startArgs += "-WaitForReadyBeforeOpen" }
+if ($CheckWorkingTree) { $startArgs += "-CheckWorkingTree" }
+if ($EnableDebugApi) { $startArgs += "-EnableDebugApi" }
+if ($AllowPathQuery) { $startArgs += "-AllowPathQuery" }
+if ($EnableCors) { $startArgs += "-EnableCors" }
+if ($DisableSnapshotCache) { $startArgs += "-DisableSnapshotCache" }
+if ($AllowRefresh) { $startArgs += "-AllowRefresh" }
 
-Invoke-PowerShellScript `
-    -ScriptPath (Join-Path $scriptDir "start-workbench.ps1") `
-    -Arguments $startArgs `
-    -Label "start-workbench.ps1"
+Invoke-LocalPowerShellScript -ScriptPath $startScript -Arguments $startArgs -Label "start-workbench.ps1"

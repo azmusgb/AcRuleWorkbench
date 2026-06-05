@@ -1,0 +1,25 @@
+AcRuleWorkbench startup/runtime v4 update
+
+Files included:
+- scripts/start-workbench.ps1
+- scripts/start-api.ps1
+- scripts/verify-workbench-live.ps1
+- scripts/README-start-workbench.md
+- scripts/package-split-deliverables.ps1
+- scripts/common/workbench-logging.ps1
+- scripts/common/workbench-paths.ps1
+- scripts/common/workbench-runtime.ps1
+- scripts/common/workbench-health.ps1
+- AcRuleWorkbench/scripts/start-workbench.ps1
+- AcRuleWorkbench/scripts/start-api.ps1
+- AcRuleWorkbench/WorkbenchApiServer.cs
+- install-update-files.ps1
+
+Fixes implemented:
+1. Foreground startup waits for /api/v1/health/ready before opening the viewer.
+2. -SkipViewerRefresh fails early if ac-rule-viewer-live.html is missing.
+3. Runtime PATH always force-adds repo rri_bin/ and lib/ after any generated helper.
+4. Nested AcRuleWorkbench/scripts files are wrappers to root scripts/.
+5. API refresh passes the configured EvidenceExportProfile into AcViewerOptions.
+6. Added scripts/verify-workbench-live.ps1.
+7. package-split-deliverables.ps1 is Windows PowerShell 5.1 compatible.

@@ -38,11 +38,13 @@ let rulesData = null;
 let relData = null;
 let treeData = null;
 let fwdData = null;
+let fwdSidecarData = null;
 
 const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
   relData: "__RELATIONSHIPS_JSON__",
   treeData: "__TREE_JSON__",
+  fwdData: "__FWD_JSON__",
 };
 
 function tryParseEmbeddedPayload(raw){
@@ -70,10 +72,42 @@ function applyEmbeddedPayloadIfPresent(){
   return false;
 }
 
+function embeddedFwdDataOrNull(){
+  if(fwdSidecarData)return fwdSidecarData;
+  const parsed=tryParseEmbeddedPayload(first(embeddedPayload.fwdData,embeddedPayload.fwdDataJson,embeddedPayload.fwd));
+  return parsed&&typeof parsed==='object'?parsed:null;
+}
+
+function applyEmbeddedFwdDataIfPresent(failedEndpoints=[]){
+  const embedded=embeddedFwdDataOrNull();
+  if(!embedded)return false;
+  fwdData=embedded;
+  fwdApiHydrationState.mode='embedded';
+  fwdApiHydrationState.failedEndpoints=list(failedEndpoints);
+  return true;
+}
+
+let fwdApiHydrationPromise = null;
+function beginFwdApiHydration(){
+  if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  fwdApiHydrationPromise=loadFwdApiData().then(()=>{
+    if(typeof model!=='undefined'&&model){
+      model=buildModel();
+      globalDefinitionLookupCache=null;
+      globalTableDefinitionsCache=null;
+      renderAll();
+    }
+  }).catch(error=>{
+    console.warn('FormWorks Editor Viewer: background FWD API hydration failed.',error);
+  });
+  return fwdApiHydrationPromise;
+}
+
 // Load large FWD snapshot payloads from sidecar JSON files so the viewer shell can bootstrap faster.
 async function loadViewerData(){
   if(applyEmbeddedPayloadIfPresent()){
-    await loadFwdApiData();
+    applyEmbeddedFwdDataIfPresent();
+    beginFwdApiHydration();
     return;
   }
 
@@ -121,7 +155,15 @@ async function loadViewerData(){
     else if (key === 'treeData') treeData = value;
   }
 
-  await loadFwdApiData();
+  try {
+    const optionalFwd = await fetchJsonWithFallback('ac-rule-viewer.fwd.json');
+    if (optionalFwd && typeof optionalFwd === 'object') fwdSidecarData = optionalFwd;
+  } catch {
+    // Older exports may not include the optional static FWD global-resource sidecar.
+  }
+
+  applyEmbeddedFwdDataIfPresent();
+  beginFwdApiHydration();
 }
 
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the workbench server.
@@ -129,43 +171,53 @@ async function loadFwdApiData(){
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
   const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
   if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){
-    fwdData = null;
-    fwdApiHydrationState.mode = 'none';
-    fwdApiHydrationState.failedEndpoints = [];
+    if(!applyEmbeddedFwdDataIfPresent()){
+      fwdData = null;
+      fwdApiHydrationState.mode = 'none';
+      fwdApiHydrationState.failedEndpoints = [];
+    }
     return;
   }
 
   const protocol=(window.location&&window.location.protocol)||'';
   if(!/^https?:$/i.test(protocol)){
-    fwdData = null;
-    fwdApiHydrationState.mode = 'none';
-    fwdApiHydrationState.failedEndpoints = [];
+    if(!applyEmbeddedFwdDataIfPresent()){
+      fwdData = null;
+      fwdApiHydrationState.mode = 'none';
+      fwdApiHydrationState.failedEndpoints = [];
+    }
     return;
   }
 
   const baseCandidates=['/api/v1','./api/v1','../api/v1','../../api/v1'];
   const snapshotMode=(()=>{const mode=new URLSearchParams(window.location.search).get('snapshotMode');return mode==='live'?'live':'snapshot';})();
-  const timeoutMs=45000;
-  const endpoints=[
-    ['editorModel','editor-model?include=ruleLists,objectGraph,udfs,selectionLists,pageDesigns,runtimeImpacts'],
-    ['overview','fwd/overview'],
-    ['documents','fwd/documents'],
-    ['pages','fwd/pages'],
-    ['batches','fwd/batches'],
-    ['processes','fwd/processes'],
-    ['processDrivers','fwd/processes/drivers'],
-    ['resources','fwd/resources'],
-    ['objectGraph','fwd/object-graph'],
-    ['functions','fwd/functions'],
-    ['ruleLists','rule-lists'],
-    ['tables','fwd/tables'],
-    ['selectionLists','fwd/selection-lists?includeInferred=true'],
-    ['udfs','fwd/udfs'],
-    ['canonicalUdfs','fwd/udfs/canonical'],
-    ['runtimeImpact','fwd/runtime-impact'],
-    ['pageDesigns','fwd/page-designs'],
-    ['pageVariants','fwd/page-variants'],
-    ['fields','fwd/fields']
+  const timeoutMs=22000;
+  const endpointStages=[
+    [
+      ['overview','fwd/overview'],
+      ['resources','fwd/resources?includeDetails=true&includePrivate=true'],
+      ['functions','fwd/functions'],
+      ['tables','fwd/tables'],
+      ['udfs','fwd/udfs']
+    ],
+    [
+      ['selectionLists','fwd/selection-lists?includeInferred=true'],
+      ['ruleLists','rule-lists'],
+      ['objectGraph','fwd/object-graph'],
+      ['runtimeImpact','fwd/runtime-impact'],
+      ['canonicalUdfs','fwd/udfs/canonical']
+    ],
+    [
+      ['editorModel','editor-model?include=ruleLists,objectGraph,udfs,selectionLists,pageDesigns,runtimeImpacts'],
+      ['documents','fwd/documents'],
+      ['pages','fwd/pages'],
+      ['batches','fwd/batches'],
+      ['processes','fwd/processes'],
+      ['processDrivers','fwd/processes/drivers'],
+      ['pageDesigns','fwd/page-designs'],
+      ['pageVariants','fwd/page-variants'],
+      ['fields','fwd/fields']
+    ]
   ];
   async function fetchApi(path){
     for(const base of baseCandidates){
@@ -189,42 +241,61 @@ async function loadFwdApiData(){
 
   const hydrated={};
   const failed=[];
-  const settled=await Promise.all(endpoints.map(async ([key,path])=>({key,result:await fetchApi(path)})));
-  settled.forEach(entry=>{
-    hydrated[entry.key]=entry.result.data;
-    if(!entry.result.ok)failed.push(entry.key);
-  });
+  const embeddedFwd=embeddedFwdDataOrNull();
+  const packet=key=>hydrated[key]!==undefined&&hydrated[key]!==null?hydrated[key]:embeddedFwd?.[key];
+  const applyHydrated=()=>{
+    if(!packet('overview'))return false;
+    fwdData={
+      editorModel:packet('editorModel'),
+      overview:packet('overview'),
+      documents:packet('documents'),
+      pages:packet('pages'),
+      batches:packet('batches'),
+      processes:packet('processes'),
+      processDrivers:packet('processDrivers'),
+      resources:packet('resources'),
+      objectGraph:packet('objectGraph'),
+      functions:packet('functions'),
+      ruleLists:packet('ruleLists'),
+      tables:packet('tables'),
+      selectionLists:packet('selectionLists'),
+      udfs:packet('udfs'),
+      canonicalUdfs:packet('canonicalUdfs'),
+      runtimeImpact:packet('runtimeImpact'),
+      pageDesigns:packet('pageDesigns'),
+      pageVariants:packet('pageVariants'),
+      fields:packet('fields')
+    };
+    fwdApiHydrationState.mode='hydrating';
+    fwdApiHydrationState.failedEndpoints=list(failed);
+    return true;
+  };
 
-  if(!hydrated.overview){
-    fwdData=null;
-    fwdApiHydrationState.mode='none';
-    fwdApiHydrationState.failedEndpoints=failed;
+  for(const stage of endpointStages){
+    const settled=await Promise.all(stage.map(async ([key,path])=>({key,result:await fetchApi(path)})));
+    settled.forEach(entry=>{
+      hydrated[entry.key]=entry.result.data;
+      if(!entry.result.ok)failed.push(entry.key);
+    });
+    if(applyHydrated()&&typeof model!=='undefined'&&model){
+      model=buildModel();
+      globalDefinitionLookupCache=null;
+      globalTableDefinitionsCache=null;
+      renderAll();
+    }
+  }
+
+  if(!packet('overview')){
+    if(!applyEmbeddedFwdDataIfPresent(failed)){
+      fwdData=null;
+      fwdApiHydrationState.mode='none';
+      fwdApiHydrationState.failedEndpoints=failed;
+    }
     return;
   }
 
-  fwdData={
-    editorModel:hydrated.editorModel,
-    overview:hydrated.overview,
-    documents:hydrated.documents,
-    pages:hydrated.pages,
-    batches:hydrated.batches,
-    processes:hydrated.processes,
-    processDrivers:hydrated.processDrivers,
-    resources:hydrated.resources,
-    objectGraph:hydrated.objectGraph,
-    functions:hydrated.functions,
-    ruleLists:hydrated.ruleLists,
-    tables:hydrated.tables,
-    selectionLists:hydrated.selectionLists,
-    udfs:hydrated.udfs,
-    canonicalUdfs:hydrated.canonicalUdfs,
-    runtimeImpact:hydrated.runtimeImpact,
-    pageDesigns:hydrated.pageDesigns,
-    pageVariants:hydrated.pageVariants,
-    fields:hydrated.fields
-  };
-
-  fwdApiHydrationState.mode=failed.length?'partial':'full';
+  applyHydrated();
+  fwdApiHydrationState.mode=failed.length?(embeddedFwd?'partial+embedded':'partial'):'full';
   fwdApiHydrationState.failedEndpoints=failed;
 }
 function $(id){
@@ -233,7 +304,7 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const storeKey='ac-rule-workbench-v62-16-message-workspace';
+const storeKey='ac-rule-workbench-v62-19-editor-mode';
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
 const list=x=>Array.isArray(x)?x:(x==null?[]:[x]);
 const first=(...xs)=>xs.find(x=>x!==undefined&&x!==null&&String(x).length>0);
@@ -320,11 +391,19 @@ function previewJsonHtml(value,options={}){
 function definitionSearchText(row){
   return lower([
     row?.name,row?.key,row?.type,row?.source,row?.metric,
+    row?.searchBlob,
     row?.fn?.name,row?.fn?.category,row?.udf?.displayName,row?.udf?.rawName,
     row?.table?.name,row?.table?.resourceType,
+    row?.selectionList?.name,row?.selectionList?.tableDriver,
+    row?.ruleList?.scopeId,row?.ruleList?.name,row?.ruleList?.kind,
+    row?.node?.id,row?.node?.kind,row?.node?.name,
+    row?.impact?.scopeId,row?.impact?.ruleName,row?.impact?.functionName,row?.impact?.impactType,row?.impact?.summary,
     list(row?.table?.columns).slice(0,20).map(c=>c.name||c.Name||c.column||c.Column).join(' '),
     list(row?.table?.matchFields).slice(0,20).map(c=>c.name||c.Name).join(' '),
     list(row?.table?.plugFields).slice(0,20).map(c=>c.name||c.Name).join(' '),
+    list(row?.selectionList?.matchFields).slice(0,30).map(c=>c.name||c.Name).join(' '),
+    list(row?.selectionList?.plugFields).slice(0,30).map(c=>c.name||c.Name).join(' '),
+    list(row?.impact?.behaviorFlags).join(' '),
     list(row?.details?.names).slice(0,30).join(' '),
     list(row?.usage).slice(0,80).map(u=>[u.scopeId,u.ruleName,u.functionName,u.target,u.targetType,u.relationshipKind].join(' ')).join(' ')
   ].join(' '));
@@ -365,11 +444,17 @@ function readState(){
     selectedResourceKey:saved.selectedResourceKey||'',
     selectedFunctionName:saved.selectedFunctionName||'',
     selectedDriverKey:saved.selectedDriverKey||'',
+    selectedObjectGraphKey:saved.selectedObjectGraphKey||'',
+    selectedRuleListKey:saved.selectedRuleListKey||'',
+    selectedSelectionListName:saved.selectedSelectionListName||'',
+    selectedRuntimeImpactKey:saved.selectedRuntimeImpactKey||'',
     selectedProcessName:text(saved.selectedProcessName||''),
     globalDetailKind:'',
     selectedTableName:saved.selectedTableName||'',
     selectedUdfName:saved.selectedUdfName||'',
-    udfFilter:['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:'with-callers',
+    udfEditorTab:['general','parameters','callers','rule-list','messages'].includes(saved.udfEditorTab)?saved.udfEditorTab:'general',
+    editorMessageExpanded:saved.editorMessageExpanded===true,
+    udfFilter:['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:'all',
     paneLeftWidth:Number.isFinite(savedLeft)?savedLeft:320,
     paneRightWidth:Number.isFinite(savedRight)?savedRight:380,
     recentScopes:Array.isArray(saved.recentScopes)?saved.recentScopes:[],searchActiveIndex:-1,inspectorOpen:false,disclosureLevel:Number(saved.disclosureLevel||1)||1
@@ -778,6 +863,8 @@ const bootState={phase:'loading',detail:'Loading FWD snapshot...'};
 
 function fwdHydrationSummary(){
   if(fwdApiHydrationState.mode==='full')return {level:'ready',label:'FWD API loaded'};
+  if(fwdApiHydrationState.mode==='embedded')return {level:'ready',label:'Embedded FWD globals loaded'};
+  if(fwdApiHydrationState.mode==='partial+embedded')return {level:'ready',label:'FWD API partial; embedded globals merged'};
   return {level:'ready',label:'FWD snapshot loaded'};
 }
 
@@ -790,10 +877,16 @@ function setBootPhase(phase,detail=''){
 
 function renderBootLoading(){
   setBootPhase('loading','Loading FWD snapshot...');
+  document.body.classList.add('no-scope-selector');
   $('sourceSubtitle').textContent='Loading FWD snapshot...';
   $('statusPill').innerHTML='<span class="dot"></span><span>Loading FWD</span>';
   $('globalNav').innerHTML='';
-  $('scopeList').innerHTML=emptyHtml('Loading scopes','Large snapshots can take a moment to parse.');
+  const scopeHost=optionalElement('scopeList');
+  if(scopeHost){
+    scopeHost.hidden=true;
+    scopeHost.setAttribute('aria-hidden','true');
+    scopeHost.innerHTML='';
+  }
   $('content').innerHTML=emptyHtml('Preparing read-only FWD viewer','Loading FWD rules, global definitions, and action lists...');
 }
 function seedExpanded(scopeId=state.scopeId){
@@ -915,13 +1008,36 @@ function selectNodeInScope(id,scopeId=''){
   setTimeout(()=>{const row=document.querySelector(`[data-node="${cssEscape(nodeId)}"]`);row?.scrollIntoView({block:'nearest'});row?.focus();},0);
 }
 function isGlobalDefinitionView(view=state.workspaceView){
-  return ['resources','functions','tables','drivers','udfs'].includes(view);
+  return globalWorkspaceViews().includes(view);
+}
+function localWorkspaceViews(){
+  return ['structure','field-resolution','messages'];
+}
+function globalWorkspaceViews(){
+  return ['resources','functions','selection-lists','tables','udfs','rule-lists','object-graph','runtime-impact','drivers'];
+}
+function validWorkspaceViews(){
+  return [...localWorkspaceViews(),...globalWorkspaceViews()];
+}
+function isEditorMode(view=state.workspaceView){
+  return isGlobalDefinitionView(view);
+}
+function setEditorModeClasses(){
+  const on=isEditorMode();
+  document.body.classList.toggle('editor-mode',on);
+  document.body.classList.toggle('fweditor-global-mode',on);
+  document.body.classList.toggle('global-workspace',on);
+  document.body.dataset.workspaceView=state.workspaceView||'structure';
 }
 function globalViewHeading(view=state.workspaceView){
   const map={
     resources:{title:'Resources',caption:'FWD-level shared definitions. Page and document rules reference these definitions; they remain global.'},
     functions:{title:'Functions',caption:'AC function catalog, configured status results, behavior flags, parameter roles, and rule usage.'},
+    'selection-lists':{title:'SelectionLists',caption:'Canonical SelectionList/table packet with match fields, plug fields, options, and resource evidence.'},
     tables:{title:'Tables',caption:'Shared SelectionList and lookup table definitions from the FWD.'},
+    'rule-lists':{title:'Rule Lists',caption:'Snapshot-wide Rule List packet with Status Result and Action List rollups.'},
+    'object-graph':{title:'Object Graph',caption:'Canonical FWD object graph nodes, typed handles, private resource descendants, and graph edges.'},
+    'runtime-impact':{title:'Runtime Impact',caption:'Static function-specific impact evidence. Native AC execution is not simulated.'},
     drivers:{title:'Drivers',caption:'Input, output, and process-private driver definitions from the FWD.'},
     udfs:{title:'UDFs',caption:'User Defined Function interfaces, internal rules, status results, and caller mappings.'}
   };
@@ -1039,8 +1155,12 @@ function workspaceTabDefinitions(){
     return [
       ['resources','Resources','FWD resources and resource-type definitions'],
       ['functions','Functions','AC function catalog and observed rule usage'],
+      ['selection-lists','SelectionLists','Canonical SelectionList match, plug, and options packet'],
       ['tables','Tables','SelectionList and table configuration'],
       ['udfs','UDFs','Reusable rule-list functions and caller bindings'],
+      ['rule-lists','Rule Lists','Snapshot-wide Rule Lists, Status Results, and Action Lists'],
+      ['object-graph','Object Graph','Canonical FWD object graph and typed handles'],
+      ['runtime-impact','Runtime Impact','Static function-specific operator and rule-flow impact'],
       ['drivers','Drivers','Driver definitions and process-private findings']
     ];
   }
@@ -1052,6 +1172,11 @@ function workspaceTabDefinitions(){
 }
 function renderWorkspaceTabs(){
   const host=$('tabs');
+  if(isGlobalDefinitionView()){
+    host.setAttribute('aria-hidden','true');
+    host.innerHTML='';
+    return;
+  }
   const defs=workspaceTabDefinitions();
   host.removeAttribute('aria-hidden');
   host.innerHTML=defs.map(([id,label,title])=>{
@@ -1061,6 +1186,19 @@ function renderWorkspaceTabs(){
 }
 
 function renderMainHead(){
+  if(isEditorMode()){
+    const head=optionalElement('scopeTitle');
+    const caption=optionalElement('scopeCaption');
+    const crumbs=optionalElement('crumbs');
+    const tabs=optionalElement('tabs');
+    const viewbar=optionalElement('viewbar');
+    if(head)head.textContent='';
+    if(caption)caption.innerHTML='';
+    if(crumbs)crumbs.innerHTML='';
+    if(tabs)tabs.innerHTML='';
+    if(viewbar)viewbar.innerHTML='';
+    return;
+  }
   const s=currentScope();
   const isDocOrPage=/^(document|page)$/i.test(text(s.kind));
   const hydration=fwdHydrationSummary();
@@ -1110,9 +1248,13 @@ function renderContent(){
   if(state.workspaceView==='messages')return renderMessages();
   if(state.workspaceView==='resources')return renderGlobalResourceDefinitions();
   if(state.workspaceView==='functions')return renderGlobalFunctionDefinitions();
+  if(state.workspaceView==='selection-lists')return renderSelectionListPacketDefinitions();
   if(state.workspaceView==='tables')return renderGlobalTablesMasterDetail();
   if(state.workspaceView==='drivers')return renderGlobalDriverDefinitions();
   if(state.workspaceView==='udfs')return renderUdfMasterDetail();
+  if(state.workspaceView==='rule-lists')return renderRuleListPacketDefinitions();
+  if(state.workspaceView==='object-graph')return renderObjectGraphDefinitions();
+  if(state.workspaceView==='runtime-impact')return renderRuntimeImpactDefinitions();
   return renderStructure();
 }
 function severityIsProblem(severity){return /warn|error|fatal/i.test(text(severity));}
@@ -1164,6 +1306,8 @@ function diagnosticsTabHtml(mode,label,count){
 function renderDiagnosticsDock(){
   const host=optionalElement('diagnosticsDock');
   if(!host)return;
+  if(isEditorMode()){host.innerHTML='';host.hidden=true;return;}
+  host.hidden=false;
   if(!model||bootState.phase==='loading'){
     host.innerHTML='<div class="diagnostics-dock-empty">Snapshot diagnostics loading.</div>';
     return;
@@ -1379,6 +1523,130 @@ function objectGraphPreviewHtml(row){
   if(!list(graph.nodes).length)return '';
   return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Object Graph</h4><p>Canonical FWD object graph nodes and private resource children linked to this definition.</p></div><span class="badge blue">${fmt(nodes.length)} nodes</span></div>${nodes.length?`<div class="mini-list">${nodes.slice(0,10).map(n=>`<div class="mini-row"><span><b>${esc(text(n.kind||'Object'))}</b> ${esc(text(n.name||n.id||''))}</span><span class="mono">${esc(text(first(n.metadata?.path,n.id,'')))}</span></div>`).join('')}</div>${privateNodes.length?`<div class="caption mt-8">${fmt(privateNodes.length)} private resource node(s) exposed for drill-through.</div>`:''}`:'<div class="global-empty-state compact">No object graph node is linked to this resource name.</div>'}</section>`;
 }
+
+function objectGraphPacket(){
+  return model.fwd?.objectGraph||model.fwd?.editorModel?.objectGraph||{};
+}
+function objectGraphEdgeEndpoint(edge,names){
+  for(const name of names){
+    const value=text(first(edge?.[name],edge?.[name.charAt(0).toUpperCase()+name.slice(1)],''));
+    if(value)return value;
+  }
+  return '';
+}
+function objectGraphEdgesForNode(nodeId){
+  const id=text(nodeId);
+  return list(objectGraphPacket().edges).filter(edge=>{
+    const from=objectGraphEdgeEndpoint(edge,['from','fromId','source','sourceId','parent','parentId']);
+    const to=objectGraphEdgeEndpoint(edge,['to','toId','target','targetId','child','childId']);
+    return from===id||to===id;
+  });
+}
+function usageRowsForObjectGraphNode(node){
+  const meta=node?.metadata||{};
+  const resourceName=text(first(meta.resourceName,node?.name,'')).trim().toLowerCase();
+  const scopeId=text(first(meta.scopeId,meta.scopePath,'')).trim();
+  if(scopeId){
+    return model.nodes
+      .filter(n=>n.scopeId===scopeId&&n.isRule)
+      .slice(0,160)
+      .map(n=>({scopeId:n.scopeId,ruleName:n.title,functionName:n.fn,node:n,target:text(node.name),targetType:text(node.kind),relationshipKind:'RuleList member'}));
+  }
+  if(resourceName){
+    return usageRowsForDefinition(r=>text(r.target).trim().toLowerCase()===resourceName).slice(0,160);
+  }
+  return [];
+}
+function buildObjectGraphDefinitions(){
+  const graph=objectGraphPacket();
+  const nodes=list(graph.nodes);
+  return nodes.map((node,index)=>{
+    const key=text(first(node.id,node.nodeId,`object-${index}`));
+    const edges=objectGraphEdgesForNode(key);
+    const meta=node.metadata||{};
+    const path=text(first(meta.path,meta.resourceName,meta.scopeId,''));
+    return {
+      key,
+      name:text(first(node.name,key,`Object ${index+1}`)),
+      type:text(first(node.kind,'Object')),
+      source:text(first(node.source,'ObjectGraph')),
+      defined:true,
+      metric:edges.length,
+      usage:usageRowsForObjectGraphNode(node),
+      node,
+      edges,
+      searchBlob:[key,node.name,node.kind,node.source,path,JSON.stringify(meta)].join(' ')
+    };
+  }).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+function objectGraphDetailHtml(row){
+  const node=row.node||{};
+  const meta=node.metadata||{};
+  const facts=[
+    ['Kind',esc(row.type||'Object')],
+    ['Source',esc(row.source||'ObjectGraph')],
+    ['Confidence',esc(text(first(node.confidence,'Medium')))],
+    ['Edges',fmt(list(row.edges).length)],
+    ['Usage rows',fmt(list(row.usage).length)],
+    ['Handle',esc(row.key)]
+  ];
+  const edgeRows=list(row.edges).slice(0,80).map(edge=>{
+    const from=objectGraphEdgeEndpoint(edge,['from','fromId','source','sourceId','parent','parentId']);
+    const to=objectGraphEdgeEndpoint(edge,['to','toId','target','targetId','child','childId']);
+    const label=text(first(edge.kind,edge.label,edge.relationship,'edge'));
+    return `<div class="mini-row"><span><b>${esc(label)}</b> ${esc(from)} -> ${esc(to)}</span><span class="mono">${esc(text(first(edge.source,'')))}</span></div>`;
+  }).join('');
+  const metadata=Object.keys(meta).length?`<div class="table-columns-head">Typed handle metadata</div>${previewJsonHtml(meta,{maxDepth:3,maxArray:30,maxKeys:60,maxChars:9000})}`:'';
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Object Node</h4><p>Canonical FWD object graph identity and typed source handle.</p></div><span class="badge blue">${esc(row.type||'Object')}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div></section>${edgeRows?`<section class="udf-section-card"><div class="udf-section-head"><div><h4>Graph Edges</h4><p>Incoming and outgoing graph links for this node.</p></div><span class="badge blue">${fmt(list(row.edges).length)} edges</span></div><div class="mini-list">${edgeRows}</div></section>`:''}${metadata}<div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}<div class="table-columns-head">Raw node</div>${previewJsonHtml(node,{maxDepth:4,maxArray:50,maxKeys:80,maxChars:16000})}`;
+}
+function renderObjectGraphDefinitions(){
+  renderGlobalDefinitionExplorer('object-graph',buildObjectGraphDefinitions(),state.selectedObjectGraphKey,'selectedObjectGraphKey',{title:'Object Graph',body:'Canonical FWD object graph nodes, resource-private descendants, typed handles, and graph edges.',emptyTitle:'No object graph nodes found',emptyBody:'No object graph packet was loaded.'},objectGraphDetailHtml);
+}
+
+function buildRuleListPacketDefinitions(){
+  const packetItems=list(model.fwd?.ruleLists?.items);
+  const byScope=new Map(model.scopes.map(scope=>[scope.scopeId,scope]));
+  packetItems.forEach(item=>{
+    const scopeId=text(first(item.scopeId,item.ScopeId,item.path,item.name,''));
+    if(scopeId&&!byScope.has(scopeId))byScope.set(scopeId,{scopeId,name:text(first(item.name,scopeId)),kind:text(first(item.kind,'RuleList')),structural:0,warnings:0});
+  });
+  return [...byScope.values()].map(scope=>{
+    const nodes=model.nodes.filter(n=>n.scopeId===scope.scopeId);
+    const ruleNodes=nodes.filter(n=>n.isRule);
+    const branches=nodes.flatMap(n=>childRouteGroups(n.id).map(group=>({parent:n,group})));
+    const statuses=[...new Set(nodes.flatMap(n=>actionNamesOf(n).map(text).filter(Boolean)))].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+    const usage=ruleNodes.slice(0,200).map(n=>({scopeId:n.scopeId,ruleName:n.title,functionName:n.fn,node:n,target:scope.scopeId,targetType:'RuleList',relationshipKind:'ContainsRule'}));
+    return {
+      key:scope.scopeId,
+      name:text(scope.name||scope.scopeId),
+      type:text(scope.kind||'RuleList'),
+      source:'RuleList packet',
+      defined:true,
+      metric:ruleNodes.length,
+      usage,
+      ruleList:{scopeId:scope.scopeId,name:scope.name,kind:scope.kind,ruleCount:ruleNodes.length,actionListCount:branches.length,statusResults:statuses,branches,nodes}
+    };
+  }).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+function ruleListPacketDetailHtml(row){
+  const packet=row.ruleList||{};
+  const statuses=list(packet.statusResults);
+  const branches=list(packet.branches);
+  const openScope=`<button class="btn" type="button" data-scope="${esc(packet.scopeId||row.key)}">Open Rule Tree</button>`;
+  const facts=[
+    ['Scope id',esc(packet.scopeId||row.key)],
+    ['Kind',esc(packet.kind||row.type||'RuleList')],
+    ['Rules',fmt(packet.ruleCount||0)],
+    ['Status Results',fmt(statuses.length)],
+    ['Action Lists',fmt(packet.actionListCount||0)],
+    ['Source',esc(row.source)]
+  ];
+  const branchRows=branches.slice(0,80).map(({parent,group})=>`<div class="mini-row"><span><b>${esc(group.label||'Unnamed Action List')}</b> ${esc(parent.title||'Parent rule')}</span><span class="badge blue">${fmt(list(group.childIds).length)} child rules</span></div>`).join('');
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Rule List Packet</h4><p>Snapshot-wide Rule List identity with Status Result and Action List rollups.</p></div>${openScope}</div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div></section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Status Results</h4><p>Unique configured status result names inside this Rule List scope.</p></div><span class="badge blue">${fmt(statuses.length)} statuses</span></div>${functionTokenStripHtml(statuses,'amber','No Status Result names were extracted for this Rule List.')}</section>${branchRows?`<section class="udf-section-card"><div class="udf-section-head"><div><h4>Action Lists</h4><p>Nested Action List groups resolved from parent rule status results.</p></div><span class="badge blue">${fmt(branches.length)} action lists</span></div><div class="mini-list">${branchRows}</div></section>`:''}<div class="table-columns-head">Rule preview</div>${usagePreviewHtml(row.usage)}<div class="table-columns-head">Raw packet</div>${previewJsonHtml(packet,{maxDepth:3,maxArray:60,maxKeys:80,maxChars:16000})}`;
+}
+function renderRuleListPacketDefinitions(){
+  renderGlobalDefinitionExplorer('rule-lists',buildRuleListPacketDefinitions(),state.selectedRuleListKey,'selectedRuleListKey',{title:'Rule Lists',body:'Snapshot-wide Rule List packet with Status Results, Action Lists, and rule membership.',emptyTitle:'No Rule Lists found',emptyBody:'No Rule List packet was loaded.'},ruleListPacketDetailHtml);
+}
 function buildGlobalDriverDefinitions(){
   const items=list(model.fwd?.processDrivers?.items);
   if(items.length){
@@ -1409,10 +1677,10 @@ function summaryTilesHtml(items){
   return `<div class="global-summary-tiles">${items.map(x=>`<div class="global-summary-tile ${x.tone||''}"><span>${esc(x.label)}</span><b>${x.value}</b></div>`).join('')}</div>`;
 }
 function definitionListHtml(kind,rows,selectedKey){
-  const metricLabel=kind==='udfs'?'caller rules':kind==='functions'?'observed rules':kind==='tables'?'rule refs':'rule refs';
-  const listLabel=kind==='udfs'?'UDFs':kind==='functions'?'Functions':kind==='tables'?'Tables':kind==='drivers'?'Drivers':'Definitions';
+  const metricLabel=kind==='udfs'?'caller rules':kind==='functions'?'observed rules':kind==='selection-lists'?'fields':kind==='tables'?'rule refs':kind==='rule-lists'?'rules':kind==='object-graph'?'edges':kind==='runtime-impact'?'signals':'rule refs';
+  const listLabel=kind==='udfs'?'UDFs':kind==='functions'?'Functions':kind==='selection-lists'?'SelectionLists':kind==='tables'?'Tables':kind==='rule-lists'?'Rule Lists':kind==='object-graph'?'Object Graph':kind==='runtime-impact'?'Runtime Impact':kind==='drivers'?'Drivers':'Definitions';
   return `<div class="global-list-head"><span>${esc(listLabel)}</span><b>${fmt(rows.length)}</b></div><div class="table-index-list global-def-list">${rows.slice(0,800).map(row=>{
-    const referenceLabel=kind==='udfs'?'Reference-only':kind==='tables'?'Referenced':kind==='functions'?'Observed':'Referenced';
+    const referenceLabel=kind==='udfs'?'Reference-only':kind==='functions'?'Observed':'Referenced';
     const exceptionBadge=row.defined?'':`<span class="badge amber">${esc(referenceLabel)}</span>`;
     const metric=fmt(list(row.usage).length||row.metric);
     return `<button class="table-index-row ${row.key===selectedKey?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span class="table-index-main"><b>${esc(row.name)}</b><span>${esc(row.type)} · ${metric} ${metricLabel}</span></span><span class="table-index-side">${exceptionBadge}</span></button>`;
@@ -1435,10 +1703,14 @@ function addDefinitionLookup(lookup,kind,key,label,aliases=[]){
 }
 function globalDefinitionLookup(){
   if(globalDefinitionLookupCache)return globalDefinitionLookupCache;
-  const lookup={resources:new Map(),functions:new Map(),tables:new Map(),drivers:new Map(),udfs:new Map()};
+  const lookup={resources:new Map(),functions:new Map(),tables:new Map(),drivers:new Map(),udfs:new Map(),'selection-lists':new Map(),'rule-lists':new Map(),'object-graph':new Map(),'runtime-impact':new Map()};
   try{buildGlobalResourceDefinitions().forEach(r=>addDefinitionLookup(lookup,'resources',r.key,r.name,[r.type]));}catch{}
   try{buildGlobalFunctionDefinitions().forEach(r=>addDefinitionLookup(lookup,'functions',r.key,r.name,[r.fn?.name,r.fn?.displayName]));}catch{}
+  try{buildSelectionListPacketDefinitions().forEach(r=>addDefinitionLookup(lookup,'selection-lists',r.key,r.name,[r.type,r.selectionList?.resourceType,r.selectionList?.tableDriver]));}catch{}
   try{buildGlobalTableDefinitions().forEach(r=>addDefinitionLookup(lookup,'tables',r.name,r.name,[r.raw?.name,r.raw?.Name,r.resourceType]));}catch{}
+  try{buildRuleListPacketDefinitions().forEach(r=>addDefinitionLookup(lookup,'rule-lists',r.key,r.name,[r.type,r.ruleList?.scopeId,r.ruleList?.kind]));}catch{}
+  try{buildObjectGraphDefinitions().forEach(r=>addDefinitionLookup(lookup,'object-graph',r.key,r.name,[r.type,r.node?.metadata?.path,r.node?.metadata?.resourceName,r.node?.metadata?.scopeId]));}catch{}
+  try{buildRuntimeImpactDefinitions().forEach(r=>addDefinitionLookup(lookup,'runtime-impact',r.key,r.name,[r.type,r.impact?.scopeId,r.impact?.ruleGuid,r.impact?.ruleName,r.impact?.functionName]));}catch{}
   try{buildGlobalDriverDefinitions().forEach(r=>addDefinitionLookup(lookup,'drivers',r.key,r.name,[r.type]));}catch{}
   try{buildUdfDefinitions().forEach(u=>addDefinitionLookup(lookup,'udfs',u.key,u.displayName||u.rawName||u.key,[u.rawName,u.displayName,...list(u.rules)]));}catch{}
   globalDefinitionLookupCache=lookup;
@@ -1446,12 +1718,15 @@ function globalDefinitionLookup(){
 }
 function definitionKindPriority(hint=''){
   const h=lower(hint);
-  if(/udf|user.?defined/.test(h))return ['udfs','functions','resources','tables','drivers'];
-  if(/table|selection.?list|lookup|database|\bdb\b/.test(h))return ['tables','resources','functions','udfs','drivers'];
-  if(/driver|process|input|output|twain|scan|ocr/.test(h))return ['drivers','resources','functions','tables','udfs'];
-  if(/resource|source/.test(h))return ['resources','tables','drivers','functions','udfs'];
-  if(/function|rule/.test(h))return ['udfs','functions','resources','tables','drivers'];
-  return ['udfs','tables','functions','resources','drivers'];
+  if(/runtime|impact|operator/.test(h))return ['runtime-impact','functions','rule-lists','selection-lists','tables','resources','udfs','drivers','object-graph'];
+  if(/udf|user.?defined/.test(h))return ['udfs','functions','runtime-impact','resources','selection-lists','tables','drivers','rule-lists','object-graph'];
+  if(/table|selection.?list|lookup|database|\bdb\b/.test(h))return ['selection-lists','tables','resources','functions','udfs','runtime-impact','drivers','object-graph','rule-lists'];
+  if(/rule.?list|status.?result|action.?list/.test(h))return ['rule-lists','runtime-impact','functions','udfs','resources','object-graph','selection-lists','tables','drivers'];
+  if(/object.?graph|handle|node/.test(h))return ['object-graph','resources','rule-lists','selection-lists','tables','drivers','functions','udfs','runtime-impact'];
+  if(/driver|process|input|output|twain|scan|ocr/.test(h))return ['drivers','resources','object-graph','functions','selection-lists','tables','udfs','rule-lists','runtime-impact'];
+  if(/resource|source/.test(h))return ['resources','object-graph','selection-lists','tables','drivers','functions','udfs','rule-lists','runtime-impact'];
+  if(/function|rule/.test(h))return ['udfs','functions','runtime-impact','rule-lists','resources','selection-lists','tables','drivers','object-graph'];
+  return ['selection-lists','udfs','tables','functions','resources','rule-lists','object-graph','drivers','runtime-impact'];
 }
 function candidateDefinitionNames(value){
   const raw=text(value).trim();
@@ -1464,13 +1739,13 @@ function candidateDefinitionNames(value){
 function resolveDefinitionNav(value,hint=''){
   const values=candidateDefinitionNames(value);
   if(!values.length)return null;
-  const generic=new Set(['table','tables','selectionlist','selection list','source','sources','field','fields','rule','rules','option','options','parameter','parameters','function','functions','udf','udfs']);
+  const generic=new Set(['table','tables','selectionlist','selection list','source','sources','field','fields','rule','rules','rulelist','rule list','status','status result','action','action list','object','object graph','node','handle','impact','runtime impact','option','options','parameter','parameters','function','functions','udf','udfs']);
   const lookup=globalDefinitionLookup();
   for(const value of values){
     const priority=definitionKindPriority(`${hint} ${value}`);
     const normalized=definitionLookupKey(value);
     if(!normalized)continue;
-    if(generic.has(normalized)&&!/udf|table|selection.?list|function|resource|driver/i.test(hint))continue;
+    if(generic.has(normalized)&&!/udf|table|selection.?list|function|resource|driver|rule.?list|status.?result|action.?list|object.?graph|runtime|impact/i.test(hint))continue;
     for(const kind of priority){
       const match=lookup[kind]?.get(normalized);
       if(match)return match;
@@ -1480,7 +1755,7 @@ function resolveDefinitionNav(value,hint=''){
 }
 function definitionButtonHtml(match,label,extraClass=''){
   if(!match)return `<span class="${esc(extraClass)}">${esc(label)}</span>`;
-  const kindLabel=match.kind==='udfs'?'UDF':match.kind==='tables'?'table':match.kind==='functions'?'function':match.kind==='resources'?'resource':'definition';
+  const kindLabel=match.kind==='udfs'?'UDF':match.kind==='tables'?'table':match.kind==='functions'?'function':match.kind==='resources'?'resource':match.kind==='selection-lists'?'SelectionList':match.kind==='rule-lists'?'Rule List':match.kind==='object-graph'?'object graph node':match.kind==='runtime-impact'?'runtime impact':'definition';
   return `<button class="definition-link ${esc(extraClass)}" type="button" data-def-kind="${esc(match.kind)}" data-def-key="${esc(match.key)}" title="Open ${esc(kindLabel)} definition: ${esc(match.label)}">${esc(label||match.label)}<span aria-hidden="true">↗</span></button>`;
 }
 function linkedDefinitionHtml(value,hint='',extraClass=''){
@@ -1497,13 +1772,17 @@ function openGlobalDefinition(kind,key){
   const normalizedKind=text(kind);
   const normalizedKey=text(key);
   if(!normalizedKind||!normalizedKey)return false;
-  if(!['resources','functions','tables','drivers','udfs'].includes(normalizedKind))return false;
+  if(!globalWorkspaceViews().includes(normalizedKind))return false;
   state.workspaceView=normalizedKind;
   if(normalizedKind==='resources')state.selectedResourceKey=normalizedKey;
   else if(normalizedKind==='functions')state.selectedFunctionName=normalizedKey;
+  else if(normalizedKind==='selection-lists')state.selectedSelectionListName=normalizedKey;
   else if(normalizedKind==='drivers')state.selectedDriverKey=normalizedKey;
   else if(normalizedKind==='tables')state.selectedTableName=normalizedKey;
   else if(normalizedKind==='udfs')state.selectedUdfName=normalizedKey;
+  else if(normalizedKind==='rule-lists')state.selectedRuleListKey=normalizedKey;
+  else if(normalizedKind==='object-graph')state.selectedObjectGraphKey=normalizedKey;
+  else if(normalizedKind==='runtime-impact')state.selectedRuntimeImpactKey=normalizedKey;
   state.selectedType='scope';
   state.selectedId='';
   document.body.classList.remove('inspector-open');
@@ -1569,20 +1848,151 @@ function parameterMatrixHtml(callers,interfaceNames=[]){
     return `<div class="global-param-card"><b>${esc(row.name)}</b>${rawHint}<span>${fmt(row.callers.size)} caller rule(s)</span><div>${[...row.values.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4).map(([v,c])=>`<span class="badge blue" title="${esc(v)}">${esc(v||'(blank)')} ${fmt(c)}</span>`).join('')}</div></div>`;
   }).join('')}</div>`;
 }
-function udfFilterBarHtml(){
-  return `<div class="udf-filter-strip" role="group" aria-label="UDF filters">${['with-callers','defined','unparsed','relationship-only','all'].map(f=>`<button class="${state.udfFilter===f?'active':''}" type="button" data-udf-filter="${f}">${esc(udfFilterLabel(f))}</button>`).join('')}</div>`;
+function udfFilterCounts(rows){
+  const all=list(rows);
+  return {
+    all:all.length,
+    'with-callers':all.filter(r=>list(r.callerRules).length>0||list(r.rules).length>0).length,
+    defined:all.filter(r=>!!r.defined).length,
+    unparsed:all.filter(r=>r.definitionParsed===false||list(r.messages).length>0).length,
+    'relationship-only':all.filter(r=>!r.defined&&list(r.rules).length>0).length
+  };
+}
+function udfFilterBarHtml(allRows=null){
+  const counts=allRows?udfFilterCounts(allRows):null;
+  return `<div class="udf-filter-strip udf-filter-strip-polished" role="group" aria-label="UDF filters">${['all','with-callers','defined','unparsed','relationship-only'].map(f=>{
+    const count=counts?`<span>${fmt(counts[f]||0)}</span>`:'';
+    return `<button class="${state.udfFilter===f?'active':''}" type="button" data-udf-filter="${f}" aria-pressed="${state.udfFilter===f?'true':'false'}"><b>${esc(udfFilterLabel(f))}</b>${count}</button>`;
+  }).join('')}</div>`;
+}
+function udfShortName(u){
+  const name=text(u?.displayName||u?.rawName||u?.key||'');
+  return name.includes(': ')?name.split(': ').slice(1).join(': '):name;
+}
+function udfPrefix(u){
+  const rhs=udfShortName(u);
+  const idx=rhs.indexOf('_');
+  if(idx>0)return `${rhs.slice(0,idx)}_`;
+  const alpha=(rhs.match(/^[A-Za-z]+/)||['Other'])[0];
+  return alpha&&alpha!=='Other'?`${alpha}`:'Other';
+}
+function udfStatusTone(u){
+  if(!u.defined)return 'amber';
+  if(u.definitionParsed&&u.bodyParsed)return 'green';
+  if(u.definitionParsed)return 'blue';
+  return 'amber';
+}
+function udfStatusLabel(u){
+  if(!u.defined)return 'reference-only';
+  if(u.definitionParsed&&u.bodyParsed)return 'parsed body';
+  if(u.definitionParsed)return 'interface parsed';
+  return 'definition pending';
+}
+function udfCallerCount(u){return list(u?.callerRules).length||list(u?.rules).length||Number(u?.count||0)||0;}
+function udfParamCount(u){return effectiveUdfParameterNames(u).length||list(u?.parameterNames).length||list(u?.parameterBindings).length||0;}
+function udfDefinitionSearchText(u){
+  return lower([
+    u?.displayName,u?.rawName,u?.key,u?.type,u?.source,u?.classification,u?.matchLevel,
+    ...list(u?.parameterNames),...list(u?.statusResults),...list(u?.rules),
+    ...list(u?.messages),...list(u?.callerRules).map(c=>`${c.ruleName} ${c.scopeId} ${c.functionName}`)
+  ].map(text).join(' '));
+}
+function udfOverviewMetrics(allRows,filteredRows,selected){
+  const all=list(allRows),filtered=list(filteredRows);
+  return [
+    {label:'total UDFs',value:fmt(all.length),tone:'blue'},
+    {label:'shown',value:fmt(filtered.length),tone:'teal'},
+    {label:'defined',value:fmt(all.filter(r=>r.defined).length),tone:'green'},
+    {label:'with callers',value:fmt(all.filter(r=>udfCallerCount(r)>0).length),tone:'amber'},
+    selected?{label:'selected params',value:fmt(udfParamCount(selected)),tone:'neutral'}:null
+  ].filter(Boolean);
+}
+function udfIndexRowHtml(u,selectedKey){
+  const params=udfParamCount(u);
+  const callers=udfCallerCount(u);
+  const statuses=list(u.statusResults).length;
+  const internal=list(u.internalRules).length;
+  const messages=list(u.messages).length;
+  const active=u.key===selectedKey;
+  const badges=[
+    `<span class="badge ${udfStatusTone(u)}">${esc(udfStatusLabel(u))}</span>`,
+    callers?`<span class="badge blue">${fmt(callers)} caller${callers===1?'':'s'}</span>`:'<span class="badge neutral">0 callers</span>',
+    params?`<span class="badge green">${fmt(params)} params</span>`:'',
+    internal?`<span class="badge blue">${fmt(internal)} internal</span>`:'',
+    statuses?`<span class="badge amber">${fmt(statuses)} statuses</span>`:'',
+    messages?`<span class="badge amber">${fmt(messages)} msg</span>`:''
+  ].filter(Boolean).join('');
+  return `<button class="udf-index-row ${active?'active':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="udf-index-title"><b>${esc(udfShortName(u))}</b>${u.rawName&&u.rawName!==udfShortName(u)?`<small>${esc(u.rawName)}</small>`:''}</span><span class="udf-index-meta">${esc(u.type||'UDF')} · ${esc(u.source||'FWD')}</span><span class="udf-index-badges">${badges}</span></button>`;
+}
+function udfIndexHtml(rows,selectedKey){
+  const groups=new Map();
+  list(rows).forEach(u=>{
+    const key=udfPrefix(u);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(u);
+  });
+  const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
+  return `<div class="udf-index-shell"><div class="global-list-head udf-list-head"><span>UDF inventory</span><b>${fmt(rows.length)}</b></div><div class="udf-index-list">${ordered.map(([group,items],idx)=>{
+    const containsSelected=items.some(x=>x.key===selectedKey);
+    return `<details class="udf-index-group" ${containsSelected||idx<8?'open':''}><summary><span>${esc(group)}</span><b>${fmt(items.length)}</b></summary><div class="udf-index-group-body">${items.map(u=>udfIndexRowHtml(u,selectedKey)).join('')}</div></details>`;
+  }).join('')}</div></div>`;
+}
+function udfStateSummaryHtml(u,callers){
+  const facts=[
+    ['Definition',u.defined?'FWD-defined':'Reference-only'],
+    ['Parse state',udfStatusLabel(u)],
+    ['Raw name',u.rawName?`<span class="mono">${esc(u.rawName)}</span>`:'<span class="muted">not exported</span>'],
+    ['Resource type',esc(u.type||'UDF')],
+    ['Source',esc(u.source||'FWD resource')],
+    ['Callers',fmt(callers.length)],
+    ['Parameters',fmt(udfParamCount(u))],
+    ['Status results',fmt(list(u.statusResults).length)],
+    ['Internal rules',fmt(list(u.internalRules).length)],
+    ['Messages',fmt(list(u.messages).length)]
+  ];
+  return `<section class="udf-overview-card"><div class="udf-overview-title"><div><span class="workspace-eyebrow">UDF interface</span><h3>${esc(udfShortName(u))}</h3><p>${u.defined?'Reusable FormWorks rule-list function with caller bindings and extracted interface evidence.':'Reference-only UDF call target. Caller rules are known, but the full UDF definition was not exported in this snapshot.'}</p></div><div class="tree-detail-badges"><span class="badge ${udfStatusTone(u)}">${esc(udfStatusLabel(u))}</span><span class="badge blue">${fmt(callers.length)} callers</span></div></div><div class="udf-overview-facts">${facts.map(([k,v])=>kv(k,v)).join('')}</div></section>`;
+}
+function udfParameterInterfaceGridHtml(u,callers){
+  const interfaceNames=effectiveUdfParameterNames(u);
+  const rows=new Map();
+  interfaceNames.forEach((name,idx)=>{
+    const key=text(name).trim()||`Field List ${idx+1}`;
+    rows.set(key,{name:key,index:idx+1,rawSlots:new Set(),values:new Map(),callers:new Set(),binding:null});
+  });
+  list(u.parameterBindings).forEach((b,idx)=>{
+    const name=text(first(b.parameterName,b.name,b.displayName,interfaceNames[idx],`Field List ${idx+1}`)).trim();
+    if(!name)return;
+    if(!rows.has(name))rows.set(name,{name,index:idx+1,rawSlots:new Set(),values:new Map(),callers:new Set(),binding:null});
+    const row=rows.get(name);
+    row.binding=b;
+    if(text(b.callerSlot))row.rawSlots.add(text(b.callerSlot));
+    if(text(b.slot))row.rawSlots.add(text(b.slot));
+    if(text(b.callerValue))row.values.set(text(b.callerValue),(row.values.get(text(b.callerValue))||0)+1);
+  });
+  list(callers).forEach(c=>callerParameterEntries(c.parameters,interfaceNames).forEach(entry=>{
+    const name=entry.displayName||entry.rawName;
+    if(!rows.has(name))rows.set(name,{name,index:rows.size+1,rawSlots:new Set(),values:new Map(),callers:new Set(),binding:null});
+    const row=rows.get(name);
+    row.callers.add(text(c.nodeId||c.ruleName));
+    if(entry.rawName&&entry.rawName!==entry.displayName)row.rawSlots.add(entry.rawName);
+    entry.values.forEach(v=>{const value=text(v);row.values.set(value,(row.values.get(value)||0)+1);});
+  }));
+  const sorted=[...rows.values()].sort((a,b)=>(a.index||999)-(b.index||999)||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  if(!sorted.length)return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Parameter Interface</h4><p>No named UDF parameters or caller-observed parameter bindings were extracted.</p></div><span class="badge amber">0</span></div></section>`;
+  return `<section class="udf-section-card udf-parameter-card"><div class="udf-section-head"><div><h4>Parameter Interface</h4><p>Canonical field-list names are shown first. Generic FWD slots are mapped to names when the interface could be inferred.</p></div><span class="badge blue">${fmt(sorted.length)} parameters</span></div><div class="udf-param-grid">${sorted.map(row=>{
+    const values=[...row.values.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const raw=[...row.rawSlots].filter(Boolean).join(', ');
+    const confidence=text(first(row.binding?.confidence,row.binding?.Confidence,''));
+    return `<div class="udf-param-card"><div class="udf-param-card-head"><span>${fmt(row.index||0)}</span><b>${esc(row.name)}</b></div><div class="udf-param-card-meta"><span>${fmt(row.callers.size)} caller use${row.callers.size===1?'':'s'}</span>${raw?`<span>slot: <code>${esc(raw)}</code></span>`:''}${confidence?`<span>${esc(confidence)}</span>`:''}</div><div class="udf-param-values">${values.length?values.map(([v,c])=>`<span class="udf-value-chip" title="${esc(v)}">${esc(v||'(blank)')} <b>${fmt(c)}</b></span>`).join(''):'<span class="muted">No caller values observed.</span>'}</div></div>`;
+  }).join('')}</div></section>`;
+}
+function udfStatusResultsHtml(u){
+  const status=list(first(u.statusResults,u.statuses,u.results,[])).map(text).filter(Boolean);
+  if(!status.length)return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Status Results</h4><p>No explicit status-result list was extracted for this UDF.</p></div><span class="badge neutral">0</span></div></section>`;
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Status Results</h4><p>Configured return/status tokens that may select Action Lists inside caller or internal rule flow.</p></div><span class="badge amber">${fmt(status.length)} statuses</span></div>${functionTokenStripHtml(status,'amber')}</section>`;
 }
 function udfInterfaceHtml(u,callers){
-  const params=effectiveUdfParameterNames(u);
-  const status=list(first(u.statusResults,u.statuses,u.results,[])).map(text).filter(Boolean);
-  const messages=list(u.messages).map(text).filter(Boolean);
-  const paramsHtml=params.length
-    ? `<div class="udf-token-strip">${params.slice(0,80).map(p=>`<span class="udf-token" title="${esc(p)}">${esc(p)}</span>`).join('')}</div>`
-    : `<div class="global-empty-state compact">${u.defined?'No named UDF parameters were extracted for this definition.':'No canonical UDF parameter list was exported; caller-observed parameters are shown when available.'}</div>`;
-  const statusHtml=status.length
-    ? `<div class="udf-token-strip">${status.slice(0,40).map(x=>`<span class="udf-token amber" title="${esc(x)}">${esc(x)}</span>`).join('')}</div>`
-    : '<span class="muted">No explicit status list extracted.</span>';
-  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Interface</h4><p>${u.defined?'Named field-list parameters and status values defined for this global UDF.':'Reference-only UDF: caller rules are known, but the canonical UDF interface/body was not exported in this snapshot.'}</p></div><span class="badge ${u.defined?'blue':'amber'}">${u.defined?`${fmt(params.length)} params`:'reference-only'}</span></div><div class="udf-facts"><span><b>Definition</b>${u.defined?'FWD-defined':'Reference-only'}</span><span><b>Caller rules</b>${fmt(callers.length)}</span><span><b>Type</b>${esc(u.type||'UDF')}</span>${messages.length?`<span><b>Messages</b>${fmt(messages.length)}</span>`:''}</div><div class="table-columns-head">Parameters</div>${paramsHtml}${status.length?`<div class="table-columns-head">Status results</div>${statusHtml}`:''}</section>`;
+  return `${udfStateSummaryHtml(u,callers)}${udfParameterInterfaceGridHtml(u,callers)}${udfStatusResultsHtml(u)}`;
 }
 function udfEvidenceHtml(u){
   const bindings=list(u.parameterBindings);
@@ -1590,20 +2000,22 @@ function udfEvidenceHtml(u){
   const attrHits=list(evidence.attributeHits);
   const treeHits=list(evidence.privateTreeHits);
   const diagnostics=list(u.messages).map(text).filter(Boolean);
-  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Definition Evidence</h4><p>Canonical UDF interface, caller-slot bindings, and private body parse state from the FWD resource packet.</p></div><span class="badge ${u.bodyParsed?'green':'blue'}">${u.bodyParsed?'body parsed':'body pending'}</span></div><div class="kv">${kv('Definition parsed',u.definitionParsed?'Yes':'No')}${kv('Resource config',evidence.hasConfig?'Available':'Unavailable')}${kv('Private tree',evidence.hasPrivateTree?'Available':'Unavailable')}${kv('Evidence hits',fmt(attrHits.length+treeHits.length))}</div>${bindings.length?`<div class="table-columns-head">Caller slot bindings</div><div class="global-param-matrix">${bindings.slice(0,24).map(b=>`<div class="global-param-card"><b>${esc(text(b.parameterName||''))}</b><small class="udf-param-raw">${esc(text(b.callerSlot||''))}</small><span>${esc(text(b.callerValue||''))}</span></div>`).join('')}</div>`:''}${treeHits.length?`<div class="table-columns-head">Private body hits</div><div class="mini-list">${treeHits.slice(0,8).map(h=>`<div class="mini-row"><span><b>${esc(text(h.role||''))}</b> ${esc(text(h.name||''))}</span><span class="mono">${esc(text(h.path||''))}</span></div>`).join('')}</div>`:''}${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section>`;
+  const rawAvailable=!!u.rawResourceDetails;
+  return `<section class="udf-section-card udf-evidence-card"><div class="udf-section-head"><div><h4>Evidence & Parse State</h4><p>Source confidence, resource config availability, caller-slot bindings, and parse diagnostics.</p></div><span class="badge ${diagnostics.length?'amber':u.definitionParsed?'green':'blue'}">${diagnostics.length?`${fmt(diagnostics.length)} messages`:u.definitionParsed?'parsed':'partial'}</span></div><div class="udf-evidence-grid"><div>${kv('Definition parsed',u.definitionParsed?'Yes':'No')}${kv('Body parsed',u.bodyParsed?'Yes':'No')}${kv('Resource config',evidence.hasConfig?'Available':'Unavailable')}</div><div>${kv('Private tree',evidence.hasPrivateTree?'Available':'Unavailable')}${kv('Raw details',rawAvailable?'Available':'Not loaded')}${kv('Evidence hits',fmt(attrHits.length+treeHits.length+bindings.length))}</div></div>${bindings.length?`<div class="table-columns-head">Caller slot bindings</div><div class="global-param-matrix compact">${bindings.slice(0,24).map(b=>`<div class="global-param-card"><b>${esc(text(first(b.parameterName,b.name,'')))}</b><small class="udf-param-raw">${esc(text(first(b.callerSlot,b.slot,'')))}</small><span>${esc(text(first(b.callerValue,b.value,b.confidence,'')))}</span></div>`).join('')}</div>`:''}${treeHits.length?`<div class="table-columns-head">Private body hits</div><div class="mini-list">${treeHits.slice(0,10).map(h=>`<div class="mini-row"><span><b>${esc(text(h.role||''))}</b> ${esc(text(h.name||''))}</span><span class="mono">${esc(text(h.path||''))}</span></div>`).join('')}</div>`:''}${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section>`;
 }
 function udfCallerRulesHtml(callers,u){
   const rows=list(callers);
-  if(!rows.length)return '<div class="global-empty-state">No caller rules are mapped for this UDF.</div>';
-  return `<section class="udf-section-card udf-callers-card"><div class="udf-section-head"><div><h4>Caller rules</h4><p>Rules that call this UDF. Open a caller to switch to its page/document rule scope and show configuration.</p></div><span class="badge blue">${fmt(rows.length)} callers</span></div><div class="udf-caller-list">${rows.slice(0,160).map(c=>{
+  if(!rows.length)return '<section class="udf-section-card"><div class="udf-section-head"><div><h4>Caller Rules</h4><p>No caller rules are mapped for this UDF.</p></div><span class="badge neutral">0</span></div></section>';
+  const interfaceNames=effectiveUdfParameterNames(u);
+  return `<section class="udf-section-card udf-callers-card polished"><div class="udf-section-head"><div><h4>Caller Rules</h4><p>Rules that invoke this UDF. Open a row to inspect the configured rule, field-list values, attributes, and action lists.</p></div><span class="badge blue">${fmt(rows.length)} callers</span></div><div class="udf-caller-table"><div class="udf-caller-table-head"><span>Rule</span><span>Scope</span><span>Parameter preview</span><span></span></div>${rows.slice(0,260).map(c=>{
     const node=c.nodeId?model.nodesById.get(String(c.nodeId)):null;
     const scopeId=text(c.scopeId||node?.scopeId||'');
     const nodeId=text(c.nodeId||node?.id||'');
-    const open=nodeId?`<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open config</button>`:'<span class="badge amber">Unlinked</span>';
-    const interfaceNames=effectiveUdfParameterNames(u);
-    const paramPreview=callerParameterEntries(c.parameters||{},interfaceNames).slice(0,3).map(entry=>`${entry.displayName}: ${entry.values.slice(0,2).join(', ')}`).filter(Boolean).join(' · ');
-    return `<div class="udf-caller-row"><div class="udf-caller-main"><b>${esc(c.ruleName||'Unnamed rule')}</b><span>${esc(scopeId)} · ${esc(c.functionName||'UDF call')}</span>${paramPreview?`<small>${esc(paramPreview)}</small>`:''}</div>${open}</div>`;
-  }).join('')}</div>${rows.length>160?`<div class="caption mt-8">Showing first 160 caller rules.</div>`:''}</section>`;
+    const open=nodeId?`<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open</button>`:'<span class="badge amber">Unlinked</span>';
+    const entries=callerParameterEntries(c.parameters||{},interfaceNames);
+    const paramPreview=entries.length?entries.slice(0,4).map(entry=>`<span title="${esc(entry.values.join(', '))}"><b>${esc(entry.displayName)}</b>: ${esc(entry.values.slice(0,2).join(', ')||'(blank)')}</span>`).join(''):'<span class="muted">No parsed parameters</span>';
+    return `<div class="udf-caller-table-row"><div><b>${esc(c.ruleName||'Unnamed rule')}</b><small>${esc(c.functionName||u.rawName||'UDF call')}</small></div><div class="mono">${esc(scopeId||'unscoped')}</div><div class="udf-caller-param-preview">${paramPreview}</div><div>${open}</div></div>`;
+  }).join('')}</div>${rows.length>260?`<div class="caption mt-8">Showing first 260 of ${fmt(rows.length)} caller rules.</div>`:''}</section>`;
 }
 
 function normalizeUdfInternalRules(u,udfName='',callers=[]){
@@ -1623,9 +2035,10 @@ function normalizeUdfInternalRules(u,udfName='',callers=[]){
     const nodeId=text(first(raw.nodeId,raw.NodeId,raw.id,raw.Id,''));
     const scopeId=text(first(raw.scopeId,raw.ScopePath,raw.ScopeId,''));
     const parameters=first(raw.parameters,raw.Parameters,{});
+    const statusResults=list(first(raw.statusResults,raw.StatusResults,raw.actions,raw.ActionNames,[])).map(text).filter(Boolean);
     const key=[nodeId,scopeId,ruleName,functionName,idx].join('|').toLowerCase();
     if(seen.has(key))return;seen.add(key);
-    out.push({ruleName,functionName,scopeId,nodeId,parameters,raw});
+    out.push({ruleName,functionName,scopeId,nodeId,parameters,statusResults,raw});
   }
   const direct=first(u?.internalRules,u?.InternalRules,u?.internalRulePreview,u?.ruleBody,u?.RuleBody,u?.bodyRules,u?.BodyRules,u?.definition?.ruleBody,u?.definition?.rules,[]);
   list(direct).forEach(addRule);
@@ -1646,22 +2059,26 @@ function normalizeUdfInternalRules(u,udfName='',callers=[]){
 }
 function udfInternalRulesHtml(u){
   const rules=list(u.internalRules);
-  if(!rules.length)return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Internal Rules</h4><p>The internal UDF rule body is not present in the current snapshot payload.</p></div><span class="badge blue">0</span></div></section>`;
-  return `<section class="udf-section-card udf-internal-rules-card"><div class="udf-section-head"><div><h4>Internal Rules</h4><p>Rules inside this UDF definition. Linked rules open with the same read-only configuration inspector.</p></div><span class="badge blue">${fmt(rules.length)} rules</span></div><div class="udf-caller-list">${rules.slice(0,160).map((r,i)=>{
+  if(!rules.length)return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Internal Rule Body</h4><p>The internal UDF rule body is not present in the current snapshot payload.</p></div><span class="badge blue">0</span></div></section>`;
+  const interfaceNames=effectiveUdfParameterNames(u);
+  return `<section class="udf-section-card udf-internal-rules-card polished"><div class="udf-section-head"><div><h4>Internal Rule Body</h4><p>Rules inside this UDF definition. Linked rows open with the same read-only configuration inspector.</p></div><span class="badge blue">${fmt(rules.length)} rules</span></div><div class="udf-internal-timeline">${rules.slice(0,220).map((r,i)=>{
     const node=r.nodeId?model.nodesById.get(String(r.nodeId)):null;
     const scopeId=text(r.scopeId||node?.scopeId||'');
     const nodeId=text(r.nodeId||node?.id||'');
-    const interfaceNames=effectiveUdfParameterNames(u);
-    const paramPreview=callerParameterEntries(r.parameters||{},interfaceNames).slice(0,3).map(entry=>`${entry.displayName}: ${entry.values.slice(0,2).join(', ')}`).filter(Boolean).join(' · ');
-    const open=nodeId?`<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open config</button>`:'<span class="badge blue">definition row</span>';
-    return `<div class="udf-caller-row"><div class="udf-caller-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><span>${esc(r.functionName||'no function')}${scopeId?` · ${esc(scopeId)}`:''}</span>${paramPreview?`<small>${esc(paramPreview)}</small>`:''}</div>${open}</div>`;
-  }).join('')}</div>${rules.length>160?`<div class="caption mt-8">Showing first 160 internal rules.</div>`:''}</section>`;
+    const paramPreview=callerParameterEntries(r.parameters||{},interfaceNames).slice(0,3).map(entry=>`<span><b>${esc(entry.displayName)}</b>: ${esc(entry.values.slice(0,2).join(', ')||'(blank)')}</span>`).join('');
+    const open=nodeId?`<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open</button>`:'<span class="badge blue">definition</span>';
+    return `<div class="udf-internal-row"><div class="udf-internal-step">${fmt(i+1)}</div><div class="udf-internal-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><span>${esc(r.functionName||'no function')}${scopeId?` · ${esc(scopeId)}`:''}</span>${paramPreview?`<small>${paramPreview}</small>`:''}</div><div class="udf-internal-actions">${list(r.statusResults).length?`<span class="badge amber">${fmt(list(r.statusResults).length)} statuses</span>`:''}${open}</div></div>`;
+  }).join('')}</div>${rules.length>220?`<div class="caption mt-8">Showing first 220 internal rules.</div>`:''}</section>`;
 }
 
 function globalDetailRecord(){
   if(state.globalDetailKind==='resources')return {kind:'resources',label:'Resource details',row:buildGlobalResourceDefinitions().find(r=>r.key===state.selectedResourceKey)};
   if(state.globalDetailKind==='functions')return {kind:'functions',label:'Function details',row:buildGlobalFunctionDefinitions().find(r=>r.key===state.selectedFunctionName)};
   if(state.globalDetailKind==='drivers')return {kind:'drivers',label:'Driver details',row:buildGlobalDriverDefinitions().find(r=>r.key===state.selectedDriverKey)};
+  if(state.globalDetailKind==='object-graph')return {kind:'object-graph',label:'Object graph node',row:buildObjectGraphDefinitions().find(r=>r.key===state.selectedObjectGraphKey)};
+  if(state.globalDetailKind==='rule-lists')return {kind:'rule-lists',label:'Rule List packet',row:buildRuleListPacketDefinitions().find(r=>r.key===state.selectedRuleListKey)};
+  if(state.globalDetailKind==='selection-lists')return {kind:'selection-lists',label:'SelectionList packet',row:buildSelectionListPacketDefinitions().find(r=>r.key===state.selectedSelectionListName)};
+  if(state.globalDetailKind==='runtime-impact')return {kind:'runtime-impact',label:'Runtime impact row',row:buildRuntimeImpactDefinitions().find(r=>r.key===state.selectedRuntimeImpactKey)};
   if(state.globalDetailKind==='tables'){
     const table=buildGlobalTableDefinitions().find(r=>r.name===state.selectedTableName);
     return table?{kind:'tables',label:'Table details',row:{...table,key:table.name,name:table.name,type:table.hasParsedSchema?'Parsed table':'Table',source:table.inferred?'Derived from rule usage':'FWD payload',usage:list(table.usage)}}:null;
@@ -1749,44 +2166,123 @@ function definitionOriginUi(kind,row){
   };
 }
 
+
+function fweditorKindTitle(kind){
+  const map={
+    resources:'Resources',
+    functions:'Functions',
+    'selection-lists':'SelectionLists',
+    tables:'Tables',
+    drivers:'Drivers',
+    'rule-lists':'Rule Lists',
+    'object-graph':'Object Graph',
+    'runtime-impact':'Runtime Impact',
+    udfs:'User Defined Functions'
+  };
+  return map[kind]||kind;
+}
+function fweditorObjectNoun(kind){
+  const map={
+    resources:'Resource',
+    functions:'Function',
+    'selection-lists':'SelectionList',
+    tables:'Table',
+    drivers:'Driver',
+    'rule-lists':'Rule List',
+    'object-graph':'Object',
+    'runtime-impact':'Runtime Impact',
+    udfs:'UDF'
+  };
+  return map[kind]||'Definition';
+}
+function fweditorDefinitionPath(kind,row){
+  const root=fweditorKindTitle(kind);
+  const type=text(row?.type||fweditorObjectNoun(kind));
+  const name=text(row?.name||row?.key||'Selected definition');
+  return `FWD Tree \\ Resources \\ ${root} \\ ${type} \\ ${name}`;
+}
+function fweditorDefinitionCategory(row){
+  const type=text(row?.type||'Other').trim();
+  return type||'Other';
+}
+function fweditorGlobalViewMenu(activeKind){
+  const views=[
+    ['resources','Resources'],
+    ['functions','Functions'],
+    ['selection-lists','SelectionLists'],
+    ['tables','Tables'],
+    ['udfs','UDFs'],
+    ['rule-lists','Rule Lists'],
+    ['object-graph','Object Graph'],
+    ['runtime-impact','Runtime Impact'],
+    ['drivers','Drivers']
+  ];
+  return `<div class="fweditor-view-strip" role="tablist" aria-label="Editor resource views">${views.map(([view,label])=>`<button class="${view===activeKind?'active':''}" type="button" data-action="view-${esc(view)}" aria-selected="${view===activeKind?'true':'false'}">${esc(label)}</button>`).join('')}</div>`;
+}
+function fweditorDefinitionTreeHtml(kind,rows,selectedKey){
+  const groups=new Map();
+  list(rows).forEach(row=>{
+    const group=fweditorDefinitionCategory(row);
+    if(!groups.has(group))groups.set(group,[]);
+    groups.get(group).push(row);
+  });
+  const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
+  const total=list(rows).length;
+  const body=ordered.map(([group,items])=>{
+    const open=items.some(r=>r.key===selectedKey)||ordered.length<=6;
+    const itemHtml=items.slice(0,600).map(row=>{
+      const selected=row.key===selectedKey;
+      const origin=definitionOriginUi(kind,row);
+      const usage=list(row.usage).length||row.metric||0;
+      const warn=!origin.defined||list(row.messages).length;
+      return `<button class="fweditor-tree-item ${selected?'selected':''}" type="button" data-editor-kind="${esc(kind)}" data-editor-key="${esc(row.key)}" data-def-kind="${esc(kind)}" data-def-key="${esc(row.key)}" title="${esc(row.name)}"><span class="fweditor-tree-glyph">${kind==='functions'?'ƒ':kind==='tables'?'▦':kind==='rule-lists'?'R':kind==='object-graph'?'◇':'◆'}</span><span class="fweditor-tree-label"><b>${esc(row.name)}</b><small>${esc(text(row.source||origin.origin||''))}${usage?` · ${fmt(usage)} usage`:''}</small></span>${warn?'<span class="fweditor-tree-warn">!</span>':''}</button>`;
+    }).join('');
+    const omitted=items.length>600?`<div class="fweditor-note">${fmt(items.length-600)} additional ${esc(group)} items hidden; narrow the search.</div>`:'';
+    return `<details class="fweditor-tree-folder" ${open?'open':''}><summary><span class="fweditor-folder-icon">▾</span><b>${esc(group)}</b><small>${fmt(items.length)}</small></summary><div class="fweditor-tree-children">${itemHtml}${omitted}</div></details>`;
+  }).join('');
+  return `<div class="fweditor-fwd-tree-body"><details class="fweditor-tree-folder" open><summary><span class="fweditor-folder-icon">▾</span><b>Resources</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children"><details class="fweditor-tree-folder nested" open><summary><span class="fweditor-folder-icon">▾</span><b>${esc(fweditorKindTitle(kind))}</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div></details></div>`;
+}
+function fweditorGlobalFactsHtml(kind,row,originUi,usageCount){
+  const facts=[
+    ['Name',esc(text(row.name||row.key||''))],
+    ['Object type',esc(text(row.type||fweditorObjectNoun(kind)))],
+    ['Definition state',esc(text(originUi.status||originUi.badge||''))],
+    ['Source',esc(text(row.source||originUi.origin||''))],
+    ['Usage / references',fmt(usageCount)],
+    ['Key / handle',esc(text(row.key||''))]
+  ];
+  return `<fieldset class="fweditor-fieldset"><legend>General</legend><div class="fweditor-property-grid">${facts.map(([k,v])=>`<label>${esc(k)}</label><div>${v}</div>`).join('')}</div></fieldset>`;
+}
+function fweditorGlobalMessageWindowHtml(kind,selected,rows,originUi){
+  const messages=[];
+  const usage=list(selected?.usage).length||selected?.metric||0;
+  messages.push({sev:originUi.defined?'Info':'Warning',object:text(selected?.name||fweditorKindTitle(kind)),message:originUi.caption||originUi.status||'Definition loaded.'});
+  messages.push({sev:'Info',object:fweditorKindTitle(kind),message:`${fmt(rows.length)} ${fweditorObjectNoun(kind).toLowerCase()} definition rows shown. ${fmt(usage)} references on the selected item.`});
+  list(selected?.messages).slice(0,8).forEach(m=>messages.push({sev:'Warning',object:text(selected?.name||''),message:text(m)}));
+  return `<section class="fweditor-message-window ${state.editorMessageExpanded?'expanded':''}" aria-label="Message Window"><div class="fweditor-message-title"><span>Message Window</span><button class="fweditor-title-button" type="button" data-action="toggle-editor-message">${state.editorMessageExpanded?'Collapse':'Expand'}</button></div><table class="fweditor-message-table"><thead><tr><th>Sev</th><th>Object</th><th>Message</th></tr></thead><tbody>${messages.map(r=>`<tr><td><span class="sev ${lower(r.sev)}">${esc(r.sev)}</span></td><td>${esc(r.object)}</td><td>${esc(r.message)}</td></tr>`).join('')}</tbody></table></section>`;
+}
+function fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml){
+  const title=fweditorKindTitle(kind);
+  const noun=fweditorObjectNoun(kind);
+  const detail=detailHtml(selected);
+  return `<section class="fweditor-config-window" aria-label="Configuration Window"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div><div class="fweditor-form-pages"><button class="active" type="button">General</button><button type="button">Usage</button><button type="button">Evidence</button><button type="button">Raw</button></div>${fweditorGlobalFactsHtml(kind,selected,originUi,usageCount)}<fieldset class="fweditor-fieldset"><legend>${esc(noun)} Configuration</legend><div class="fweditor-definition-body">${detail}</div></fieldset></div></section>`;
+}
 function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,detailHtml){
   const q=lower(state.query).trim();
   if(q){
     rows=rows.filter(row=>definitionSearchText(row).includes(q));
   }
   if(!rows.length){
-    const hero=workspaceHeroHtml({eyebrow:'Global definitions',title:copy.title||'Definitions',caption:copy.body||copy.emptyBody||'No matching definitions.'});
-    $('content').innerHTML=workspacePageHtml(kind,hero,workspaceSectionHtml(copy.emptyTitle,emptyHtml(copy.emptyTitle,copy.emptyBody),{caption:'Try clearing search or choosing another definition group.'}));
+    $('content').innerHTML=`<section class="fweditor-root fweditor-global-root empty"><div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Window</span><span>Help</span><b>Read-only FormWorks Editor Viewer</b></div><div class="fweditor-empty big">${esc(copy.emptyTitle||'No definitions found')} - ${esc(copy.emptyBody||'Clear search or choose another resource group.')}</div></section>`;
     return;
   }
   const selected=rows.find(r=>r.key===selectedKey)||rows[0];
   state[stateKey]=selected.key;
   const originUi=definitionOriginUi(kind,selected);
-  const exceptionalOrigin=!originUi.defined;
-  const withUsage=rows.filter(r=>list(r.usage).length>0).length;
-  const summaryLabel=kind==='udfs'?'UDFs':kind==='functions'?'functions':'definitions';
-  const usageLabel=kind==='udfs'?'with callers':kind==='functions'?'observed':'used';
-  const metricLabel=kind==='udfs'?'caller rules':kind==='functions'?'observed rules':'usage';
-  const originBadge=`<span class="badge ${esc(originUi.badgeTone)}">${esc(originUi.badge)}</span>`;
-  const detailSub=originUi.eyebrow;
   const usageCount=list(selected.usage).length||selected.metric||0;
-  const hero=workspaceHeroHtml({
-    eyebrow:'Global definitions',
-    title:copy.title||kind,
-    caption:copy.body||'Browse shared FWD definitions and their rule usage.',
-    metrics:[
-      {label:summaryLabel,value:fmt(rows.length),tone:'blue'},
-      {label:usageLabel,value:fmt(withUsage),tone:'teal'},
-      {label:'selected usage',value:fmt(usageCount),tone:usageCount?'amber':'neutral'}
-    ],
-    actions:`<button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Open full details</button>`
-  });
-  const facts=`<div class="global-detail-facts global-detail-facts-hero"><span><b>Type</b>${esc(selected.type)}</span>${exceptionalOrigin?`<span><b>Status</b>${esc(originUi.status)}</span><span><b>Evidence</b>${esc(originUi.origin)}</span>`:`<span><b>Origin</b>${esc(originUi.origin)}</span>`}<span><b>${kind==='udfs'?'Callers':kind==='functions'?'Observed by':'Used by'}</b>${fmt(usageCount)}</span></div>`;
-  const selectedHead=`<div class="global-detail-head polished"><div><div class="workspace-eyebrow">${esc(detailSub)}</div><h3>${esc(selected.name)}</h3><p>${esc(originUi.caption)}</p></div><div class="tree-detail-badges">${originBadge}<span class="badge blue">${fmt(usageCount)} ${metricLabel}</span></div></div>`;
-  const detail=`${selectedHead}${facts}<div class="definition-detail-body">${detailHtml(selected)}</div>`;
-  const body=`<div class="global-explorer global-explorer-${esc(kind)} polished"><aside class="global-index-panel workspace-card">${definitionListHtml(kind,rows,selected.key)}</aside><section class="global-detail-panel workspace-card workspace-card-primary">${detail}<div class="global-detail-actions"><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Full details</button></div></section></div>`;
-  $('content').innerHTML=workspacePageHtml(kind,hero,body,{split:true});
+  $('content').innerHTML=`<section class="fweditor-root fweditor-global-root" aria-label="FormWorks Editor style ${esc(fweditorKindTitle(kind))} view"><div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FormWorks Editor Viewer</b></div><div class="fweditor-workarea fweditor-global-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FWD Tree"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(rows.length)}</b><span>${esc(fweditorKindTitle(kind))}</span></div><div class="fweditor-filter-note">Use the command search above to filter this tree.</div></div>${fweditorDefinitionTreeHtml(kind,rows,selected.key)}</aside>${fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml)}</div>${fweditorGlobalMessageWindowHtml(kind,selected,rows,originUi)}</section>`;
 }
+
 function renderGlobalResourceDefinitions(){
   renderGlobalDefinitionExplorer('resources',buildGlobalResourceDefinitions(),state.selectedResourceKey,'selectedResourceKey',{title:'Resources',body:'Global resources are shared definitions. The main panel stays focused on identity, graph membership, and usage status.',emptyTitle:'No resources found',emptyBody:'No FWD resources or usage-derived resources were discovered.'},row=>`${objectGraphPreviewHtml(row)}<div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}`);
 }
@@ -1892,6 +2388,138 @@ function renderGlobalFunctionDefinitions(){
   renderGlobalDefinitionExplorer('functions',rows,state.selectedFunctionName,'selectedFunctionName',{title:'Functions',body:'AC functions are first-class rule operations with parameters, status results, behavior flags, and runtime UX impact.',emptyTitle:'No functions found',emptyBody:'No function definitions or rule usage were discovered.'},row=>{
     return `${functionConfigurationHtml(row.fn,row)}<div class="table-columns-head">Used By</div>${usagePreviewHtml(row.usage)}<div class="table-columns-head">Raw preview</div>${previewJsonHtml(row.fn,{maxDepth:3,maxArray:50,maxKeys:70,maxChars:14000})}`;
   });
+}
+
+function buildSelectionListPacketDefinitions(){
+  return list(model.fwd?.selectionLists?.items).map(item=>{
+    const name=text(item.name);
+    const usage=list(item.usageLinks).map(u=>({
+      scopeId:text(u.scopeId),
+      ruleName:text(u.ruleName||'SelectionList usage'),
+      functionName:text(u.functionName||''),
+      node:u.ruleNodeId?model.nodesById.get(String(u.ruleNodeId)):null,
+      nodeId:text(u.ruleNodeId||''),
+      target:name,
+      targetType:'SelectionList',
+      relationshipKind:text(u.relationshipKind||'UsesTable'),
+      matchLevel:text(first(u.confidence,item.confidence,'High')),
+      rel:u
+    }));
+    const fieldCount=list(item.matchFields).length+list(item.plugFields).length+list(item.columns).length;
+    return {
+      key:name,
+      name,
+      type:text(first(item.tableDriver,item.resourceType,'SelectionList')),
+      source:text(first(item.source,'SelectionList packet')),
+      defined:first(item.canonical,true)===true,
+      metric:fieldCount,
+      usage,
+      selectionList:item,
+      searchBlob:[name,item.resourceType,item.tableDriver,item.source,list(item.matchFields).map(f=>f.name).join(' '),list(item.plugFields).map(f=>f.name).join(' '),list(item.options).map(o=>`${o.role} ${o.name} ${o.value}`).join(' ')].join(' ')
+    };
+  }).filter(row=>row.name).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+function selectionListFieldRowsHtml(title,rows,tone='blue'){
+  const fields=list(rows);
+  if(!fields.length)return '';
+  return `<div class="table-columns-head">${esc(title)}</div><div class="table-columns-grid">${fields.slice(0,140).map(field=>`<div class="table-column-row"><div class="table-col-name">${esc(text(field.name||field.Name||''))}</div><div class="table-col-meta"><span class="badge ${esc(tone)}">${esc(text(first(field.role,title)))}</span><span class="mono">${esc(text(first(field.confidence,field.matchLevel,'parsed')))}</span></div></div>`).join('')}</div>${fields.length>140?`<div class="caption mt-8">Showing first 140 ${esc(title.toLowerCase())}.</div>`:''}`;
+}
+function selectionListOptionsHtml(options){
+  const rows=list(options);
+  if(!rows.length)return '<div class="global-empty-state compact">No SelectionList options were extracted.</div>';
+  return `<div class="mini-list">${rows.slice(0,80).map(option=>`<div class="mini-row"><span><b>${esc(text(first(option.role,option.name,'Option')))}</b> ${esc(text(first(option.name,'')))}</span><span class="mono">${esc(text(first(option.value,option.source,'')))}</span></div>`).join('')}</div>`;
+}
+function selectionListPacketDetailHtml(row){
+  const item=row.selectionList||{};
+  const facts=[
+    ['Resource type',esc(text(first(item.resourceType,row.type,'SelectionList')))],
+    ['Table driver',esc(text(first(item.tableDriver,'SelectionList')))],
+    ['Schema',first(item.schemaParsed,false)?'Parsed':'Not parsed'],
+    ['Options',first(item.optionsParsed,false)?`${fmt(list(item.options).length)} parsed`:'Not parsed'],
+    ['Match fields',fmt(list(item.matchFields).length)],
+    ['Plug fields',fmt(list(item.plugFields).length)],
+    ['Columns',fmt(list(item.columns).length)],
+    ['Usage links',fmt(list(row.usage).length)]
+  ];
+  const diagnostics=list(item.diagnostics).map(text).filter(Boolean);
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>SelectionList Packet</h4><p>Canonical table-backed SelectionList definition with match fields, plug fields, options, and resource evidence.</p></div><span class="badge ${first(item.schemaParsed,false)?'green':'amber'}">${first(item.schemaParsed,false)?'schema parsed':'needs parser'}</span></div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${diagnostics.length?`<div class="table-columns-head">Diagnostics</div>${functionTokenStripHtml(diagnostics,'amber')}`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Fields</h4><p>Match fields, plug fields, and parsed columns from SelectionList resource evidence.</p></div><span class="badge blue">${fmt(row.metric)} fields</span></div>${selectionListFieldRowsHtml('Match fields',item.matchFields,'blue')}${selectionListFieldRowsHtml('Plug fields',item.plugFields,'green')}${selectionListFieldRowsHtml('Columns',item.columns,'amber')}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Options / Behaviors</h4><p>Persistence, rerun, prompt/keyer, no-good-match, enter, plug, and reject signals when present.</p></div><span class="badge blue">${fmt(list(item.options).length)} options</span></div>${selectionListOptionsHtml(item.options)}</section><div class="table-columns-head">Usage preview</div>${usagePreviewHtml(row.usage)}<div class="table-columns-head">Resource evidence</div>${previewJsonHtml({resourceEvidence:item.resourceEvidence,rawResourceDetails:item.rawResourceDetails},{maxDepth:4,maxArray:50,maxKeys:80,maxChars:16000})}<div class="table-columns-head">Raw packet</div>${previewJsonHtml(item,{maxDepth:4,maxArray:70,maxKeys:90,maxChars:18000})}`;
+}
+function renderSelectionListPacketDefinitions(){
+  renderGlobalDefinitionExplorer('selection-lists',buildSelectionListPacketDefinitions(),state.selectedSelectionListName,'selectedSelectionListName',{title:'SelectionLists',body:'Canonical SelectionList/table packet with match fields, plug fields, options, resource evidence, and static usage links.',emptyTitle:'No SelectionLists found',emptyBody:'No canonical SelectionList packet was loaded.'},selectionListPacketDetailHtml);
+}
+
+function nodeForRuntimeImpact(row){
+  const guid=text(first(row.ruleGuid,row.RuleGuid,'')).trim().toLowerCase();
+  const scopeId=text(first(row.scopeId,row.ScopePath,'')).trim();
+  const ruleName=text(first(row.ruleName,row.RuleName,'')).trim().toLowerCase();
+  const functionName=text(first(row.functionName,row.FunctionName,'')).trim().toLowerCase();
+  if(guid){
+    const byGuid=model.nodes.find(n=>text(n.RuleGuid).trim().toLowerCase()===guid&&(!scopeId||n.scopeId===scopeId));
+    if(byGuid)return byGuid;
+  }
+  return model.nodes.find(n=>n.scopeId===scopeId&&lower(n.title)===ruleName&&(!functionName||lower(n.fn)===functionName))||null;
+}
+function runtimeImpactKey(row,index){
+  return [text(first(row.scopeId,row.ScopePath,'')),text(first(row.ruleGuid,row.RuleGuid,'')),text(first(row.ruleName,row.RuleName,'')),text(first(row.functionName,row.FunctionName,'')),index].join('|');
+}
+function buildRuntimeImpactDefinitions(){
+  return list(model.fwd?.runtimeImpact?.items).map((item,index)=>{
+    const node=nodeForRuntimeImpact(item);
+    const key=runtimeImpactKey(item,index);
+    const usage=node?[{scopeId:node.scopeId,ruleName:node.title,functionName:node.fn,node,target:text(first(item.impactType,'')),targetType:'RuntimeImpact',relationshipKind:text(first(item.summary,'Static impact'))}]:[];
+    const flags=list(item.behaviorFlags).map(text).filter(Boolean);
+    const targets=list(item.relationshipTargets);
+    return {
+      key,
+      name:`${text(first(item.ruleName,'Unnamed rule'))} - ${text(first(item.functionName,'No function'))}`,
+      type:text(first(item.impactType,item.schemaProfile?.mutationKind,'RuntimeImpact')),
+      source:text(first(item.schemaProfile?.source,'Runtime impact packet')),
+      defined:true,
+      metric:flags.length+targets.length,
+      usage,
+      impact:item,
+      node,
+      searchBlob:[key,item.scopeId,item.ruleName,item.ruleGuid,item.functionName,item.impactType,item.summary,flags.join(' '),JSON.stringify(targets)].join(' ')
+    };
+  }).sort((a,b)=>a.type.localeCompare(b.type,undefined,{sensitivity:'base'})||a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+}
+function runtimeSchemaProfileHtml(profile){
+  if(!profile||typeof profile!=='object')return '<div class="global-empty-state compact">No schema profile was exported for this impact row.</div>';
+  const rows=[
+    ['Mutation kind',esc(text(profile.mutationKind||''))],
+    ['Reads fields',profile.readsFields?'Yes':'No'],
+    ['Writes fields',profile.writesFields?'Yes':'No'],
+    ['Uses table',profile.usesTable?'Yes':'No'],
+    ['Calls UDF',profile.callsUdf?'Yes':'No'],
+    ['Operator work',profile.createsOperatorWork?'Yes':'No'],
+    ['Branches rule flow',profile.branchesRuleFlow?'Yes':'No'],
+    ['Runtime only',profile.runtimeOnly?'Yes':'No'],
+    ['Source',esc(text(profile.source||''))]
+  ];
+  return `<div class="kv">${rows.map(([k,v])=>kv(k,v)).join('')}</div>`;
+}
+function relationshipTargetsHtml(targets){
+  const rows=list(targets);
+  if(!rows.length)return '<div class="global-empty-state compact">No relationship targets were attached to this impact row.</div>';
+  return `<div class="mini-list">${rows.slice(0,80).map(target=>`<div class="mini-row"><span><b>${esc(text(first(target.Kind,target.kind,'Uses')))}</b> ${relationshipTargetHtml({target:first(target.Target,target.target,''),targetType:first(target.TargetType,target.targetType,''),kind:first(target.Kind,target.kind,''),ParameterRole:first(target.ParameterRole,target.parameterRole,''),FunctionName:''})}</span><span class="mono">${esc(text(first(target.ParameterName,target.parameterName,target.Confidence,target.confidence,'')))}</span></div>`).join('')}</div>`;
+}
+function runtimeImpactDetailHtml(row){
+  const impact=row.impact||{};
+  const node=row.node;
+  const flags=list(impact.behaviorFlags).map(text).filter(Boolean);
+  const facts=[
+    ['Scope',esc(text(first(impact.scopeId,node?.scopeId,'')))],
+    ['Rule',esc(text(first(impact.ruleName,node?.title,'')))],
+    ['Function',esc(text(first(impact.functionName,node?.fn,'')))],
+    ['Impact type',esc(row.type||'RuntimeImpact')],
+    ['Targets',fmt(list(impact.relationshipTargets).length)],
+    ['Native execution',esc(text(first(impact.notProven,'Not simulated')))]
+  ];
+  const open=node?`<button class="btn" type="button" data-node="${esc(node.id)}" data-node-scope="${esc(node.scopeId)}">Open Rule</button>`:'<span class="badge amber">Unlinked</span>';
+  return `<section class="udf-section-card"><div class="udf-section-head"><div><h4>Runtime Impact Packet</h4><p>Static function-specific impact model for a configured rule. This does not claim native AC execution.</p></div>${open}</div><div class="kv">${facts.map(([k,v])=>kv(k,v)).join('')}</div>${impact.summary?`<div class="notice compact"><div class="notice-icon">i</div><div><b>Summary</b><br>${esc(text(impact.summary))}</div></div>`:''}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Behavior Flags</h4><p>Function catalog flags and static relationship evidence.</p></div><span class="badge blue">${fmt(flags.length)} flags</span></div>${functionTokenStripHtml(flags,'blue','No behavior flags were exported.')}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Schema Profile</h4><p>Function-specific static model used to infer operator/runtime impact.</p></div><span class="badge blue">${esc(text(first(impact.schemaProfile?.mutationKind,row.type,'Impact')))}</span></div>${runtimeSchemaProfileHtml(impact.schemaProfile)}</section><section class="udf-section-card"><div class="udf-section-head"><div><h4>Relationship Targets</h4><p>Fields, attributes, tables, UDFs, reject messages, and options touched by this rule.</p></div><span class="badge blue">${fmt(list(impact.relationshipTargets).length)} targets</span></div>${relationshipTargetsHtml(impact.relationshipTargets)}</section><div class="table-columns-head">Raw impact row</div>${previewJsonHtml(impact,{maxDepth:4,maxArray:80,maxKeys:100,maxChars:20000})}`;
+}
+function renderRuntimeImpactDefinitions(){
+  renderGlobalDefinitionExplorer('runtime-impact',buildRuntimeImpactDefinitions(),state.selectedRuntimeImpactKey,'selectedRuntimeImpactKey',{title:'Runtime Impact',body:'Static function-specific impact rows with behavior flags, relationship targets, and rule links. Native AC execution is not simulated.',emptyTitle:'No runtime impact rows found',emptyBody:'No runtime-impact packet was loaded.'},runtimeImpactDetailHtml);
 }
 
 // Build global table definitions and inferred column names from relationship co-occurrence.
@@ -2226,32 +2854,167 @@ function passesUdfFilter(row){
   if(state.udfFilter==='relationship-only')return !row.defined&&list(row.rules).length>0;
   return true;
 }
-function renderUdfMasterDetail(){
-  const allRows=buildUdfDefinitions().sort((a,b)=>a.displayName.localeCompare(b.displayName,undefined,{sensitivity:'base'}));
-  const rows=allRows.filter(passesUdfFilter);
-  if(!rows.length){
-    $('content').innerHTML=`<section class="global-explorer global-explorer-udfs">${udfFilterBarHtml()}${emptyHtml('No user defined functions match','Choose a broader UDF filter or clear search.')}</section>`;
-    return;
-  }
-  const selected=rows.find(r=>r.key===state.selectedUdfName)||rows[0];
-  state.selectedUdfName=selected.key;
+
+// Render UDFs in a guide-aligned FWEditor layout rather than the generic workbench shell.
+function udfEditorPathText(u){
+  return `FWD / Resources / Function / ${udfShortName(u)}`;
+}
+function udfEditorTreeNodeHtml(u,selectedKey){
+  const active=u.key===selectedKey;
+  const callers=udfCallerCount(u);
+  const warningCount=list(u.messages).length+(u.definitionParsed?0:1);
+  return `<button class="fweditor-tree-item ${active?'selected':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="fweditor-tree-glyph">ƒ</span><span class="fweditor-tree-label"><b>${esc(udfShortName(u))}</b><small>${esc(u.type||'Function')}${callers?` · ${fmt(callers)} caller${callers===1?'':'s'}`:''}</small></span>${warningCount?`<span class="fweditor-tree-warn" title="Definition or parse messages">!</span>`:''}</button>`;
+}
+function udfEditorTreeHtml(rows,selectedKey){
   const groups=new Map();
-  rows.forEach(r=>{
-    const rhs=r.displayName.includes(': ')?r.displayName.split(': ').slice(1).join(': '):r.displayName;
-    const idx=rhs.indexOf('_');
-    const groupKey=idx>0?`${rhs.slice(0,idx)}_`:'Other';
-    if(!groups.has(groupKey))groups.set(groupKey,[]);
-    groups.get(groupKey).push(r);
+  list(rows).forEach(u=>{
+    const key=udfPrefix(u);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(u);
   });
   const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
-  const udfExplorerRows=rows.map(r=>({key:r.key,name:r.displayName,type:r.type,source:r.source||'Candidate definition',defined:r.defined,metric:list(r.callerRules).length,usage:list(r.callerRules).map(c=>({scopeId:c.scopeId,ruleName:c.ruleName,functionName:c.functionName,node:c.nodeId?model.nodesById.get(String(c.nodeId)):null,target:'',targetType:'UDF caller',relationshipKind:'Calls'})),udf:r}));
-  renderGlobalDefinitionExplorer('udfs',udfExplorerRows,state.selectedUdfName,'selectedUdfName',{title:'User Defined Functions',body:'UDF references and definitions found in the snapshot. Reference-only rows still show caller inventory even when the canonical UDF body/signature was not exported.',emptyTitle:'No UDFs found',emptyBody:'No UDF candidates match the current filter.'},row=>{
-    const u=row.udf;
-    const callers=list(u.callerRules);
-    return `<div class="udf-detail-stack">${udfFilterBarHtml()}${udfInterfaceHtml(u,callers)}${udfEvidenceHtml(u)}${udfInternalRulesHtml(u)}${udfCallerRulesHtml(callers,u)}</div>`;
+  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FWD Tree UDF resources"><details open class="fweditor-tree-folder root"><summary><span class="fweditor-folder-icon">▾</span>FWD</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Resources</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Function <b>${fmt(rows.length)}</b></summary>${ordered.map(([group,items],idx)=>`<details class="fweditor-tree-folder nested" ${items.some(x=>x.key===selectedKey)||idx<6?'open':''}><summary><span class="fweditor-folder-icon">▾</span>${esc(group)} <b>${fmt(items.length)}</b></summary><div class="fweditor-tree-children">${items.map(u=>udfEditorTreeNodeHtml(u,selectedKey)).join('')}</div></details>`).join('')}</details></details></details></div>`;
+}
+function udfEditorDefinitionStateHtml(u){
+  const pieces=[
+    u.defined?'FWD-defined':'Reference-only',
+    udfStatusLabel(u),
+    u.source||'FWD resource',
+    u.classification||''
+  ].map(text).filter(Boolean);
+  return pieces.map((p,i)=>`<span class="fweditor-state-chip ${i===0?'primary':''}">${esc(p)}</span>`).join('');
+}
+function udfEditorGeneralHtml(u,callers){
+  const rows=[
+    ['Name',`<span class="mono">${esc(udfShortName(u))}</span>`],
+    ['Raw resource name',u.rawName?`<span class="mono">${esc(u.rawName)}</span>`:'<span class="muted">not exported</span>'],
+    ['Resource type',esc(u.type||'Function')],
+    ['Definition source',esc(u.source||'FWD resource')],
+    ['Definition parsed',u.definitionParsed?'Yes':'No'],
+    ['Body parsed',u.bodyParsed?'Yes':'No'],
+    ['Caller rules',fmt(callers.length)],
+    ['Field-list parameters',fmt(udfParamCount(u))],
+    ['Status results',fmt(list(u.statusResults).length)],
+    ['Internal rules',fmt(list(u.internalRules).length)]
+  ];
+  return `<fieldset class="fweditor-fieldset"><legend>General</legend><div class="fweditor-property-grid">${rows.map(([k,v])=>`<label>${esc(k)}</label><div>${v}</div>`).join('')}</div></fieldset>`;
+}
+function udfEditorParameterTableHtml(u,callers){
+  const interfaceNames=effectiveUdfParameterNames(u);
+  const byName=new Map();
+  interfaceNames.forEach((name,index)=>{
+    const key=text(name)||`Field List ${index+1}`;
+    if(!byName.has(key))byName.set(key,{name:key,slot:`ParamList${index}`,callers:new Set(),values:new Map(),sources:new Set()});
   });
-  return;
+  list(callers).forEach(c=>callerParameterEntries(c.parameters||{},interfaceNames).forEach(entry=>{
+    const key=entry.displayName||entry.rawName;
+    if(!byName.has(key))byName.set(key,{name:key,slot:entry.rawName,callers:new Set(),values:new Map(),sources:new Set()});
+    const row=byName.get(key);
+    row.callers.add(text(c.ruleName||c.nodeId||'caller'));
+    row.sources.add(entry.rawName);
+    entry.values.forEach(v=>{const value=text(v);row.values.set(value,(row.values.get(value)||0)+1);});
+  }));
+  const rows=[...byName.values()].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}));
+  if(!rows.length)return `<fieldset class="fweditor-fieldset"><legend>Field List Parameters</legend><div class="fweditor-empty">No named UDF parameters or caller-observed field-list bindings were extracted.</div></fieldset>`;
+  return `<fieldset class="fweditor-fieldset"><legend>Field List Parameters</legend><table class="fweditor-grid"><thead><tr><th>Parameter</th><th>FWD slot</th><th>Caller use</th><th>Observed field-list values</th></tr></thead><tbody>${rows.map(row=>{
+    const values=[...row.values.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5).map(([v,c])=>`${v||'(blank)'} (${fmt(c)})`).join(', ');
+    return `<tr><td><b>${esc(row.name)}</b></td><td class="mono">${esc([...row.sources].join(', ')||row.slot||'')}</td><td>${fmt(row.callers.size)}</td><td>${esc(values||'not observed')}</td></tr>`;
+  }).join('')}</tbody></table></fieldset>`;
+}
+function udfEditorStatusResultsHtml(u){
+  const rows=list(u.statusResults).map((x,i)=>({ordinal:i,token:text(x),description:''}));
+  if(!rows.length)return `<fieldset class="fweditor-fieldset"><legend>Status Results</legend><div class="fweditor-empty">No advertised UDF status results were extracted.</div></fieldset>`;
+  return `<fieldset class="fweditor-fieldset"><legend>Status Results</legend><table class="fweditor-grid compact"><thead><tr><th>Ordinal</th><th>Token</th><th>Action List use</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${fmt(r.ordinal)}</td><td><span class="mono">${esc(r.token)}</span></td><td>Mapped when used by caller rules</td></tr>`).join('')}</tbody></table></fieldset>`;
+}
+function udfEditorCallerRulesHtml(callers,u){
+  const rows=list(callers);
+  if(!rows.length)return `<fieldset class="fweditor-fieldset"><legend>Caller Rules</legend><div class="fweditor-empty">No caller rules are mapped for this UDF.</div></fieldset>`;
+  const interfaceNames=effectiveUdfParameterNames(u);
+  return `<fieldset class="fweditor-fieldset"><legend>Caller Rules</legend><table class="fweditor-grid caller-grid"><thead><tr><th>Rule</th><th>Scope</th><th>Field-list bindings</th><th></th></tr></thead><tbody>${rows.slice(0,350).map(c=>{
+    const node=c.nodeId?model.nodesById.get(String(c.nodeId)):null;
+    const scopeId=text(c.scopeId||node?.scopeId||'');
+    const nodeId=text(c.nodeId||node?.id||'');
+    const bindings=callerParameterEntries(c.parameters||{},interfaceNames).slice(0,5).map(entry=>`${entry.displayName}: ${entry.values.slice(0,2).join(', ')||'(blank)'}`).join('; ');
+    const open=nodeId?`<button class="fweditor-command-button small" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open Rule</button>`:'<span class="fweditor-state-chip">Unlinked</span>';
+    return `<tr><td><b>${esc(c.ruleName||'Unnamed rule')}</b><small>${esc(c.functionName||u.rawName||'UDF call')}</small></td><td class="mono">${esc(scopeId||'unscoped')}</td><td>${esc(bindings||'No parsed parameters')}</td><td>${open}</td></tr>`;
+  }).join('')}</tbody></table>${rows.length>350?`<div class="fweditor-note">Showing first 350 of ${fmt(rows.length)} caller rules.</div>`:''}</fieldset>`;
+}
+function udfEditorInternalRuleTreeHtml(u){
+  const rules=list(u.internalRules);
+  if(!rules.length)return `<fieldset class="fweditor-fieldset"><legend>Rule List</legend><div class="fweditor-empty">The internal UDF Rule List was not present in the current snapshot payload.</div></fieldset>`;
+  const interfaceNames=effectiveUdfParameterNames(u);
+  return `<fieldset class="fweditor-fieldset"><legend>Rule List</legend><div class="fweditor-rule-list" role="tree" aria-label="UDF internal rule list">${rules.slice(0,260).map((r,i)=>{
+    const node=r.nodeId?model.nodesById.get(String(r.nodeId)):null;
+    const scopeId=text(r.scopeId||node?.scopeId||'');
+    const nodeId=text(r.nodeId||node?.id||'');
+    const paramPreview=callerParameterEntries(r.parameters||{},interfaceNames).slice(0,3).map(entry=>`${entry.displayName}: ${entry.values.slice(0,2).join(', ')||'(blank)'}`).join('; ');
+    const open=nodeId?`<button class="fweditor-command-button small" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open</button>`:'<span class="fweditor-state-chip">definition</span>';
+    return `<div class="fweditor-rule-row" role="treeitem"><span class="fweditor-rule-index">${fmt(i+1)}</span><span class="fweditor-rule-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><small>${esc(r.functionName||'no function')}${scopeId?` · ${esc(scopeId)}`:''}${paramPreview?` · ${esc(paramPreview)}`:''}</small></span><span class="fweditor-rule-actions">${list(r.statusResults).length?`<span class="fweditor-state-chip">${fmt(list(r.statusResults).length)} status</span>`:''}${open}</span></div>`;
+  }).join('')}</div>${rules.length>260?`<div class="fweditor-note">Showing first 260 internal rules.</div>`:''}</fieldset>`;
+}
+function udfEditorEvidenceHtml(u){
+  const evidence=u.resourceEvidence||{};
+  const diagnostics=list(u.messages).map(text).filter(Boolean);
+  const rows=[
+    ['Definition parsed',u.definitionParsed?'Yes':'No'],
+    ['Body parsed',u.bodyParsed?'Yes':'No'],
+    ['Resource config',evidence.hasConfig?'Available':'Unavailable'],
+    ['Private tree',evidence.hasPrivateTree?'Available':'Unavailable'],
+    ['Raw details',u.rawResourceDetails?'Available':'Not loaded'],
+    ['Diagnostics',fmt(diagnostics.length)]
+  ];
+  return `<fieldset class="fweditor-fieldset"><legend>Evidence</legend><div class="fweditor-property-grid evidence">${rows.map(([k,v])=>`<label>${esc(k)}</label><div>${esc(v)}</div>`).join('')}</div>${diagnostics.length?`<div class="fweditor-diagnostic-list">${diagnostics.slice(0,20).map(m=>`<div class="fweditor-message-row warn"><span>Warning</span><b>${esc(m)}</b></div>`).join('')}</div>`:''}</fieldset>`;
+}
 
+function udfEditorActiveTab(){
+  const tab=text(state.udfEditorTab||'general');
+  return ['general','parameters','callers','rule-list','messages'].includes(tab)?tab:'general';
+}
+function udfEditorTabsHtml(){
+  const active=udfEditorActiveTab();
+  const tabs=[
+    ['general','General'],
+    ['parameters','Parameters'],
+    ['callers','Callers'],
+    ['rule-list','Rule List'],
+    ['messages','Messages']
+  ];
+  return `<div class="fweditor-form-pages" role="tablist" aria-label="UDF configuration pages">${tabs.map(([key,label])=>`<button class="${key===active?'active':''}" type="button" role="tab" data-udf-tab="${esc(key)}" aria-selected="${key===active?'true':'false'}">${esc(label)}</button>`).join('')}</div>`;
+}
+function udfEditorActivePanelHtml(u,callers){
+  const active=udfEditorActiveTab();
+  if(active==='parameters')return udfEditorParameterTableHtml(u,callers);
+  if(active==='callers')return udfEditorCallerRulesHtml(callers,u);
+  if(active==='rule-list')return `${udfEditorStatusResultsHtml(u)}${udfEditorInternalRuleTreeHtml(u)}`;
+  if(active==='messages')return udfEditorEvidenceHtml(u);
+  return `${udfEditorGeneralHtml(u,callers)}${udfEditorParameterTableHtml(u,callers)}`;
+}
+function udfEditorMessageWindowHtml(selected,allRows,filteredRows){
+  const selectedMessages=list(selected?.messages).map(text).filter(Boolean);
+  const inventoryWarnings=list(allRows).filter(r=>list(r.messages).length||!r.definitionParsed).length;
+  const rows=[];
+  if(selectedMessages.length){selectedMessages.slice(0,12).forEach(m=>rows.push({sev:'Warning',item:udfShortName(selected),message:m}));}
+  if(!selectedMessages.length)rows.push({sev:'Info',item:udfShortName(selected),message:'Selected UDF loaded. Static viewer does not execute AC rules or prove runtime outcomes.'});
+  rows.push({sev:'Info',item:'Inventory',message:`${fmt(filteredRows.length)} UDFs shown from ${fmt(allRows.length)} extracted UDF definitions. ${fmt(inventoryWarnings)} have parse warnings or pending body/interface evidence.`});
+  return `<section class="fweditor-message-window ${state.editorMessageExpanded?'expanded':''}" aria-label="Message Window"><div class="fweditor-message-title"><span>Message Window</span><button class="fweditor-title-button" type="button" data-action="toggle-editor-message">${state.editorMessageExpanded?'Collapse':'Expand'}</button></div><table class="fweditor-message-table"><thead><tr><th>Sev</th><th>Object</th><th>Message</th></tr></thead><tbody>${rows.map(r=>`<tr><td><span class="sev ${lower(r.sev)}">${esc(r.sev)}</span></td><td>${esc(r.item)}</td><td>${esc(r.message)}</td></tr>`).join('')}</tbody></table></section>`;
+}
+function udfEditorConfigurationWindowHtml(u,callers){
+  return `<section class="fweditor-config-window" aria-label="Configuration Window"><div class="fweditor-window-titlebar"><span>User Defined Function - ${esc(udfShortName(u))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(udfEditorPathText(u))}</span>${udfEditorDefinitionStateHtml(u)}</div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">Function Resource</div><h2>${esc(udfShortName(u))}</h2><p>User Defined Function interface, field-list parameters, status results, caller rules, internal Rule List evidence, and extraction messages.</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="udfs">Details</button></div>${udfEditorTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${udfEditorActivePanelHtml(u,callers)}</div></div></section>`;
+}
+
+function renderUdfMasterDetail(){
+  const allRows=buildUdfDefinitions().sort((a,b)=>udfShortName(a).localeCompare(udfShortName(b),undefined,{sensitivity:'base'}));
+  const q=lower(state.query).trim();
+  const searched=q?allRows.filter(r=>udfDefinitionSearchText(r).includes(q)):allRows;
+  const rows=searched.filter(passesUdfFilter);
+  const selected=rows.find(r=>r.key===state.selectedUdfName)||rows[0]||allRows[0]||null;
+  if(selected)state.selectedUdfName=selected.key;
+  if(!selected){
+    $('content').innerHTML=`<section class="fweditor-udf-root empty"><div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Window</span><span>Help</span></div><div class="fweditor-empty big">No UDF definitions were discovered. Verify /api/v1/fwd/udfs and regenerate the FWD sidecar.</div></section>`;
+    return;
+  }
+  const callers=list(selected.callerRules);
+  $('content').innerHTML=`<section class="fweditor-udf-root" aria-label="FormWorks Editor style UDF view"><div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FormWorks Editor Viewer</b></div><div class="fweditor-udf-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FWD Tree"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(rows.length)}</b><span>UDF resources</span></div>${udfFilterBarHtml(allRows)}</div>${udfEditorTreeHtml(rows,selected.key)}</aside>${udfEditorConfigurationWindowHtml(selected,callers)}</div>${udfEditorMessageWindowHtml(selected,allRows,rows)}</section>`;
 }
 
 function renderDomainCatalog(title,rows,caption){
@@ -2300,6 +3063,7 @@ function treeRow(n,level){
 }
 function renderNoData(){
   const detail=bootState.detail||'No FWD snapshot files could be loaded.';
+  document.body.classList.add('no-scope-selector');
   $('sourceSubtitle').textContent='No snapshot data available';
   $('statusPill').innerHTML='<span class="dot warn"></span><span>FWD load failed</span>';
   const banner=optionalElement('globalErrorBanner');
@@ -2308,7 +3072,12 @@ function renderNoData(){
     banner.hidden=false;
   }
   $('globalNav').innerHTML='';
-  $('scopeList').innerHTML=emptyHtml('No scopes available','Generate a snapshot or verify the FWD path.');
+  const scopeHost=optionalElement('scopeList');
+  if(scopeHost){
+    scopeHost.hidden=true;
+    scopeHost.setAttribute('aria-hidden','true');
+    scopeHost.innerHTML='';
+  }
   $('content').innerHTML=emptyHtml('No FWD structure found',detail);
   optionalElement('diagnosticsDock')?.replaceChildren();
 }
@@ -2767,7 +3536,7 @@ function requestedWorkspaceView(){
     const href=text(window.location?.href||'');
     const match=href.match(/[?&]view=([^&#]+)/i);
     const view=match?decodeURIComponent(match[1].replace(/\+/g,' ')):'';
-    return ['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(view)?view:'';
+    return validWorkspaceViews().includes(view)?view:'';
   }catch{return '';}
 }
 function noteRecentScope(scopeId){const id=text(scopeId);if(!id)return;state.recentScopes=[id,...state.recentScopes.filter(x=>x!==id)].slice(0,6);}
@@ -2786,9 +3555,15 @@ function saveState(){
     selectedResourceKey:state.selectedResourceKey,
     selectedFunctionName:state.selectedFunctionName,
     selectedDriverKey:state.selectedDriverKey,
+    selectedObjectGraphKey:state.selectedObjectGraphKey,
+    selectedRuleListKey:state.selectedRuleListKey,
+    selectedSelectionListName:state.selectedSelectionListName,
+    selectedRuntimeImpactKey:state.selectedRuntimeImpactKey,
     selectedProcessName:state.selectedProcessName,
     selectedTableName:state.selectedTableName,
     selectedUdfName:state.selectedUdfName,
+    udfEditorTab:state.udfEditorTab,
+    editorMessageExpanded:state.editorMessageExpanded,
     udfFilter:state.udfFilter,
     paneLeftWidth:state.paneLeftWidth,
     paneRightWidth:state.paneRightWidth,
@@ -2809,7 +3584,7 @@ function restoreSnapshotState(){
   if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;
   if(saved.treeFilter)state.treeFilter=saved.treeFilter;
   if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;
-  state.workspaceView=['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(saved.workspaceView)?saved.workspaceView:'structure';
+  state.workspaceView=validWorkspaceViews().includes(saved.workspaceView)?saved.workspaceView:'structure';
   state.workspaceView=requestedWorkspaceView()||state.workspaceView;
   state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';
   state.inventoryFilter=['all','StructuralMatch','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:state.inventoryFilter;
@@ -2818,9 +3593,15 @@ function restoreSnapshotState(){
   state.selectedResourceKey=text(saved.selectedResourceKey||'');
   state.selectedFunctionName=text(saved.selectedFunctionName||'');
   state.selectedDriverKey=text(saved.selectedDriverKey||'');
+  state.selectedObjectGraphKey=text(saved.selectedObjectGraphKey||'');
+  state.selectedRuleListKey=text(saved.selectedRuleListKey||'');
+  state.selectedSelectionListName=text(saved.selectedSelectionListName||'');
+  state.selectedRuntimeImpactKey=text(saved.selectedRuntimeImpactKey||'');
   state.selectedProcessName=text(saved.selectedProcessName||'');
   state.selectedTableName=text(saved.selectedTableName||'');
   state.selectedUdfName=text(saved.selectedUdfName||'');
+  state.udfEditorTab=['general','parameters','callers','rule-list','messages'].includes(saved.udfEditorTab)?saved.udfEditorTab:state.udfEditorTab;
+  state.editorMessageExpanded=saved.editorMessageExpanded===true;
   state.udfFilter=['all','with-callers','defined','unparsed','relationship-only'].includes(saved.udfFilter)?saved.udfFilter:state.udfFilter;
   state.paneLeftWidth=Number.isFinite(Number(saved.paneLeftWidth))?Number(saved.paneLeftWidth):state.paneLeftWidth;
   state.paneRightWidth=Number.isFinite(Number(saved.paneRightWidth))?Number(saved.paneRightWidth):state.paneRightWidth;
@@ -2837,6 +3618,19 @@ function renderContextActionMenu(contextLabel){
   return '';
 }
 function renderInspector(){
+  if(isEditorMode()){
+    const title=optionalElement('inspectorTitle');
+    const caption=optionalElement('inspectorCaption');
+    const tabs=optionalElement('inspectorTabs');
+    const body=optionalElement('inspectorBody');
+    if(title)title.textContent='';
+    if(caption)caption.textContent='';
+    if(tabs)tabs.innerHTML='';
+    if(body)body.innerHTML='';
+    document.body.classList.remove('inspector-open');
+    syncActionAvailability();
+    return;
+  }
   const b=selectedBranch();
   const n=selectedNode();
   const inventoryRow=selectedInventory();
@@ -2925,13 +3719,17 @@ function searchKindLabel(kind){
     Message:'Diagnostics',
     Function:'Functions',
     Table:'Tables',
+    SelectionList:'SelectionLists',
     UDF:'UDFs',
+    RuleList:'Rule Lists',
+    ObjectGraph:'Object Graph',
+    RuntimeImpact:'Runtime Impact',
     Resource:'Resources',
     Driver:'Drivers'
   })[kind]||'Other';
 }
 function searchKindRank(kind){
-  return ({StructuralRule:1,Scope:2,ActionList:3,Function:4,UDF:5,Table:6,Reference:7,Message:8,Resource:9,Driver:10})[kind]||99;
+  return ({StructuralRule:1,Scope:2,ActionList:3,Function:4,UDF:5,SelectionList:6,Table:7,RuleList:8,ObjectGraph:9,RuntimeImpact:10,Reference:11,Message:12,Resource:13,Driver:14})[kind]||99;
 }
 function addGlobalDefinitionSearchRows(rows,q,kind,view,defs){
   list(defs).forEach(row=>{
@@ -2960,8 +3758,12 @@ function searchResults(){
   }
   try{
     addGlobalDefinitionSearchRows(rows,q,'Function','functions',buildGlobalFunctionDefinitions());
+    addGlobalDefinitionSearchRows(rows,q,'SelectionList','selection-lists',buildSelectionListPacketDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Table','tables',buildGlobalTableDefinitions().map(t=>({...t,key:t.name,type:t.hasParsedSchema?'Parsed table':'Table',metric:list(t.usage).length})));
     addGlobalDefinitionSearchRows(rows,q,'UDF','udfs',buildUdfDefinitions().map(u=>({...u,name:u.displayName||u.key,type:u.type||'UDF',metric:list(u.callerRules).length,usage:u.callerRules})));
+    addGlobalDefinitionSearchRows(rows,q,'RuleList','rule-lists',buildRuleListPacketDefinitions());
+    addGlobalDefinitionSearchRows(rows,q,'ObjectGraph','object-graph',buildObjectGraphDefinitions());
+    addGlobalDefinitionSearchRows(rows,q,'RuntimeImpact','runtime-impact',buildRuntimeImpactDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Resource','resources',buildGlobalResourceDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Driver','drivers',buildGlobalDriverDefinitions());
   }catch(error){
@@ -3020,28 +3822,121 @@ function globalNavigationCounts(){
   return {
     resources:first(definedCounts.resourceTypes,domainRowsByView('resources').length),
     functions:first(model.fwd?.functions?.count,domainRowsByView('functions').length),
+    selectionLists:first(model.fwd?.selectionLists?.count,buildSelectionListPacketDefinitions().length),
     tables:first(model.fwd?.selectionLists?.count,model.fwd?.tables?.count,definedCounts.tables,tableDefs.length),
     drivers:domainRowsByView('drivers').length,
-    udfs:buildUdfDefinitions().length
+    udfs:buildUdfDefinitions().length,
+    ruleLists:first(model.fwd?.ruleLists?.count,buildRuleListPacketDefinitions().length),
+    objectGraph:first(list(model.fwd?.objectGraph?.nodes).length,list(model.fwd?.editorModel?.objectGraph?.nodes).length,0),
+    runtimeImpact:first(model.fwd?.runtimeImpact?.count,buildRuntimeImpactDefinitions().length)
   };
+}
+function activeGlobalDefinitionKey(kind){
+  if(kind==='resources')return state.selectedResourceKey;
+  if(kind==='functions')return state.selectedFunctionName;
+  if(kind==='selection-lists')return state.selectedSelectionListName;
+  if(kind==='drivers')return state.selectedDriverKey;
+  if(kind==='tables')return state.selectedTableName;
+  if(kind==='udfs')return state.selectedUdfName;
+  if(kind==='rule-lists')return state.selectedRuleListKey;
+  if(kind==='object-graph')return state.selectedObjectGraphKey;
+  if(kind==='runtime-impact')return state.selectedRuntimeImpactKey;
+  return '';
+}
+function compactGlobalDefinitionRowHtml(kind,row,options={}){
+  const key=text(first(row?.key,row?.name,''));
+  const name=text(first(row?.name,row?.displayName,key));
+  if(!kind||!key||!name)return '';
+  const active=state.workspaceView===kind&&activeGlobalDefinitionKey(kind)===key;
+  const meta=text(first(row?.type,row?.source,options.meta,''));
+  const count=Number(first(row?.metric,row?.count,row?.ruleCount,row?.scopeCount,''));
+  const countHtml=Number.isFinite(count)&&count>0?`<span class="global-view-count">${fmt(count)}</span>`:'';
+  const title=`Open ${kind.replace('-', ' ')} definition: ${name}${meta?` (${meta})`:''}`;
+  return `<button class="global-view-row child definition-tree-row ${active?'active':''}" type="button" data-editor-kind="${esc(kind)}" data-editor-key="${esc(key)}" data-def-kind="${esc(kind)}" data-def-key="${esc(key)}" aria-current="${active?'true':'false'}" title="${esc(title)}"><span class="global-view-name"><b>${esc(name)}</b>${meta?`<small>${esc(meta)}</small>`:''}</span>${countHtml}</button>`;
+}
+function compactGlobalDefinitionSectionHtml(kind,title,rows,options={}){
+  const all=list(rows).filter(r=>text(first(r?.key,r?.name,'')).trim());
+  if(!all.length)return '';
+  const limit=Number(first(options.limit,12))||12;
+  const active=state.workspaceView===kind;
+  const visible=all.slice(0,limit);
+  const more=all.length-visible.length;
+  const rowHtml=visible.map(row=>compactGlobalDefinitionRowHtml(kind,row,options)).join('');
+  const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-${esc(kind)}" title="Open full ${esc(title)} catalog"><span class="global-view-name">Show ${fmt(more)} more...</span><span class="global-view-count">↗</span></button>`:'';
+  return `<details class="scope-section global-inventory-section" ${active?'open':''}><summary><span>${esc(title)}</span><span class="section-count">${fmt(all.length)}</span></summary><div class="scope-section-body">${rowHtml}${moreHtml}</div></details>`;
+}
+function compactResourceBucketTreeHtml(){
+  const resources=buildGlobalResourceDefinitions();
+  if(!resources.length)return '';
+  const byType=new Map();
+  resources.forEach(row=>{
+    const type=text(row.type||'Resource');
+    if(!byType.has(type))byType.set(type,[]);
+    byType.get(type).push(row);
+  });
+  const sections=[...byType.entries()]
+    .sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}))
+    .slice(0,8)
+    .map(([type,rows],index)=>{
+      const sorted=rows.slice().sort((a,b)=>(Number(first(b.metric,0))-Number(first(a.metric,0)))||text(a.name).localeCompare(text(b.name),undefined,{sensitivity:'base'}));
+      const visible=sorted.slice(0,10);
+      const more=sorted.length-visible.length;
+      const active=state.workspaceView==='resources'&&sorted.some(r=>r.key===state.selectedResourceKey);
+      const rowHtml=visible.map(row=>compactGlobalDefinitionRowHtml('resources',row,{meta:type})).join('');
+      const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(more)} more ${esc(type)}...</span><span class="global-view-count">↗</span></button>`:'';
+      return `<details class="scope-section global-inventory-section" ${(active||index<2)?'open':''}><summary><span>${esc(type)}</span><span class="section-count">${fmt(sorted.length)}</span></summary><div class="scope-section-body">${rowHtml}${moreHtml}</div></details>`;
+    });
+  const remaining=Math.max(0,byType.size-8);
+  const remainingHtml=remaining?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(remaining)} more resource type buckets...</span><span class="global-view-count">↗</span></button>`:'';
+  return `<details class="scope-section global-inventory-root" ${state.workspaceView==='resources'?'open':''}><summary><span>Resource Types</span><span class="section-count">${fmt(resources.length)}</span></summary><div class="scope-section-body">${sections.join('')}${remainingHtml}</div></details>`;
+}
+function renderGlobalInventoryTreeBlock(){
+  if(!model?.fwd)return '';
+  // Do not pre-slice global inventory packets here. compactGlobalDefinitionSectionHtml() handles
+  // the visible row limit while preserving the true total count in the left rail.
+  const functionRows=buildGlobalFunctionDefinitions();
+  const selectionRows=buildSelectionListPacketDefinitions();
+  const tableRows=buildGlobalTableDefinitions();
+  const udfRows=buildUdfDefinitions().map(row=>({key:row.key,name:row.displayName||row.name||row.key,type:row.type||'UDF',metric:list(row.callerRules).length}));
+  const driverRows=buildGlobalDriverDefinitions();
+  const packetRows=buildRuleListPacketDefinitions();
+  const objectRows=buildObjectGraphDefinitions();
+  const runtimeRows=buildRuntimeImpactDefinitions();
+  const body=[
+    compactResourceBucketTreeHtml(),
+    compactGlobalDefinitionSectionHtml('udfs','UDFs',udfRows,{limit:32}),
+    compactGlobalDefinitionSectionHtml('tables','Tables / SelectionLists',tableRows,{limit:24}),
+    compactGlobalDefinitionSectionHtml('selection-lists','SelectionLists',selectionRows,{limit:10}),
+    compactGlobalDefinitionSectionHtml('functions','Functions',functionRows,{limit:24}),
+    compactGlobalDefinitionSectionHtml('drivers','Drivers',driverRows,{limit:8}),
+    compactGlobalDefinitionSectionHtml('rule-lists','Rule Lists',packetRows,{limit:8}),
+    compactGlobalDefinitionSectionHtml('object-graph','Object Graph',objectRows,{limit:8}),
+    compactGlobalDefinitionSectionHtml('runtime-impact','Runtime Impact',runtimeRows,{limit:8})
+  ].filter(Boolean).join('');
+  return body||'<div class="muted compact-left-note">No global inventory packets are loaded yet.</div>';
 }
 function renderGlobalNavigation(){
   const el=$('globalNav');
   if(!el)return;
-  if(!model){el.innerHTML='';return;}
+  if(isEditorMode()||!model){el.innerHTML='';return;}
   const counts=globalNavigationCounts();
   function globalNavRow(action,label,count,title){
     const view=action.replace(/^view-/,'');
     const active=state.workspaceView===view;
     return `<button class="global-view-row ${active?'active':''}" type="button" data-action="${esc(action)}" aria-current="${active?'true':'false'}" title="${esc(title)}"><span class="global-view-name">${esc(label)}</span><span class="global-view-count">${fmt(count)}</span></button>`;
   }
-  el.innerHTML=`<div class="fwd-tree-root"><b>FWD Tree</b><span>Pages, documents, batches, processes, resources, raw/STC evidence</span></div>${renderObjectTreeBlock()}<div class="scope-group global-nav-heading"><span>Resources</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
+  el.innerHTML=`<div class="fwd-tree-root"><b>FWD Tree</b><span>Pages, documents, batches, processes, resources, raw/STC evidence</span></div>${renderObjectTreeBlock()}<div class="scope-group global-nav-heading"><span>Canonical Packets</span></div><div class="global-view-list" role="group" aria-label="Canonical FormWorks packet views">${[
+    globalNavRow('view-rule-lists','Rule Lists',counts.ruleLists,'Snapshot-wide Rule Lists, Status Results, and Action Lists'),
+    globalNavRow('view-object-graph','Object Graph',counts.objectGraph,'Canonical FWD object graph nodes and edges'),
+    globalNavRow('view-selection-lists','SelectionLists',counts.selectionLists,'Canonical SelectionList packet'),
+    globalNavRow('view-runtime-impact','Runtime Impact',counts.runtimeImpact,'Static runtime/operator impact packet')
+  ].join('')}</div><div class="scope-group global-nav-heading"><span>Definition Views</span></div><div class="global-view-list" role="group" aria-label="Global resource definition views">${[
     globalNavRow('view-resources','Resources',counts.resources,'FWD-level resource buckets and definitions'),
     globalNavRow('view-functions','Functions',counts.functions,'AC function catalog and observed rule usage'),
     globalNavRow('view-tables','Tables',counts.tables,'Global table definitions and rule usage'),
     globalNavRow('view-udfs','UDFs',counts.udfs,'Global User Defined Functions and caller rules'),
     globalNavRow('view-drivers','Drivers',counts.drivers,'Driver definitions and process-private driver findings')
-  ].join('')}</div>`;
+  ].join('')}</div><div class="scope-group global-nav-heading"><span>Global Inventory</span></div><div class="global-view-list global-inventory-tree" role="tree" aria-label="Global FWD inventory tree">${renderGlobalInventoryTreeBlock()}</div>`;
 }
 
 function renderObjectTreeBlock(){
@@ -3106,53 +4001,17 @@ function applyEditorNavPreset(target){
   renderAll();
 }
 function renderScopes(){
-  const q=lower(state.scopeQuery).trim();
-  let kind=lower(state.scopeKindFilter||'all');
-  if(kind==='warning')kind='all';
-  const rows=model.scopes.filter(s=>{
-    if(kind==='page'&&!/page/i.test(text(s.kind)))return false;
-    if(kind==='document'&&!/document|doc/i.test(text(s.kind)))return false;
-    if(q&&!`${lower(s.name)} ${lower(s.scopeId)} ${lower(s.kind)}`.includes(q))return false;
-    return true;
-  });
-  const scopeSearchEl=optionalElement('scopeSearch');
-  if(scopeSearchEl)scopeSearchEl.value=state.scopeQuery;
-  document.querySelectorAll('[data-scope-filter]').forEach(btn=>{
-    const active=btn.dataset.scopeFilter===state.scopeKindFilter;
-    btn.classList.toggle('active',active);
-    btn.setAttribute('aria-pressed',active?'true':'false');
-  });
-  const recentRows=state.recentScopes.map(id=>model.scopes.find(s=>s.scopeId===id)).filter(Boolean);
-  const recentEl=optionalElement('recentScopes');
-  if(recentEl)recentEl.innerHTML=recentRows.length?recentRows.map(s=>`<button class="recent-scope-btn ${s.scopeId===state.scopeId?'active':''}" type="button" data-scope="${esc(s.scopeId)}" title="${esc(s.scopeId)}">${esc(s.name)}</button>`).join(''):'';
-  // Render a scope row button for a single scope entry.
-  function scopeRowHtml(s){
-    const active=s.scopeId===state.scopeId;
-    const icon=/page/i.test(text(s.kind))?'▣':/document|doc/i.test(text(s.kind))?'▤':'▦';
-    const cls=scopeHealthClass(s);
-    const label=scopeHealthLabel(s);
-    const flatText=s.flatOnly?`${fmt(s.flatOnly)} unlinked flat`:'all linked';
-    return `<button class="scope-row ${active?'active':''} health-${cls}" type="button" data-scope="${esc(s.scopeId)}" aria-current="${active?'true':'false'}"><span class="scope-icon" aria-hidden="true">${icon}</span><span class="scope-row-main"><span class="scope-name">${esc(s.name)}</span><span class="scope-row-meta">${esc(s.scopeId)}</span><span class="scope-row-meta-strip"><span class="mini-health ${cls}">${esc(label)}</span><span>${fmt(s.structural)} structural</span><span>${flatText}</span></span></span></button>`;
-  }
-  function scopeSectionHtml(title,rows,open=true){
-    if(!rows.length)return '';
-    return `<details class="scope-section scope-section-scopes" ${open?'open':''}><summary><span>${esc(title)}</span><span class="section-count">${fmt(rows.length)}</span></summary><div class="scope-section-body">${rows.map(scopeRowHtml).join('')}</div></details>`;
-  }
-  if(!rows.length){
-    $('scopeList').innerHTML=emptyHtml('No scopes match','Adjust the scope filter or search.');
-  } else {
-    // Separate rows into Documents first, then Pages, then everything else in nested sections.
-    const docs=rows.filter(s=>/document|doc/i.test(text(s.kind)));
-    const pages=rows.filter(s=>/page/i.test(text(s.kind)));
-    const other=rows.filter(s=>!/document|doc|page/i.test(text(s.kind)));
-    const parts=[];
-    parts.push('<div class="scope-group"><span>Rule Scopes</span></div>');
-    parts.push(scopeSectionHtml('Document Rule Scopes',docs,true));
-    parts.push(scopeSectionHtml('Page Rule Scopes',pages,true));
-    parts.push(scopeSectionHtml('Other Rule Scopes',other,false));
-    $('scopeList').innerHTML=parts.join('');
-  }
+  const scopeHost=optionalElement('scopeList');
+  if(!scopeHost)return;
+  // The left rail is intentionally no longer a scope selector.
+  // Rule lists/scopes remain accessible through the Global Inventory > Rule Lists view
+  // and through selected-rule/detail actions, but the bulky Document/Page scope picker is hidden.
+  document.body.classList.add('no-scope-selector');
+  scopeHost.hidden=true;
+  scopeHost.setAttribute('aria-hidden','true');
+  scopeHost.innerHTML='';
 }
+
 function jumpToSearchResult(r){
   if(!r)return;
   closeSearchPopover();
@@ -3168,9 +4027,13 @@ function jumpToSearchResult(r){
     state.workspaceView=r.view;
     if(r.view==='resources')state.selectedResourceKey=r.key;
     else if(r.view==='functions')state.selectedFunctionName=r.key;
+    else if(r.view==='selection-lists')state.selectedSelectionListName=r.key;
     else if(r.view==='drivers')state.selectedDriverKey=r.key;
     else if(r.view==='tables')state.selectedTableName=r.key;
     else if(r.view==='udfs')state.selectedUdfName=r.key;
+    else if(r.view==='rule-lists')state.selectedRuleListKey=r.key;
+    else if(r.view==='object-graph')state.selectedObjectGraphKey=r.key;
+    else if(r.view==='runtime-impact')state.selectedRuntimeImpactKey=r.key;
     document.body.classList.remove('inspector-open');
     renderAll();
     return;
@@ -3183,17 +4046,17 @@ function jumpToSearchResult(r){
 function normalizeWorkspaceViewForScope(){
   const scope=currentScope();
   if(!scope)return;
-  if(!['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
+  if(!validWorkspaceViews().includes(state.workspaceView))state.workspaceView='structure';
   if(state.selectedProcessName&&!processNamesForScope(scope).some(name=>lower(name)===lower(state.selectedProcessName)))state.selectedProcessName='';
 }
-function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
+function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
 function renderTop(){
+  document.body.classList.add('no-scope-selector');
   const banner=optionalElement('globalErrorBanner');
   if(banner&&bootState.phase!=='failed')banner.hidden=true;
   document.body.classList.toggle('is-loading',!model||bootState.phase==='loading');
   document.body.classList.toggle('is-loaded',!!model&&bootState.phase!=='loading');
-  document.body.dataset.workspaceView=state.workspaceView||'structure';
-  document.body.classList.toggle('global-workspace',isGlobalDefinitionView());
+  setEditorModeClasses();
   if(!model||bootState.phase==='loading'){
     $('sourceSubtitle').textContent='Loading FWD snapshot...';
     $('statusPill').innerHTML='<span class="dot warn"></span><span>Snapshot loading</span>';
@@ -3436,7 +4299,7 @@ function wireOnboardingChecklist(){
     dismissBtn.addEventListener('click',()=>dismissOnboardingChecklist());
   }
 }
-function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act==='view-structure'||act==='view-field-resolution'||act==='view-messages'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='toggle-editor-message'){e.preventDefault();state.editorMessageExpanded=!state.editorMessageExpanded;renderContent();saveState();return;}if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act.startsWith('view-')&&validWorkspaceViews().includes(act.replace(/^view-/,''))){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
   document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch')applyQueryInput(e.target.value,e.target.id);});
   document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderDiagnosticsDock();renderViewbar();return;}});
@@ -3510,7 +4373,7 @@ function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.tar
 }
 function wireTableSelection(){document.addEventListener('click',e=>{const tableName=e.target.closest('[data-table-name]')?.dataset.tableName;if(!tableName)return;state.selectedTableName=tableName;renderContent();saveState();});}
 function wireUdfSelection(){document.addEventListener('click',e=>{const udfName=e.target.closest('[data-udf-name]')?.dataset.udfName;if(!udfName)return;state.selectedUdfName=udfName;renderContent();saveState();});}
-function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const row=e.target.closest('[data-global-kind][data-global-key]');if(!row)return;const kind=row.dataset.globalKind,key=row.dataset.globalKey;if(kind==='resources')state.selectedResourceKey=key;else if(kind==='functions')state.selectedFunctionName=key;else if(kind==='drivers')state.selectedDriverKey=key;else if(kind==='tables')state.selectedTableName=key;else if(kind==='udfs')state.selectedUdfName=key;else return;e.preventDefault();renderContent();saveState();});}
+function wireGlobalDefinitionSelection(){document.addEventListener('click',e=>{const row=e.target.closest('[data-global-kind][data-global-key]');if(!row)return;const kind=row.dataset.globalKind,key=row.dataset.globalKey;if(kind==='resources')state.selectedResourceKey=key;else if(kind==='functions')state.selectedFunctionName=key;else if(kind==='selection-lists')state.selectedSelectionListName=key;else if(kind==='drivers')state.selectedDriverKey=key;else if(kind==='tables')state.selectedTableName=key;else if(kind==='udfs')state.selectedUdfName=key;else if(kind==='rule-lists')state.selectedRuleListKey=key;else if(kind==='object-graph')state.selectedObjectGraphKey=key;else if(kind==='runtime-impact')state.selectedRuntimeImpactKey=key;else return;e.preventDefault();renderContent();saveState();});}
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.branch-row[data-branch]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.branch&&state.selectedId===r.dataset.branch));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.branch)selectBranch(row.dataset.branch);row.focus();}
 function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const branch=active?.closest?.('[data-branch]')?.dataset.branch;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(branch)selectBranch(branch);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(branch){state.collapsedBranches.has(branch)?state.collapsedBranches.delete(branch):state.collapsedBranches.add(branch);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseBranchesForNode(node));}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(branch)state.collapsedBranches.delete(branch);else if(node){state.expanded.add(node);collapseBranchesForNode(node);}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(branch)state.collapsedBranches.add(branch);else if(node)state.expanded.delete(node);renderContent();renderDiagnosticsDock();renderInspector();return;}}

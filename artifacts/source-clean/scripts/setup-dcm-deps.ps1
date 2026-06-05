@@ -1,0 +1,179 @@
+<#
+.SYNOPSIS
+  Finds FormWorks/DCM managed and native DLLs and prepares this harness.
+
+.DESCRIPTION
+  - Copies compile-time managed .NET DLLs into .\lib.
+  - Finds native DLL directories and writes .\scripts\runtime-path.generated.ps1.
+  - Optionally copies native DLLs into .\native for local runtime use.
+
+.EXAMPLE
+  .\scripts\setup-dcm-deps.ps1
+
+.EXAMPLE
+  .\scripts\setup-dcm-deps.ps1 -RriRoot C:\rri -DcmBinRoot C:\rri\ddce\bin -CopyNative
+#>
+[CmdletBinding()]
+param(
+    [string]$HarnessRoot = "",
+    [string]$RriRoot = "",
+    [string]$DcmBinRoot = "C:\rri\ddce\bin",
+    [switch]$CopyNative,
+    [switch]$PreferNewest
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+$scriptRoot = if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+if ([string]::IsNullOrWhiteSpace($HarnessRoot)) {
+    $HarnessRoot = (Resolve-Path (Join-Path $scriptRoot "..")).Path
+}
+if ([string]::IsNullOrWhiteSpace($RriRoot)) {
+    $RriRoot = Join-Path $HarnessRoot "rri_bin"
+}
+
+function Write-Section([string]$Text) {
+    Write-Host ""
+    Write-Host $Text -ForegroundColor Cyan
+    Write-Host ("=" * $Text.Length) -ForegroundColor DarkCyan
+}
+
+function Find-OneDll {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$Root,
+        [Parameter(Mandatory=$true)][string]$Name,
+        [switch]$Newest
+    )
+
+    $items = @()
+    foreach ($candidateRoot in $Root) {
+        if (-not (Test-Path -LiteralPath $candidateRoot)) {
+            continue
+        }
+
+        $items += @(Get-ChildItem -Path $candidateRoot -Recurse -Filter $Name -File -ErrorAction SilentlyContinue)
+    }
+
+    if (-not $items) { return $null }
+
+    if ($Newest) {
+        return $items | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    }
+
+    # Prefer R2023Q3 SP1 paths when present, otherwise the first stable path.
+    $preferred = $items | Where-Object { $_.FullName -match "R2023Q3" -and $_.FullName -match "SP1" } | Select-Object -First 1
+    if ($preferred) { return $preferred }
+
+    return $items | Select-Object -First 1
+}
+
+$managedDlls = @(
+    "rribase_net.dll",
+    "rrifwd_net.dll",
+    "rridc_net.dll",
+    "rriwf2_net.dll",
+    "FormWorks.Core.dll",
+    "FormWorks.Versioning.dll"
+)
+
+$nativeDlls = @(
+    "rribase.dll",
+    "rrifwd.dll",
+    "rridc.dll",
+    "rriwf2.dll"
+)
+
+$libDir = Join-Path $HarnessRoot "lib"
+$nativeDir = Join-Path $HarnessRoot "native"
+$repoRriBin = Join-Path $HarnessRoot "rri_bin"
+New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+$managedSearchRoots = @($repoRriBin, $libDir, $RriRoot, $DcmBinRoot) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+$nativeSearchRoots = @($repoRriBin, $DcmBinRoot, $RriRoot) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+Write-Section "Copying managed .NET DLLs to lib"
+$missingManaged = New-Object System.Collections.Generic.List[string]
+foreach ($dll in $managedDlls) {
+    $found = Find-OneDll -Root $managedSearchRoots -Name $dll -Newest:$PreferNewest
+    if (-not $found) {
+        $missingManaged.Add($dll)
+        Write-Host "MISSING: $dll" -ForegroundColor Red
+        continue
+    }
+
+    $dest = Join-Path $libDir $dll
+    Copy-Item -Path $found.FullName -Destination $dest -Force
+    Write-Host "Copied $dll" -ForegroundColor Green
+    Write-Host "  from: $($found.FullName)" -ForegroundColor DarkGray
+    Write-Host "  to  : $dest" -ForegroundColor DarkGray
+}
+
+Write-Section "Finding native DLL runtime directories"
+$nativeDirs = New-Object System.Collections.Generic.HashSet[string]([System.StringComparer]::OrdinalIgnoreCase)
+$missingNative = New-Object System.Collections.Generic.List[string]
+
+foreach ($dll in $nativeDlls) {
+    $found = Find-OneDll -Root $nativeSearchRoots -Name $dll -Newest:$PreferNewest
+
+    if (-not $found) {
+        $missingNative.Add($dll)
+        Write-Host "MISSING: $dll" -ForegroundColor Red
+        continue
+    }
+
+    [void]$nativeDirs.Add($found.DirectoryName)
+    Write-Host "Found $dll" -ForegroundColor Green
+    Write-Host "  at: $($found.FullName)" -ForegroundColor DarkGray
+}
+
+if ($CopyNative) {
+    Write-Section "Copying native DLLs to native folder"
+    New-Item -ItemType Directory -Force -Path $nativeDir | Out-Null
+    foreach ($dll in $nativeDlls) {
+        $found = Find-OneDll -Root $nativeSearchRoots -Name $dll -Newest:$PreferNewest
+        if ($found) {
+            Copy-Item -Path $found.FullName -Destination (Join-Path $nativeDir $dll) -Force
+            Write-Host "Copied $dll to $nativeDir" -ForegroundColor Green
+        }
+    }
+    [void]$nativeDirs.Add($nativeDir)
+}
+
+$runtimePathScript = Join-Path $scriptRoot "runtime-path.generated.ps1"
+[void]$nativeDirs.Add($repoRriBin)
+[void]$nativeDirs.Add($libDir)
+$escapedDirs = $nativeDirs | ForEach-Object { $_.Replace("'", "''") }
+$pathLines = $escapedDirs | ForEach-Object { "    '$_'" }
+if (-not $pathLines) { $pathLines = @() }
+
+@"
+# Auto-generated by setup-dcm-deps.ps1.
+# Dot-source this file before running AcRuleWorkbench.exe.
+`$DcmNativeDirs = @(
+$($pathLines -join ",`r`n")
+)
+foreach (`$dir in `$DcmNativeDirs) {
+    if (`$dir -and (Test-Path `$dir)) {
+        `$env:PATH = "`$dir;`$env:PATH"
+    }
+}
+"@ | Set-Content -Path $runtimePathScript -Encoding UTF8
+
+Write-Section "Summary"
+Write-Host "Harness root: $HarnessRoot"
+Write-Host "Managed lib : $libDir"
+Write-Host "PATH helper : $runtimePathScript"
+
+if ($missingManaged.Count -gt 0) {
+    Write-Host "Missing managed DLLs: $($missingManaged -join ', ')" -ForegroundColor Red
+}
+
+if ($missingNative.Count -gt 0) {
+    Write-Host "Missing native DLLs: $($missingNative -join ', ')" -ForegroundColor Yellow
+}
+
+if ($missingManaged.Count -gt 0) {
+    exit 2
+}
+
+Write-Host "Setup complete. Next: .\scripts\build-and-doctor.ps1" -ForegroundColor Green

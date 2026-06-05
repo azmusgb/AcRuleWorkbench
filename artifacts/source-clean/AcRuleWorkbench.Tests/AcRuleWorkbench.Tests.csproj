@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AssemblyName>AcRuleWorkbench.Tests</AssemblyName>
+    <RootNamespace>AcRuleWorkbench.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AcRuleWorkbench.Core\AcRuleWorkbench.Core.csproj" />
+    <ProjectReference Include="..\AcRuleWorkbench\AcRuleWorkbench.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="2.2.8" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.2.8" />
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
+  </ItemGroup>
+
+  <!-- NOTE: Removed custom target that deleted the MSTest adapter from test output.
+       The MSTest.TestAdapter assembly shipped by the NuGet package must remain next to the test
+       assembly so the .NET Framework test host (testhost.net48.x86.exe) can load the adapter
+       and discover MSTest tests. If blocked-assembly issues appear on CI or other machines,
+       prefer unblocking the files or adding loadFromRemoteSources in the test host config rather
+       than removing the adapter entirely. -->
+
+</Project>
