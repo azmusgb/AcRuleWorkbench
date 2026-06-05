@@ -3239,7 +3239,7 @@
     "/fwd/functions/{name}": {
       "get": {
         "operationId": "GETFwdFunctionsName",
-        "summary": "AC function detail with catalog metadata, configured status results, parameters, relationships, and usage.",
+        "summary": "AC function detail with catalog metadata, configured status results, structured parameter schema, schema profile, relationships, and usage.",
         "tags": [
           "fwd"
         ],

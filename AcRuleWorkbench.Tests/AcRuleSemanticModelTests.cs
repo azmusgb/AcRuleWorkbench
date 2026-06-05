@@ -52,6 +52,34 @@ public sealed class AcRuleSemanticModelTests
     }
 
     [TestMethod]
+    public void FunctionCatalog_ExposesStructuredParameterSchemaAndProfile()
+    {
+        Assert.IsTrue(AcFunctionCatalog.TryGetDefinition("Copy", out AcFunctionCatalog.FunctionDefinition copy));
+        AcFunctionCatalog.FunctionParameterSchema copyInput = copy.ParameterSchema.Single(p => p.ParameterPattern == "_ParamList0");
+        AcFunctionCatalog.FunctionParameterSchema copyOutput = copy.ParameterSchema.Single(p => p.ParameterPattern == "_ParamList1");
+
+        Assert.AreEqual("InputField", copyInput.Role);
+        Assert.AreEqual("Exact", copyInput.PatternKind);
+        Assert.AreEqual("Field", copyInput.TargetType);
+        Assert.AreEqual("UsesField", copyInput.RelationshipKind);
+        Assert.IsTrue(copyInput.Required);
+
+        Assert.AreEqual("OutputField", copyOutput.Role);
+        Assert.AreEqual("WritesField", copyOutput.RelationshipKind);
+        Assert.AreEqual("FieldMutation", copy.SchemaProfile.MutationKind);
+        Assert.IsTrue(copy.SchemaProfile.ReadsFields);
+        Assert.IsTrue(copy.SchemaProfile.WritesFields);
+
+        Assert.IsTrue(AcFunctionCatalog.TryGetDefinition("HasRegExpr", out AcFunctionCatalog.FunctionDefinition regex));
+        AcFunctionCatalog.FunctionParameterSchema regexOption = regex.ParameterSchema.Single(p => p.ParameterPattern == "RegularExpression");
+        Assert.AreEqual("Regex", regexOption.Role);
+        Assert.IsTrue(regexOption.Option);
+        Assert.AreEqual("Option", regexOption.TargetType);
+        Assert.IsTrue(regex.SchemaProfile.UsesRegex);
+        Assert.IsTrue(regex.SchemaProfile.BranchesRuleFlow);
+    }
+
+    [TestMethod]
     public void FunctionCatalog_DefinesObservedEditorParitySeedFunctions()
     {
         string[] expected =

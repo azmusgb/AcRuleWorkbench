@@ -1724,6 +1724,7 @@ internal sealed class WorkbenchApiService
                 || RuleCorrelation.Contains(f.Category, q)
                 || RuleCorrelation.Contains(f.Description, q)
                 || f.StatusResults.Any(s => RuleCorrelation.Contains(s, q))
+                || f.ParameterSchema.Any(p => RuleCorrelation.Contains(p.Role, q) || RuleCorrelation.Contains(p.DisplayName, q) || RuleCorrelation.Contains(p.TargetType, q) || RuleCorrelation.Contains(p.RelationshipKind, q))
                 || f.ObservedParameterNames.Any(p => RuleCorrelation.Contains(p, q))
                 || f.BehaviorFlags.Any(b => RuleCorrelation.Contains(b, q)))
             .OrderBy(f => f.Category, StringComparer.OrdinalIgnoreCase)
@@ -1784,13 +1785,16 @@ internal sealed class WorkbenchApiService
                 statusResults = item.StatusResults,
                 configuredStatusResults = item.ConfiguredStatusResults,
                 parameterRoles = item.ParameterRoles,
+                parameterSchema = item.ParameterSchema,
                 observedParameterNames = item.ObservedParameterNames,
+                unknownObservedParameterNames = item.UnknownObservedParameterNames,
                 statusResultCaveat = item.StatusResultCaveat
             },
             behavior = new
             {
                 category = item.Category,
                 flags = item.BehaviorFlags,
+                schemaProfile = item.SchemaProfile,
                 runtimeImpacts = item.RuntimeImpacts,
                 deprecated = item.Deprecated
             },
@@ -1872,6 +1876,14 @@ internal sealed class WorkbenchApiService
                 .Concat(structuralRules.Select(n => RuleCorrelation.ScopeId(n.ScopePath, n.ScopeType, n.ScopeName)))
                 .Concat(relationships.Select(r => RuleCorrelation.ScopeId(r.ScopePath, r.ScopeType, r.ScopeName))));
             List<string> statusResults = DistinctOrdered((definition?.StatusResults ?? Array.Empty<string>()).Concat(configuredStatusResults));
+            List<string> behaviorFlags = hasDefinition ? DistinctOrdered(definition!.BehaviorFlags) : InferBehaviorFlags(name, observedParameters, relationships);
+            List<AcFunctionCatalog.FunctionParameterSchema> parameterSchema = hasDefinition
+                ? definition!.ParameterSchema.ToList()
+                : AcFunctionCatalog.InferObservedParameterSchemas(name, observedParameters).ToList();
+            AcFunctionCatalog.FunctionSchemaProfile schemaProfile = hasDefinition
+                ? definition!.SchemaProfile
+                : AcFunctionCatalog.BuildSchemaProfile(name, parameterSchema, behaviorFlags, deprecated: false);
+            List<string> unknownObservedParameters = AcFunctionCatalog.FindUnknownObservedParameterNames(name, observedParameters).ToList();
 
             var row = new FunctionCatalogItemVm
             {
@@ -1899,8 +1911,11 @@ internal sealed class WorkbenchApiService
                 StatusResults = statusResults,
                 ConfiguredStatusResults = configuredStatusResults,
                 ParameterRoles = DistinctOrdered(definition?.ParameterRoles ?? Array.Empty<string>()),
+                ParameterSchema = parameterSchema,
                 ObservedParameterNames = observedParameters,
-                BehaviorFlags = hasDefinition ? DistinctOrdered(definition.BehaviorFlags) : InferBehaviorFlags(name, observedParameters, relationships),
+                UnknownObservedParameterNames = unknownObservedParameters,
+                SchemaProfile = schemaProfile,
+                BehaviorFlags = behaviorFlags,
                 RuntimeImpacts = hasDefinition
                     ? DistinctOrdered(definition.RuntimeImpacts)
                     : new List<string> { "Static rule usage was observed. Inspect configured status actions and parameter bindings before inferring runtime operator impact." },
@@ -1920,6 +1935,8 @@ internal sealed class WorkbenchApiService
             };
 
             if (!hasDefinition) row.Diagnostics.Add("FunctionNotInCuratedCatalog");
+            if (!hasDefinition) row.Diagnostics.Add("FunctionSchemaUnknown");
+            if (unknownObservedParameters.Count > 0) row.Diagnostics.Add("ObservedParametersOutsideCatalogSchema");
             if (hasDefinition && !observed) row.Diagnostics.Add("CatalogOnlyNotObservedInCurrentSnapshot");
             if (isResource && !hasDefinition) row.Diagnostics.Add("FunctionResourceCandidate");
             if (row.Deprecated) row.Diagnostics.Add("DeprecatedFunction");
@@ -3352,6 +3369,16 @@ internal sealed class WorkbenchApiService
         List<string> configuredStatusResults = DistinctOrdered(node.ActionNames
             .Concat(rule.FlatRule?.ActionNames ?? Enumerable.Empty<string>())
             .Concat(outgoingEdges.Select(e => e.ActionName ?? string.Empty)));
+        List<string> functionBehaviorFlags = hasDefinition
+            ? DistinctOrdered(definition!.BehaviorFlags)
+            : InferBehaviorFlags(functionName ?? string.Empty, observedParameterNames, rule.Relationships);
+        List<AcFunctionCatalog.FunctionParameterSchema> functionParameterSchema = hasDefinition
+            ? definition!.ParameterSchema.ToList()
+            : AcFunctionCatalog.InferObservedParameterSchemas(functionName ?? string.Empty, observedParameterNames).ToList();
+        AcFunctionCatalog.FunctionSchemaProfile functionSchemaProfile = hasDefinition
+            ? definition!.SchemaProfile
+            : AcFunctionCatalog.BuildSchemaProfile(functionName ?? string.Empty, functionParameterSchema, functionBehaviorFlags, deprecated: false);
+        List<string> unknownObservedParameterNames = AcFunctionCatalog.FindUnknownObservedParameterNames(functionName ?? string.Empty, observedParameterNames).ToList();
 
         var packet = new SelectedRulePacket
         {
@@ -3393,8 +3420,11 @@ internal sealed class WorkbenchApiService
                 StatusResults = DistinctOrdered((definition?.StatusResults ?? Array.Empty<string>()).Concat(configuredStatusResults)),
                 ConfiguredStatusResults = configuredStatusResults,
                 ParameterRoles = DistinctOrdered(definition?.ParameterRoles ?? Array.Empty<string>()),
+                ParameterSchema = functionParameterSchema,
                 ObservedParameterNames = observedParameterNames,
-                BehaviorFlags = hasDefinition ? DistinctOrdered(definition.BehaviorFlags) : InferBehaviorFlags(functionName ?? string.Empty, observedParameterNames, rule.Relationships),
+                UnknownObservedParameterNames = unknownObservedParameterNames,
+                SchemaProfile = functionSchemaProfile,
+                BehaviorFlags = functionBehaviorFlags,
                 RuntimeImpacts = hasDefinition
                     ? DistinctOrdered(definition.RuntimeImpacts)
                     : new List<string> { "Static rule usage was observed. Inspect configured status actions and parameter bindings before inferring runtime operator impact." },
@@ -4168,8 +4198,14 @@ internal sealed class WorkbenchApiService
         public List<string> ConfiguredStatusResults { get; set; } = new List<string>();
         [JsonProperty("parameterRoles")]
         public List<string> ParameterRoles { get; set; } = new List<string>();
+        [JsonProperty("parameterSchema")]
+        public List<AcFunctionCatalog.FunctionParameterSchema> ParameterSchema { get; set; } = new List<AcFunctionCatalog.FunctionParameterSchema>();
         [JsonProperty("observedParameterNames")]
         public List<string> ObservedParameterNames { get; set; } = new List<string>();
+        [JsonProperty("unknownObservedParameterNames")]
+        public List<string> UnknownObservedParameterNames { get; set; } = new List<string>();
+        [JsonProperty("schemaProfile")]
+        public AcFunctionCatalog.FunctionSchemaProfile? SchemaProfile { get; set; }
         [JsonProperty("behaviorFlags")]
         public List<string> BehaviorFlags { get; set; } = new List<string>();
         [JsonProperty("runtimeImpacts")]

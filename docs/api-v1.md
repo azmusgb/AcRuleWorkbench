@@ -43,7 +43,7 @@ GET  /diagnostics
 GET  /openapi.json
 ```
 
-`/fwd/functions` is the AC function catalog endpoint. It merges seeded function metadata with observed rule usage, configured ActionNames/status results, observed parameter names, relationship samples, and static runtime-impact notes. Unknown/custom functions remain visible as observed usage instead of being silently dropped.
+`/fwd/functions` is the AC function catalog endpoint. It merges seeded function metadata with observed rule usage, configured ActionNames/status results, structured `parameterSchema` entries, `schemaProfile` capability flags, observed parameter names, unknown observed parameter diagnostics, relationship samples, and static runtime-impact notes. Unknown/custom functions remain visible as observed usage instead of being silently dropped or falsely treated as curated.
 
 ## Include expansion
 
@@ -85,6 +85,10 @@ when inferable, field containers, parsed geometry, role flags, related AC rules,
 links to FIP inspection for dropout/OMR evidence. When the native payload only yields
 resource names or rule usage, the same packets keep explicit parse-state diagnostics
 rather than implying unavailable native bytes were decoded.
+
+The checked-in OpenAPI document is guarded against route drift by
+`scripts/test-code-quality.ps1`, which compares `ApiV1Routes` to
+`docs/openapi/ac-workbench-api-v1.openapi.json`.
 
 The desktop viewer hydrates these canonical packets directly when hosted by the API:
 the Resources workspace consumes the object graph, the selected-rule inspector shows

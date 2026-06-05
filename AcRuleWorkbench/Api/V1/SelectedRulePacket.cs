@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using AcRuleWorkbench.Core;
 using Newtonsoft.Json;
 
 namespace AcRuleWorkbench.Api.V1;
@@ -197,8 +198,17 @@ internal sealed class SelectedFunctionProjection
     [JsonProperty("parameterRoles")]
     public List<string> ParameterRoles { get; set; } = new();
 
+    [JsonProperty("parameterSchema")]
+    public List<AcFunctionCatalog.FunctionParameterSchema> ParameterSchema { get; set; } = new();
+
     [JsonProperty("observedParameterNames")]
     public List<string> ObservedParameterNames { get; set; } = new();
+
+    [JsonProperty("unknownObservedParameterNames")]
+    public List<string> UnknownObservedParameterNames { get; set; } = new();
+
+    [JsonProperty("schemaProfile")]
+    public AcFunctionCatalog.FunctionSchemaProfile? SchemaProfile { get; set; }
 
     [JsonProperty("behaviorFlags")]
     public List<string> BehaviorFlags { get; set; } = new();

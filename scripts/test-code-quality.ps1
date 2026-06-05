@@ -4,8 +4,8 @@
 
 .DESCRIPTION
   This script is intentionally Windows PowerShell 5.1 compatible. It validates
-  PowerShell syntax, OpenAPI JSON syntax, generated-viewer JavaScript syntax
-  when Node.js is available, and basic package hygiene. It does not replace
+  PowerShell syntax, OpenAPI JSON syntax and route drift, generated-viewer
+  JavaScript syntax when Node.js is available, and basic package hygiene. It does not replace
   MSBuild; run build-and-doctor.ps1 for compile/native validation.
 #>
 [CmdletBinding()]
@@ -94,6 +94,71 @@ function Test-JsonFile {
     }
 }
 
+function ConvertTo-OpenApiPath {
+    param([string]$Path)
+
+    $basePath = "/api/v1"
+    if ([string]::Equals($Path, $basePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return "/"
+    }
+
+    if ($Path.StartsWith($basePath + "/", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $Path.Substring($basePath.Length)
+    }
+
+    return $Path
+}
+
+function Test-OpenApiRouteDrift {
+    param(
+        [string]$RouteFile,
+        [string]$OpenApiFile
+    )
+
+    try {
+        $routeSource = Get-Content -LiteralPath $RouteFile -Raw -Encoding UTF8
+        $routeMatches = [regex]::Matches($routeSource, 'new\s+ApiRouteDescriptor\("(?<method>[^"]+)",\s*"(?<path>[^"]+)"')
+        if ($routeMatches.Count -eq 0) {
+            Add-Failure "No ApiRouteDescriptor entries were found in $RouteFile"
+            return
+        }
+
+        $expected = New-Object 'System.Collections.Generic.HashSet[string]'
+        foreach ($match in $routeMatches) {
+            $method = $match.Groups["method"].Value.ToUpperInvariant()
+            $path = ConvertTo-OpenApiPath -Path $match.Groups["path"].Value
+            [void]$expected.Add("$method $path")
+        }
+
+        $openApi = Get-Content -LiteralPath $OpenApiFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $actual = New-Object 'System.Collections.Generic.HashSet[string]'
+        $httpMethods = @("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")
+        foreach ($pathProperty in $openApi.paths.PSObject.Properties) {
+            foreach ($methodProperty in $pathProperty.Value.PSObject.Properties) {
+                $method = $methodProperty.Name.ToUpperInvariant()
+                if ($httpMethods -contains $method) {
+                    [void]$actual.Add("$method $($pathProperty.Name)")
+                }
+            }
+        }
+
+        foreach ($route in $expected) {
+            if (-not $actual.Contains($route)) {
+                Add-Failure "OpenAPI is missing route from ApiV1Routes: $route"
+            }
+        }
+
+        foreach ($route in $actual) {
+            if (-not $expected.Contains($route)) {
+                Add-Failure "OpenAPI contains route not present in ApiV1Routes: $route"
+            }
+        }
+    }
+    catch {
+        Add-Failure "OpenAPI route drift check failed - $($_.Exception.Message)"
+    }
+}
+
 Write-Host "AC Rule Workbench static quality checks"
 Write-Host "Root: $Root"
 Write-Host ""
@@ -103,7 +168,13 @@ Get-ChildItem -LiteralPath (Join-Path $Root "scripts") -Filter "*.ps1" -File | F
 }
 
 $openApi = Join-Path $Root "docs\openapi\ac-workbench-api-v1.openapi.json"
-if (Test-Path $openApi) { Test-JsonFile -File $openApi } else { Add-Failure "OpenAPI JSON was not found: $openApi" }
+if (Test-Path $openApi) {
+    Test-JsonFile -File $openApi
+    Test-OpenApiRouteDrift -RouteFile (Join-Path $Root "AcRuleWorkbench\Api\V1\ApiV1Routes.cs") -OpenApiFile $openApi
+}
+else {
+    Add-Failure "OpenAPI JSON was not found: $openApi"
+}
 
 $viewer = Join-Path $Root "AcRuleWorkbench.Core\Viewer\ac-viewer-template.html"
 if (!(Test-Path $viewer)) {

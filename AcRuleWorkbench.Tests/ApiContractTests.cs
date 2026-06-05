@@ -109,6 +109,9 @@ public sealed class ApiContractTests
         Assert.AreEqual("ParentRuleStatusResultOwnsSelectedRule", editorModel["incomingStatusResult"]?["relationship"]?.Value<string>());
         Assert.AreEqual("Formatf", editorModel["function"]?["name"]?.Value<string>());
         Assert.IsTrue(editorModel["function"]?["defined"]?.Value<bool>() ?? false);
+        Assert.IsTrue(editorModel["function"]?["schemaProfile"]?["writesFields"]?.Value<bool>() ?? false);
+        JArray selectedFunctionSchema = (JArray)(editorModel["function"]?["parameterSchema"] ?? new JArray());
+        Assert.IsTrue(selectedFunctionSchema.Any(p => string.Equals((string?)p?["role"], "MutatedField", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue((editorModel["actionLists"] as JArray)?.Any(a => string.Equals((string?)a?["statusResult"]?["name"], "OK", StringComparison.OrdinalIgnoreCase)) ?? false);
     }
 
@@ -455,9 +458,13 @@ public sealed class ApiContractTests
 
         Assert.IsNotNull(formatf);
         Assert.IsTrue(formatf!["defined"]?.Value<bool>() ?? false);
+        Assert.IsTrue(formatf["schemaProfile"]?["writesFields"]?.Value<bool>() ?? false);
+        JArray formatfParameterSchema = (JArray)(formatf["parameterSchema"] ?? new JArray());
+        Assert.IsTrue(formatfParameterSchema.Any(p => string.Equals((string?)p?["targetType"], "Field", StringComparison.OrdinalIgnoreCase)));
         Assert.IsNotNull(udf);
         Assert.IsTrue(udf!["observed"]?.Value<bool>() ?? false);
         Assert.AreEqual("User Defined", udf["category"]?.Value<string>());
+        Assert.IsTrue((udf["diagnostics"] as JArray)?.Any(d => string.Equals(d.Value<string>(), "FunctionSchemaUnknown", StringComparison.OrdinalIgnoreCase)) ?? false);
     }
 
     [TestMethod]
@@ -477,9 +484,12 @@ public sealed class ApiContractTests
 
         JArray configured = (JArray)(body["data"]?["interfaceModel"]?["configuredStatusResults"] ?? new JArray());
         JArray parameters = (JArray)(body["data"]?["interfaceModel"]?["observedParameterNames"] ?? new JArray());
+        JArray unknownParameters = (JArray)(body["data"]?["interfaceModel"]?["unknownObservedParameterNames"] ?? new JArray());
 
         Assert.IsTrue(configured.Any(x => string.Equals(x.Value<string>(), "Copied", StringComparison.OrdinalIgnoreCase)));
         Assert.IsTrue(parameters.Any(x => string.Equals(x.Value<string>(), "Source", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(unknownParameters.Any(x => string.Equals(x.Value<string>(), "Source", StringComparison.OrdinalIgnoreCase)));
+        Assert.AreEqual("ObservedParameterNames", body["data"]?["behavior"]?["schemaProfile"]?["source"]?.Value<string>());
         Assert.IsTrue(body["data"]?["usage"]?["ruleCount"]?.Value<int>() >= 1);
     }
 

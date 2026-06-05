@@ -198,6 +198,15 @@ internal sealed class EditorFunctionSchemaModel
     [JsonProperty("parameterRoles")]
     public List<string> ParameterRoles { get; } = new();
 
+    [JsonProperty("parameterSchema")]
+    public List<AcFunctionCatalog.FunctionParameterSchema> ParameterSchema { get; } = new();
+
+    [JsonProperty("unknownObservedParameterNames")]
+    public List<string> UnknownObservedParameterNames { get; } = new();
+
+    [JsonProperty("schemaProfile")]
+    public AcFunctionCatalog.FunctionSchemaProfile? SchemaProfile { get; set; }
+
     [JsonProperty("behaviorFlags")]
     public List<string> BehaviorFlags { get; } = new();
 
@@ -981,11 +990,19 @@ internal static class FormWorksEditorModelBuilder
     {
         string functionName = node.FunctionName ?? rule?.FlatRule?.FunctionName ?? string.Empty;
         bool defined = AcFunctionCatalog.TryGetDefinition(functionName, out AcFunctionCatalog.FunctionDefinition? definition);
+        List<string> observedParameterNames = Distinct(node.Parameters.Keys.Concat(rule?.FlatRule?.Parameters.Keys ?? Enumerable.Empty<string>())).ToList();
+        List<string> behaviorFlags = Distinct(defined ? definition!.BehaviorFlags : InferBehaviorFlags(functionName, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())).ToList();
+        List<AcFunctionCatalog.FunctionParameterSchema> parameterSchema = defined
+            ? definition!.ParameterSchema.ToList()
+            : AcFunctionCatalog.InferObservedParameterSchemas(functionName, observedParameterNames).ToList();
         var schema = new EditorFunctionSchemaModel
         {
             Name = string.IsNullOrWhiteSpace(functionName) ? null : functionName,
             Defined = defined,
             Category = defined ? definition.Category : AcFunctionCatalog.InferCategory(functionName),
+            SchemaProfile = defined
+                ? definition!.SchemaProfile
+                : AcFunctionCatalog.BuildSchemaProfile(functionName, parameterSchema, behaviorFlags, deprecated: false),
             Evidence = defined ? definition.Evidence : "Observed static rule configuration"
         };
 
@@ -995,9 +1012,12 @@ internal static class FormWorksEditorModelBuilder
             schema.ConfiguredStatusResults.Add(value);
         foreach (string value in Distinct(definition?.ParameterRoles ?? Array.Empty<string>()))
             schema.ParameterRoles.Add(value);
-        foreach (string value in Distinct(defined ? definition.BehaviorFlags : InferBehaviorFlags(functionName, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())))
+        schema.ParameterSchema.AddRange(parameterSchema);
+        foreach (string value in AcFunctionCatalog.FindUnknownObservedParameterNames(functionName, observedParameterNames))
+            schema.UnknownObservedParameterNames.Add(value);
+        foreach (string value in behaviorFlags)
             schema.BehaviorFlags.Add(value);
-        foreach (string value in Distinct(defined ? definition.RuntimeImpacts : InferRuntimeImpacts(functionName, schema.BehaviorFlags, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())))
+        foreach (string value in Distinct(defined ? definition.RuntimeImpacts : InferRuntimeImpacts(functionName, behaviorFlags, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())))
             schema.RuntimeImpacts.Add(value);
 
         return schema;

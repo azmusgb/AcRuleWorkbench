@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Newtonsoft.Json;
 
 namespace AcRuleWorkbench.Core;
 
@@ -32,6 +33,120 @@ public static class AcFunctionCatalog
         public string Confidence { get; init; } = "High";
     }
 
+    public sealed class FunctionParameterSchema
+    {
+        [JsonProperty("role")]
+        public string Role { get; init; } = "FunctionSchemaParameter";
+
+        [JsonProperty("displayName")]
+        public string DisplayName { get; init; } = string.Empty;
+
+        [JsonProperty("parameterPattern", NullValueHandling = NullValueHandling.Ignore)]
+        public string? ParameterPattern { get; init; }
+
+        [JsonProperty("patternKind")]
+        public string PatternKind { get; init; } = "RoleOnly";
+
+        [JsonProperty("targetType")]
+        public string TargetType { get; init; } = "Parameter";
+
+        [JsonProperty("relationshipKind")]
+        public string RelationshipKind { get; init; } = "UsesParameter";
+
+        [JsonProperty("required")]
+        public bool Required { get; init; }
+
+        [JsonProperty("cardinality")]
+        public string Cardinality { get; init; } = "One";
+
+        [JsonProperty("option")]
+        public bool Option { get; init; }
+
+        [JsonProperty("supportsGeometry")]
+        public bool SupportsGeometry { get; init; }
+
+        [JsonProperty("supportsMultiline")]
+        public bool SupportsMultiline { get; init; }
+
+        [JsonProperty("supportsMultipleInstances")]
+        public bool SupportsMultipleInstances { get; init; }
+
+        [JsonProperty("supportsOmr")]
+        public bool SupportsOmr { get; init; }
+
+        [JsonProperty("source")]
+        public string Source { get; init; } = "CatalogRole";
+
+        [JsonProperty("confidence")]
+        public string Confidence { get; init; } = "Medium";
+    }
+
+    public sealed class FunctionSchemaProfile
+    {
+        [JsonProperty("mutationKind")]
+        public string MutationKind { get; init; } = "ReadOnly";
+
+        [JsonProperty("inputCardinality")]
+        public string InputCardinality { get; init; } = "None";
+
+        [JsonProperty("outputCardinality")]
+        public string OutputCardinality { get; init; } = "None";
+
+        [JsonProperty("readsFields")]
+        public bool ReadsFields { get; init; }
+
+        [JsonProperty("writesFields")]
+        public bool WritesFields { get; init; }
+
+        [JsonProperty("readsAttributes")]
+        public bool ReadsAttributes { get; init; }
+
+        [JsonProperty("writesAttributes")]
+        public bool WritesAttributes { get; init; }
+
+        [JsonProperty("usesGeometry")]
+        public bool UsesGeometry { get; init; }
+
+        [JsonProperty("supportsMultiline")]
+        public bool SupportsMultiline { get; init; }
+
+        [JsonProperty("supportsMultipleInstances")]
+        public bool SupportsMultipleInstances { get; init; }
+
+        [JsonProperty("supportsOmr")]
+        public bool SupportsOmr { get; init; }
+
+        [JsonProperty("usesRegex")]
+        public bool UsesRegex { get; init; }
+
+        [JsonProperty("usesDateFormat")]
+        public bool UsesDateFormat { get; init; }
+
+        [JsonProperty("usesTable")]
+        public bool UsesTable { get; init; }
+
+        [JsonProperty("callsUdf")]
+        public bool CallsUdf { get; init; }
+
+        [JsonProperty("createsOperatorWork")]
+        public bool CreatesOperatorWork { get; init; }
+
+        [JsonProperty("branchesRuleFlow")]
+        public bool BranchesRuleFlow { get; init; }
+
+        [JsonProperty("runtimeOnly")]
+        public bool RuntimeOnly { get; init; }
+
+        [JsonProperty("deprecated")]
+        public bool Deprecated { get; init; }
+
+        [JsonProperty("source")]
+        public string Source { get; init; } = "CatalogDefinition";
+
+        [JsonProperty("reviewNotes")]
+        public IReadOnlyList<string> ReviewNotes { get; init; } = Array.Empty<string>();
+    }
+
     public sealed class FunctionDefinition
     {
         public string Name { get; init; } = string.Empty;
@@ -39,6 +154,8 @@ public static class AcFunctionCatalog
         public string Description { get; init; } = string.Empty;
         public IReadOnlyList<string> StatusResults { get; init; } = Array.Empty<string>();
         public IReadOnlyList<string> ParameterRoles { get; init; } = Array.Empty<string>();
+        public IReadOnlyList<FunctionParameterSchema> ParameterSchema { get; init; } = Array.Empty<FunctionParameterSchema>();
+        public FunctionSchemaProfile SchemaProfile { get; init; } = new FunctionSchemaProfile();
         public IReadOnlyList<string> BehaviorFlags { get; init; } = Array.Empty<string>();
         public IReadOnlyList<string> RuntimeImpacts { get; init; } = Array.Empty<string>();
         public bool Deprecated { get; init; }
@@ -254,6 +371,116 @@ public static class AcFunctionCatalog
         };
     }
 
+    public static IReadOnlyList<FunctionParameterSchema> InferObservedParameterSchemas(string functionName, IEnumerable<string> parameterNames)
+    {
+        var schemas = new List<FunctionParameterSchema>();
+        foreach (string parameterName in Distinct(parameterNames))
+        {
+            Classification? classification = TryClassify(functionName, parameterName);
+            if (classification == null)
+            {
+                schemas.Add(RoleSchema(parameterName, Array.Empty<string>(), "ObservedParameterName", confidence: "Low", source: "ObservedParameterName"));
+                continue;
+            }
+
+            bool multiline = Supports(parameterName, Array.Empty<string>(), "line", "multiline", "grid");
+            bool multipleInstances = Supports(parameterName, Array.Empty<string>(), "instance");
+            bool omr = Supports(parameterName, Array.Empty<string>(), "omr", "checkbox");
+            schemas.Add(new FunctionParameterSchema
+            {
+                Role = classification.ParameterRole,
+                DisplayName = parameterName,
+                ParameterPattern = parameterName,
+                PatternKind = "ObservedName",
+                TargetType = classification.TargetType,
+                RelationshipKind = classification.RelationshipKind,
+                Required = !classification.IsOptionParameter,
+                Cardinality = "Observed",
+                Option = classification.IsOptionParameter,
+                SupportsGeometry = Supports(parameterName, Array.Empty<string>(), "geometry", "rect", "position"),
+                SupportsMultiline = multiline,
+                SupportsMultipleInstances = multipleInstances,
+                SupportsOmr = omr,
+                Source = "ObservedParameterName+CatalogClassification",
+                Confidence = classification.Confidence
+            });
+        }
+
+        return schemas;
+    }
+
+    public static IReadOnlyList<string> FindUnknownObservedParameterNames(string functionName, IEnumerable<string> observedParameterNames)
+    {
+        List<string> observed = Distinct(observedParameterNames).ToList();
+        if (observed.Count == 0)
+            return Array.Empty<string>();
+
+        if (!TryGetDefinition(functionName, out FunctionDefinition? definition))
+            return observed;
+
+        return observed
+            .Where(name => !definition.ParameterSchema.Any(schema => MatchesSchemaParameter(schema, name)))
+            .ToList();
+    }
+
+    public static FunctionSchemaProfile BuildSchemaProfile(
+        string functionName,
+        IEnumerable<FunctionParameterSchema> parameterSchemas,
+        IEnumerable<string> behaviorFlags,
+        bool deprecated,
+        string source = "ObservedParameterNames",
+        string evidence = "")
+    {
+        List<FunctionParameterSchema> schemas = parameterSchemas.ToList();
+        List<string> flags = Distinct(behaviorFlags).ToList();
+        bool readsFields = HasFlag(flags, "ReadsField") || schemas.Any(s => StartsOrContains(s.RelationshipKind, "UsesField", "ReadsField") || RoleContains(s, "input", "source", "amount", "field"));
+        bool writesFields = HasFlag(flags, "WritesField", "MayPlugFields") || schemas.Any(s => StartsOrContains(s.RelationshipKind, "WritesField", "MutatesField") || RoleContains(s, "output", "destination", "mutated", "calculated", "plug"));
+        bool readsAttributes = HasFlag(flags, "ReadsAttribute", "ReadsFieldAttribute", "ReadsDocumentAttribute", "ReadsPageAttribute", "ReadsRecordAttribute") || schemas.Any(s => StartsOrContains(s.RelationshipKind, "ReadsAttribute", "ReadsFieldAttribute"));
+        bool writesAttributes = HasFlag(flags, "WritesAttribute", "WritesFieldAttribute", "ClearsAttribute", "ClearsFieldAttribute", "WritesDocumentAttribute", "WritesPageAttribute", "WritesRecordAttribute", "ClearsDocumentAttribute", "ClearsPageAttribute", "ClearsRecordAttribute") || schemas.Any(s => StartsOrContains(s.RelationshipKind, "WritesAttribute", "ClearsAttribute", "WritesFieldAttribute", "ClearsFieldAttribute"));
+        bool usesTable = HasFlag(flags, "UsesTable", "ReadsSelectionListState", "WritesSelectionListState") || schemas.Any(s => Eq(s.TargetType, "Table") || RoleContains(s, "selectionlist", "table"));
+        bool usesRegex = HasFlag(flags, "UsesRegex") || schemas.Any(s => RoleContains(s, "regex", "regexpr", "regular expression"));
+        bool usesDateFormat = HasFlag(flags, "UsesDateFormat") || schemas.Any(s => RoleContains(s, "dateformat", "date format", "date"));
+        bool supportsMultiline = HasFlag(flags, "SupportsMultiline", "IteratesLines", "IteratesTableRows") || schemas.Any(s => s.SupportsMultiline || RoleContains(s, "line", "multiline", "grid", "row"));
+        bool supportsMultipleInstances = HasFlag(flags, "SupportsMultipleInstances", "IteratesInstances") || schemas.Any(s => s.SupportsMultipleInstances || RoleContains(s, "instance"));
+        bool supportsOmr = HasFlag(flags, "SupportsOmr") || schemas.Any(s => s.SupportsOmr || RoleContains(s, "omr", "checkbox"));
+        bool callsUdf = HasFlag(flags, "CallsUdf") || schemas.Any(s => Eq(s.TargetType, "UDF") || RoleContains(s, "udf"));
+        bool createsOperatorWork = HasFlag(flags, "CreatesOperatorWork", "MayPromptOperator", "RoutesToRepair", "MayChangeOperatorWork") || ContainsAny(functionName, "reject", "repair");
+        bool branchesRuleFlow = HasFlag(flags, "BranchesRuleFlow") || StartsOrContains(functionName, "Check", "Test", "Is", "Has", "Compare");
+        bool runtimeOnly = HasFlag(flags, "ReadsRuntimeContext") && !readsFields && !writesFields && !readsAttributes && !writesAttributes;
+        bool usesGeometry = schemas.Any(s => s.SupportsGeometry || RoleContains(s, "geometry", "rect", "position"));
+
+        var reviewNotes = new List<string>();
+        if (!string.IsNullOrWhiteSpace(evidence) && evidence.IndexOf("verify", StringComparison.OrdinalIgnoreCase) >= 0)
+            reviewNotes.Add(evidence);
+        if (Eq(source, "ObservedParameterNames"))
+            reviewNotes.Add("Schema inferred from observed static parameter names; native runtime signature is not proven.");
+
+        return new FunctionSchemaProfile
+        {
+            MutationKind = MutationKind(flags, readsFields, writesFields, readsAttributes, writesAttributes, usesTable, callsUdf, createsOperatorWork, branchesRuleFlow, runtimeOnly),
+            InputCardinality = CardinalityFor(schemas, output: false),
+            OutputCardinality = CardinalityFor(schemas, output: true),
+            ReadsFields = readsFields,
+            WritesFields = writesFields,
+            ReadsAttributes = readsAttributes,
+            WritesAttributes = writesAttributes,
+            UsesGeometry = usesGeometry,
+            SupportsMultiline = supportsMultiline,
+            SupportsMultipleInstances = supportsMultipleInstances,
+            SupportsOmr = supportsOmr,
+            UsesRegex = usesRegex,
+            UsesDateFormat = usesDateFormat,
+            UsesTable = usesTable,
+            CallsUdf = callsUdf,
+            CreatesOperatorWork = createsOperatorWork,
+            BranchesRuleFlow = branchesRuleFlow,
+            RuntimeOnly = runtimeOnly,
+            Deprecated = deprecated,
+            Source = source,
+            ReviewNotes = reviewNotes
+        };
+    }
+
     private static Entry Field(string functionName, string parameterPattern, string kind, string role, bool prefix = false)
     {
         return new Entry
@@ -306,6 +533,7 @@ public static class AcFunctionCatalog
         bool deprecated = false,
         string evidence = "Curated AC function catalog seed")
     {
+        List<FunctionParameterSchema> parameterSchema = BuildParameterSchema(name, parameterRoles, behaviorFlags, evidence);
         return new FunctionDefinition
         {
             Name = name,
@@ -313,10 +541,243 @@ public static class AcFunctionCatalog
             Description = description,
             StatusResults = statusResults,
             ParameterRoles = parameterRoles,
+            ParameterSchema = parameterSchema,
+            SchemaProfile = BuildSchemaProfile(name, parameterSchema, behaviorFlags, deprecated, source: "CatalogDefinition", evidence: evidence),
             BehaviorFlags = behaviorFlags,
             RuntimeImpacts = runtimeImpacts,
             Deprecated = deprecated,
             Evidence = evidence
         };
+    }
+
+    private static List<FunctionParameterSchema> BuildParameterSchema(
+        string functionName,
+        IEnumerable<string> parameterRoles,
+        IEnumerable<string> behaviorFlags,
+        string evidence)
+    {
+        var schemas = new List<FunctionParameterSchema>();
+        foreach (Entry entry in Entries.Where(e => Eq(e.FunctionName, functionName)))
+        {
+            bool multiline = Supports(entry.ParameterRole + " " + entry.ParameterPattern, behaviorFlags, "line", "multiline", "grid", "row");
+            bool multipleInstances = Supports(entry.ParameterRole + " " + entry.ParameterPattern, behaviorFlags, "instance");
+            bool omr = Supports(entry.ParameterRole + " " + entry.ParameterPattern, behaviorFlags, "omr", "checkbox");
+            schemas.Add(new FunctionParameterSchema
+            {
+                Role = entry.ParameterRole,
+                DisplayName = entry.ParameterPattern,
+                ParameterPattern = entry.ParameterPattern,
+                PatternKind = entry.Prefix ? "Prefix" : "Exact",
+                TargetType = entry.TargetType,
+                RelationshipKind = entry.RelationshipKind,
+                Required = !entry.IsOptionParameter,
+                Cardinality = entry.Prefix ? "Many" : "One",
+                Option = entry.IsOptionParameter,
+                SupportsGeometry = Supports(entry.ParameterRole + " " + entry.ParameterPattern, behaviorFlags, "geometry", "rect", "position"),
+                SupportsMultiline = multiline,
+                SupportsMultipleInstances = multipleInstances,
+                SupportsOmr = omr,
+                Source = "CatalogParameterPattern",
+                Confidence = entry.Confidence
+            });
+        }
+
+        foreach (string role in Distinct(parameterRoles))
+        {
+            if (schemas.Any(s => RoleEquivalent(s.Role, role) || RoleEquivalent(s.DisplayName, role)))
+                continue;
+
+            schemas.Add(RoleSchema(role, behaviorFlags, "RoleOnly", EvidenceConfidence(evidence), "CatalogRole"));
+        }
+
+        return schemas;
+    }
+
+    private static FunctionParameterSchema RoleSchema(
+        string role,
+        IEnumerable<string> behaviorFlags,
+        string patternKind,
+        string confidence,
+        string source)
+    {
+        string cleanRole = string.IsNullOrWhiteSpace(role) ? "FunctionSchemaParameter" : role.Trim();
+        bool option = IsOptionRole(cleanRole);
+        string targetType = InferTargetType(cleanRole);
+        return new FunctionParameterSchema
+        {
+            Role = cleanRole,
+            DisplayName = cleanRole,
+            ParameterPattern = patternKind == "ObservedParameterName" ? cleanRole : null,
+            PatternKind = patternKind,
+            TargetType = targetType,
+            RelationshipKind = InferRelationshipKind(cleanRole, targetType, behaviorFlags),
+            Required = !option,
+            Cardinality = InferCardinality(cleanRole),
+            Option = option,
+            SupportsGeometry = Supports(cleanRole, behaviorFlags, "geometry", "rect", "position"),
+            SupportsMultiline = Supports(cleanRole, behaviorFlags, "line", "multiline", "grid", "row"),
+            SupportsMultipleInstances = Supports(cleanRole, behaviorFlags, "instance"),
+            SupportsOmr = Supports(cleanRole, behaviorFlags, "omr", "checkbox"),
+            Source = source,
+            Confidence = confidence
+        };
+    }
+
+    private static bool MatchesSchemaParameter(FunctionParameterSchema schema, string observedName)
+    {
+        if (string.IsNullOrWhiteSpace(observedName))
+            return false;
+
+        string name = observedName.Trim();
+        if (!string.IsNullOrWhiteSpace(schema.ParameterPattern))
+        {
+            if (Eq(schema.PatternKind, "Prefix"))
+                return name.StartsWith(schema.ParameterPattern!, StringComparison.OrdinalIgnoreCase);
+            return Eq(schema.ParameterPattern!, name);
+        }
+
+        return RoleEquivalent(schema.Role, name) || RoleEquivalent(schema.DisplayName, name);
+    }
+
+    private static string InferTargetType(string role)
+    {
+        if (ContainsAny(role, "selectionlist", "table", "fuzzy")) return "Table";
+        if (ContainsAny(role, "udf")) return "UDF";
+        if (ContainsAny(role, "attr")) return "Attribute";
+        if (ContainsAny(role, "field", "line", "amount", "checkbox", "grid", "row", "instance")) return "Field";
+        if (ContainsAny(role, "page")) return "Page";
+        if (ContainsAny(role, "document", "doc")) return "Document";
+        if (ContainsAny(role, "batch", "worker", "token", "runtime", "context")) return "RuntimeContext";
+        if (ContainsAny(role, "regex", "regular expression", "dateformat", "format", "option", "constant", "value", "expected", "criteria", "reason", "target")) return "Option";
+        return "Parameter";
+    }
+
+    private static string InferRelationshipKind(string role, string targetType, IEnumerable<string> behaviorFlags)
+    {
+        if (ContainsAny(role, "reject")) return "RejectsField";
+        if (Eq(targetType, "Table")) return "UsesTable";
+        if (Eq(targetType, "UDF")) return "CallsUdf";
+        if (Eq(targetType, "RuntimeContext")) return "ReadsRuntimeContext";
+        if (Eq(targetType, "Attribute"))
+        {
+            if (HasFlag(behaviorFlags, "ClearsFieldAttribute", "ClearsDocumentAttribute", "ClearsPageAttribute", "ClearsRecordAttribute") || ContainsAny(role, "clear")) return "ClearsAttribute";
+            if (HasFlag(behaviorFlags, "WritesFieldAttribute", "WritesDocumentAttribute", "WritesPageAttribute", "WritesRecordAttribute") || ContainsAny(role, "write", "set", "value")) return "WritesAttribute";
+            return "ReadsAttribute";
+        }
+
+        if (Eq(targetType, "Field"))
+        {
+            if (HasFlag(behaviorFlags, "WritesField", "MayPlugFields") || ContainsAny(role, "output", "destination", "mutated", "calculated", "plug")) return "WritesField";
+            return "UsesField";
+        }
+
+        if (IsOptionRole(role)) return "UsesOption";
+        return "UsesParameter";
+    }
+
+    private static string InferCardinality(string role)
+    {
+        return ContainsAny(role, "fields", "field-list", "collection", "instances", "lines", "rows", "grid", "table")
+            ? "Many"
+            : "One";
+    }
+
+    private static string CardinalityFor(IEnumerable<FunctionParameterSchema> schemas, bool output)
+    {
+        List<FunctionParameterSchema> matches = schemas
+            .Where(s => output
+                ? StartsOrContains(s.RelationshipKind, "WritesField", "MutatesField") || RoleContains(s, "output", "destination", "mutated", "plug", "calculated")
+                : StartsOrContains(s.RelationshipKind, "UsesField", "ReadsField") || RoleContains(s, "input", "source", "match", "amount"))
+            .ToList();
+
+        if (matches.Count == 0) return "None";
+        return matches.Any(s => Eq(s.Cardinality, "Many") || Eq(s.Cardinality, "Observed") && matches.Count > 1) || matches.Count > 1
+            ? "Many"
+            : "One";
+    }
+
+    private static string MutationKind(
+        IEnumerable<string> behaviorFlags,
+        bool readsFields,
+        bool writesFields,
+        bool readsAttributes,
+        bool writesAttributes,
+        bool usesTable,
+        bool callsUdf,
+        bool createsOperatorWork,
+        bool branchesRuleFlow,
+        bool runtimeOnly)
+    {
+        if (createsOperatorWork || HasFlag(behaviorFlags, "RejectsField", "RejectsPage", "RejectsDocument")) return "RejectOrRepair";
+        if (writesAttributes) return "AttributeMutation";
+        if (writesFields && usesTable) return "SelectionListPlug";
+        if (writesFields) return "FieldMutation";
+        if (callsUdf) return "UdfCall";
+        if (usesTable) return "SelectionListLookup";
+        if (branchesRuleFlow) return "BranchingTest";
+        if (runtimeOnly) return "RuntimeGate";
+        if (readsFields || readsAttributes) return "ReadOnly";
+        return "Unknown";
+    }
+
+    private static bool IsOptionRole(string role)
+    {
+        return ContainsAny(role, "option", "regex", "regular expression", "dateformat", "format", "constant", "expected", "criteria", "state", "reason", "target", "value");
+    }
+
+    private static string EvidenceConfidence(string evidence)
+    {
+        return !string.IsNullOrWhiteSpace(evidence) && evidence.IndexOf("verify parameter schema", StringComparison.OrdinalIgnoreCase) >= 0
+            ? "Medium"
+            : "High";
+    }
+
+    private static bool RoleEquivalent(string left, string right)
+    {
+        return Eq(NormalizeRole(left), NormalizeRole(right));
+    }
+
+    private static string NormalizeRole(string value)
+    {
+        return new string((value ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+    }
+
+    private static bool RoleContains(FunctionParameterSchema schema, params string[] values)
+    {
+        string haystack = string.Join(" ", schema.Role, schema.DisplayName, schema.ParameterPattern ?? string.Empty);
+        return ContainsAny(haystack, values);
+    }
+
+    private static bool Supports(string text, IEnumerable<string> behaviorFlags, params string[] values)
+    {
+        return ContainsAny(text, values) || behaviorFlags.Any(flag => ContainsAny(flag, values));
+    }
+
+    private static bool HasFlag(IEnumerable<string> flags, params string[] values)
+    {
+        return flags.Any(flag => ContainsAny(flag, values));
+    }
+
+    private static bool StartsOrContains(string value, params string[] values)
+    {
+        return values.Any(v => value.StartsWith(v, StringComparison.OrdinalIgnoreCase) || value.IndexOf(v, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static bool ContainsAny(string value, params string[] values)
+    {
+        return values.Any(v => (value ?? string.Empty).IndexOf(v, StringComparison.OrdinalIgnoreCase) >= 0);
+    }
+
+    private static bool Eq(string? left, string? right)
+    {
+        return string.Equals(left ?? string.Empty, right ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> Distinct(IEnumerable<string> values)
+    {
+        return values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Select(v => v.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 }

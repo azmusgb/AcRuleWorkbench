@@ -151,7 +151,7 @@ API v1 is the stable product contract. It wraps extraction output in consistent 
 | `/diagnostics` | Global snapshot diagnostics. |
 | `/search` | FWD-aware global search. |
 
-The routes now expose the canonical Editor-model layer for Rule Lists, selected Rules, UDFs, SelectionLists, page designs, object graph, and runtime impact. Remaining semantic gaps are primarily complete function-specific schemas and deeper typed process/resource projections where native payload shapes still need proof.
+The routes now expose the canonical Editor-model layer for Rule Lists, selected Rules, UDFs, SelectionLists, page designs, object graph, structured function schemas, and runtime impact. Remaining semantic gaps are primarily native-guide-only function metadata, deeper typed process/resource projections, and raw evidence drill-through where native payload shapes still need proof.
 
 ### `AcRuleWorkbench.Core`
 
@@ -598,7 +598,7 @@ Key scripts:
 | `WorkbenchApiService.cs` | Large route dispatch and payload builder class. | Move heavy query construction into focused services. |
 | `WorkbenchApiServer.cs` | Server, static assets, legacy routes, debug routes, refresh, and harness in one class. | Keep semantic work out of this file; eventually split hosting/static/debug concerns. |
 | Viewer JS | Large single-file desktop app. | Keep root/core sync; split only if packaging can preserve generated viewer simplicity. |
-| Function catalog | Seeded high-value catalog with observed-function additions and contract tests. | Continue expanding into a full AC function schema catalog. |
+| Function catalog | Seeded high-value catalog with observed-function additions, structured parameter schemas, schema profiles, unknown observed parameter diagnostics, and contract tests. | Continue expanding native-guide-only metadata such as defaults, package/DLL, examples, replacement guidance, and custom function signatures when source evidence exists. |
 | UDF model | Canonical definitions now include named field-list parameters, status results, caller bindings, and an internal Rule List projection from decoded UDF nodes or promoted private-tree body evidence. | Replace remaining opaque-payload diagnostics only when new native payload shapes expose typed rule bytes. |
 | Table model | Currently resource/usage-derived. | Add canonical SelectionList/table definitions, schema, match fields, plug fields, options, persistence, rerun behavior. |
 | Status-result actions | Structural edges exist, labels may be resolved, but action semantics are not yet fully first-class. | Add explicit status result -> action model to rule packets/API/viewer. |
