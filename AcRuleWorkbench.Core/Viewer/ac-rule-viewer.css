@@ -6900,9 +6900,9 @@ body.tabbed-workbench.layout-v61 .toast{
   }
 }
 
-/* v62.15 FormWorks Editor wiring alignment.
-   Keep the light chrome and make durable regions plus process/message controls
-   behave like stateful FWEditor surfaces. */
+/* v62.16 FormWorks Editor message workspace alignment.
+   Keep the light chrome and make Message Window diagnostics usable as both a
+   durable bottom region and a scope-local Configuration Window tab. */
 body.tabbed-workbench.layout-v61 .fwd-tree-root{
   display:grid!important;
   gap:2px!important;
@@ -7041,6 +7041,41 @@ body.tabbed-workbench.layout-v61 .process-pill.configured b{
 body.tabbed-workbench.layout-v61 .process-pill.warn{
   border-color:rgba(180,83,9,.34)!important;
   background:#fff7ed!important;
+}
+
+body.tabbed-workbench.layout-v61 .messages-workspace-grid{
+  align-items:start!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-filter-toolbar{
+  justify-content:flex-end!important;
+  flex-wrap:wrap!important;
+  max-width:640px!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-filter-toolbar .chip-btn{
+  min-height:28px!important;
+  padding:3px 8px!important;
+  border-radius:5px!important;
+  gap:5px!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-filter-toolbar .chip-btn b{
+  color:var(--text-muted)!important;
+  font:700 10px var(--font-mono)!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-row{
+  grid-template-columns:minmax(260px,1fr) 92px 110px minmax(120px,180px)!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-row .data-sub{
+  max-width:86ch!important;
+}
+
+body.tabbed-workbench.layout-v61 .message-detail-card{
+  display:grid!important;
+  gap:8px!important;
 }
 
 body.tabbed-workbench.layout-v61 .status-action-preview{

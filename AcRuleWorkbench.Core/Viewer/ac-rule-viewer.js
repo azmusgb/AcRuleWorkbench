@@ -233,7 +233,7 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const storeKey='ac-rule-workbench-v62-15-editor-wiring';
+const storeKey='ac-rule-workbench-v62-16-message-workspace';
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
 const list=x=>Array.isArray(x)?x:(x==null?[]:[x]);
 const first=(...xs)=>xs.find(x=>x!==undefined&&x!==null&&String(x).length>0);
@@ -1046,7 +1046,8 @@ function workspaceTabDefinitions(){
   }
   return [
     ['structure','Structure','Rule List hierarchy, Status Results, and Action Lists'],
-    ['field-resolution','Fields','Field and parameter references resolved against the FWD catalog']
+    ['field-resolution','Fields','Field and parameter references resolved against the FWD catalog'],
+    ['messages','Messages','Persistent scope messages, validation output, and linked diagnostics']
   ];
 }
 function renderWorkspaceTabs(){
@@ -1073,6 +1074,7 @@ function renderMainHead(){
     const captions={
       structure:isDocOrPage?'Rule hierarchy, rule lists, and action lists.':'Structural rule lists and action lists.',
       'field-resolution':'Field references resolved against the extracted FWD field catalog.',
+      messages:'Persistent scope messages and diagnostics from the FWD snapshot.',
     };
     $('scopeCaption').innerHTML=`<span class="scope-caption-note">${esc(captions[state.workspaceView]||captions.structure)}</span>`;
     $('crumbs').innerHTML=`<span class="head-chip kind">${esc(s.kind)}</span><span class="head-chip">Read-only FWD snapshot</span>${state.focusNodeId?'<span class="head-chip focus">Focused subtree</span>':''}`;
@@ -1105,6 +1107,7 @@ function renderStructure(){
 }
 function renderContent(){
   if(state.workspaceView==='field-resolution')return renderFieldResolutionCatalog();
+  if(state.workspaceView==='messages')return renderMessages();
   if(state.workspaceView==='resources')return renderGlobalResourceDefinitions();
   if(state.workspaceView==='functions')return renderGlobalFunctionDefinitions();
   if(state.workspaceView==='tables')return renderGlobalTablesMasterDetail();
@@ -1216,7 +1219,51 @@ function routeChip(e){
 }
 function filteredInventory(){return scopedInventory().filter(r=>{if(!hasVisibleQuery(r))return false;if(state.inventoryFilter==='StructuralMatch')return r.classification==='StructuralMatch';if(state.inventoryFilter==='FlatOnly')return r.classification==='FlatOnly';if(state.inventoryFilter==='direct')return r.disabled==='direct';if(state.inventoryFilter==='inherited')return r.disabled==='inherited';return true;});}
 function renderInventory(){const rows=filteredInventory();$('content').innerHTML=`<div class="notice"><div class="notice-icon">!</div><div><b>Inventory is not execution order.</b> Use flat rows for search/completeness. Only rows classified as StructuralMatch link to the hierarchy.</div></div><div class="table-list">${rows.slice(0,5000).map(r=>`<div class="data-row ${state.selectedId===r.id?'selected':''}" data-inventory="${esc(r.id)}"><div><div class="data-title">${esc(r.title)}</div><div class="data-sub">${esc(r.scopeId)} · ${esc(r.RuleGuid||r.RuleId||'no id')}</div></div><div class="mono">${esc(r.fn||'no function')}</div><div>${r.classification==='FlatOnly'?'<span class="badge amber">Unlinked flat row</span>':'<span class="badge green">StructuralMatch</span>'}</div><div>${r.nodeId?'<span class="badge blue">Linked</span>':''}</div></div>`).join('')||emptyHtml('No inventory rows match','Adjust search or filter.')}</div>${rows.length>5000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 5,000 matching inventory rows for browser performance. Narrow the filter for full review.</div></div>':''}`;}
-function renderMessages(){const rows=filteredDiags();$('content').innerHTML=`<div class="table-list">${rows.map(d=>`<div class="data-row ${state.selectedId===d.id?'selected':''}" data-diag="${esc(d.id)}"><div><div class="data-title">${esc(d.title)}</div><div class="data-sub">${esc(d.detail||d.Message||'')}</div></div><div><span class="badge ${/warn|error/i.test(d.severity)?'amber':'blue'}">${esc(d.severity)}</span></div><div>${d.nodeId?`<span class="badge blue">Node ${esc(d.nodeId)}</span>`:''}</div><div></div></div>`).join('')||emptyHtml('No messages match','This scope has no messages matching the filter.')}</div>`;}
+function messageFilterToolbarHtml(){
+  const scope=currentScope();
+  const stats=messageWindowStats(scope);
+  const defs=[
+    ['all','All',stats.diags.length],
+    ['error','Errors',stats.errorCount],
+    ['warning','Warnings',stats.warningCount],
+    ['info','Info',stats.infoCount],
+    ['linked','Linked',stats.linkedCount],
+    ['rule-validation','Rule validation',stats.validationCount],
+    ['missing-refs','Missing refs',stats.missingRefs]
+  ];
+  return `<div class="scope-kind-filter message-filter-toolbar" role="toolbar" aria-label="Message Window filters">${defs.map(([mode,label,count])=>`<button class="chip-btn ${state.messageFilter===mode?'active':''}" type="button" data-action="message-filter-${esc(mode)}">${esc(label)} <b>${fmt(count)}</b></button>`).join('')}</div>`;
+}
+function messageRowHtml(d){
+  const linkedNode=d.nodeId?model.nodesById.get(String(d.nodeId)):null;
+  const severityClass=severityIsError(d.severity)?'red':severityIsProblem(d.severity)?'amber':'blue';
+  return `<button class="data-row message-row ${state.selectedType==='diag'&&state.selectedId===d.id?'selected':''}" type="button" data-diag="${esc(d.id)}"><div><div class="data-title">${esc(d.title||'Message')}</div><div class="data-sub">${esc(d.detail||d.Message||'No detail text extracted.')}</div></div><div><span class="badge ${severityClass}">${esc(d.severity||'Info')}</span></div><div>${linkedNode?`<span class="badge blue">Rule ${esc(linkedNode.id)}</span>`:'<span class="badge">Scope</span>'}</div><div>${linkedNode?`<span class="mono">${esc(linkedNode.fn||linkedNode.title||'linked')}</span>`:''}</div></button>`;
+}
+function renderMessages(){
+  const scope=currentScope();
+  const stats=messageWindowStats(scope);
+  const rows=filteredDiags();
+  const currentSelected=selectedDiag();
+  const selected=currentSelected&&rows.some(row=>row.id===currentSelected.id)?currentSelected:(rows[0]||null);
+  const linkedNode=selected?.nodeId?model.nodesById.get(String(selected.nodeId)):null;
+  const hero=workspaceHeroHtml({
+    eyebrow:'Message Window',
+    title:`${messageFilterLabel()} / ${scope.name||scope.scopeId}`,
+    caption:'Persistent scope diagnostics, validation output, and linked rule messages.',
+    metrics:[
+      {label:'scope messages',value:fmt(stats.diags.length),tone:'blue'},
+      {label:'warnings',value:fmt(stats.warningCount),tone:stats.warningCount?'amber':'green'},
+      {label:'linked rules',value:fmt(stats.linkedCount),tone:'teal'},
+      {label:'missing refs',value:fmt(stats.missingRefs),tone:stats.missingRefs?'amber':'green'}
+    ],
+    actions:`<button class="btn" type="button" data-action="go-structure">Rule Tree</button><button class="btn" type="button" data-action="view-field-resolution">Fields</button>`
+  });
+  const rowsHtml=rows.slice(0,4000).map(messageRowHtml).join('');
+  const detail=selected
+    ? `<div class="message-detail-card"><div class="kv">${kv('Severity',`<span class="badge ${severityIsProblem(selected.severity)?'amber':'blue'}">${esc(selected.severity||'Info')}</span>`)}${kv('Scope',esc(selected.scopeId||scope.scopeId))}${kv('Linked rule',linkedNode?`<button class="btn ghost" type="button" data-node="${esc(linkedNode.id)}">${esc(linkedNode.title||linkedNode.id)}</button>`:'Scope-level message')}${kv('Node',esc(selected.nodeId||''))}</div><div class="table-columns-head">Detail</div><div class="notice compact"><div class="notice-icon">!</div><div><b>${esc(selected.title||'Message')}</b><br>${esc(selected.detail||selected.Message||'No detail text extracted.')}</div></div></div>`
+    : '<div class="muted">No message is selected.</div>';
+  const body=`${scopeBannerHtml(scope)}<div class="field-workspace-grid messages-workspace-grid"><section class="workspace-card workspace-card-primary"><div class="workspace-card-head"><div><h4>Messages</h4><p>Filterable diagnostics for the selected FWD scope. Linked rows keep the rule tree and inspector synchronized.</p></div>${messageFilterToolbarHtml()}</div><div class="table-list mt-8">${rowsHtml||emptyHtml('No messages match','Change the Message Window filter or clear search.')}</div>${rows.length>4000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 4,000 messages for browser performance. Use search to narrow down.</div></div>':''}</section><aside class="workspace-side-stack">${workspaceSectionHtml('Selected Message',detail,{caption:'Selection-linked message detail.'})}${workspaceSectionHtml('Message Window State',`<div class="kv">${kv('Filter',esc(messageFilterLabel()))}${kv('Errors',fmt(stats.errorCount))}${kv('Warnings',fmt(stats.warningCount))}${kv('Info',fmt(stats.infoCount))}${kv('Linked',fmt(stats.linkedCount))}${kv('Missing refs',fmt(stats.missingRefs))}</div>`,{caption:'Durable bottom window counters for this scope.'})}</aside></div>`;
+  $('content').innerHTML=workspacePageHtml('messages',hero,body,{split:true});
+}
 function domainRowsByView(view){
   const fwd=model.fwd;
   if(fwd&&view==='resources'){
@@ -2714,13 +2761,13 @@ function stableSnapshotFallbackId(){
   return `static-${(hash>>>0).toString(36)}`;
 }
 function snapshotId(){return text(first(treeData.SnapshotId,treeData.snapshotId,rulesData.SnapshotId,rulesData.snapshotId,treeData.GeneratedAtUtc,rulesData.GeneratedAtUtc,stableSnapshotFallbackId())).replace(/[^a-z0-9_.:-]+/gi,'-');}
-function snapshotStoreKey(){return `ac-rule-workbench-v62-15:${snapshotId()}`;}
+function snapshotStoreKey(){return `ac-rule-workbench-v62-16:${snapshotId()}`;}
 function requestedWorkspaceView(){
   try{
     const href=text(window.location?.href||'');
     const match=href.match(/[?&]view=([^&#]+)/i);
     const view=match?decodeURIComponent(match[1].replace(/\+/g,' ')):'';
-    return ['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(view)?view:'';
+    return ['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(view)?view:'';
   }catch{return '';}
 }
 function noteRecentScope(scopeId){const id=text(scopeId);if(!id)return;state.recentScopes=[id,...state.recentScopes.filter(x=>x!==id)].slice(0,6);}
@@ -2749,11 +2796,11 @@ function saveState(){
     recentScopes:state.recentScopes,
     disclosureLevel:state.disclosureLevel
   }));
-  writeStorage('ac-rule-workbench-v62-15-theme',state.theme);
+  writeStorage('ac-rule-workbench-v62-16-theme',state.theme);
 }
 function restoreSnapshotState(){
   const saved=safeJson(readStorage(snapshotStoreKey())||'{}',{});
-  const theme=readStorage('ac-rule-workbench-v62-15-theme')||'light';
+  const theme=readStorage('ac-rule-workbench-v62-16-theme')||'light';
   state.theme=theme;
   document.documentElement.dataset.theme=theme;
   state.density=saved.density==='high'?'high':state.density;
@@ -2762,7 +2809,7 @@ function restoreSnapshotState(){
   if(saved.scopeId&&model.scopes.some(s=>s.scopeId===saved.scopeId))state.scopeId=saved.scopeId;
   if(saved.treeFilter)state.treeFilter=saved.treeFilter;
   if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;
-  state.workspaceView=['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(saved.workspaceView)?saved.workspaceView:'structure';
+  state.workspaceView=['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(saved.workspaceView)?saved.workspaceView:'structure';
   state.workspaceView=requestedWorkspaceView()||state.workspaceView;
   state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';
   state.inventoryFilter=['all','StructuralMatch','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:state.inventoryFilter;
@@ -3136,7 +3183,7 @@ function jumpToSearchResult(r){
 function normalizeWorkspaceViewForScope(){
   const scope=currentScope();
   if(!scope)return;
-  if(!['structure','field-resolution','resources','functions','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
+  if(!['structure','field-resolution','messages','resources','functions','tables','drivers','udfs'].includes(state.workspaceView))state.workspaceView='structure';
   if(state.selectedProcessName&&!processNamesForScope(scope).some(name=>lower(name)===lower(state.selectedProcessName)))state.selectedProcessName='';
 }
 function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
@@ -3191,6 +3238,7 @@ function activeSliceHtml(){
   const labels={
     structure:['Structure','Rule hierarchy'],
     'field-resolution':['Fields','Resolution matrix'],
+    messages:['Messages','Diagnostics'],
     resources:['Resources','Global definitions'],
     functions:['Functions','AC catalog'],
     tables:['Tables','Global definitions'],
@@ -3321,6 +3369,8 @@ function selectMessageFilter(mode){
   }else if(state.messageFilter==='missing-refs'){
     state.workspaceView='field-resolution';
     state.fieldResolutionFilter='unresolved';
+  }else{
+    state.workspaceView='messages';
   }
   const d=firstDiagnosticForFilter(state.messageFilter);
   if(d){
@@ -3344,6 +3394,7 @@ function viewSearchMeta(){
   if(state.workspaceView==='tables')return {label:'Filter tables',placeholder:'Filter tables by name, column, scope, or rule reference'};
   if(state.workspaceView==='drivers')return {label:'Filter drivers',placeholder:'Filter drivers and process findings'};
   if(state.workspaceView==='udfs')return {label:'Filter UDFs',placeholder:'Filter UDF names, real parameter names, internal rules, caller rules, or status results'};
+  if(state.workspaceView==='messages')return {label:'Filter messages',placeholder:'Filter messages by severity, title, detail, scope, or linked rule'};
   return {label:'Filter viewer',placeholder:'Filter current view'};
 }
 function syncViewSearchMeta(){
@@ -3385,7 +3436,7 @@ function wireOnboardingChecklist(){
     dismissBtn.addEventListener('click',()=>dismissOnboardingChecklist());
   }
 }
-function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act==='view-structure'||act==='view-field-resolution'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act==='view-structure'||act==='view-field-resolution'||act==='view-messages'||act==='view-resources'||act==='view-functions'||act==='view-tables'||act==='view-drivers'||act==='view-udfs'){e.preventDefault();state.workspaceView=act.replace(/^view-/,'');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();handleAction(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseBranchesForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-branch]')?.dataset.toggleBranch;if(br){state.collapsedBranches.has(br)?state.collapsedBranches.delete(br):state.collapsedBranches.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const branch=e.target.closest('[data-branch]')?.dataset.branch;if(branch){selectBranch(branch);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
   document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch')applyQueryInput(e.target.value,e.target.id);});
   document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderDiagnosticsDock();renderViewbar();return;}});
