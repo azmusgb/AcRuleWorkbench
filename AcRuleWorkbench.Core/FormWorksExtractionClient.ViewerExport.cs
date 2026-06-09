@@ -33,9 +33,12 @@ public sealed partial class FormWorksExtractionClient : IFormWorksExtractionClie
             RequireNativeOk = options.RequireNativeOk
         };
 
+        // Structural hierarchy/order is canonical; reconcile flat inventory once.
         AcRuleReport rules = InspectAcRules(ruleOptions);
+
         AcRelationshipReport relationships = BuildRelationshipReport(rules, includeRules: false);
         relationships.RebuildCounts();
+
         AcTreeReport tree = BuildAcTree(new AcTreeOptions
         {
             Path = options.Path,
@@ -49,6 +52,7 @@ public sealed partial class FormWorksExtractionClient : IFormWorksExtractionClie
             MaskSensitiveValues = true,
             RequireNativeOk = options.RequireNativeOk
         });
+
         AcTreeFlatInventoryReconciler.ReconcileFlatInventoryIntoTree(tree, rules);
         EvidenceExportProfileSettings exportProfile = EvidenceExportProfileSettings.Resolve(options.ExportProfile);
         FwdInspectionReport? fwd = null;

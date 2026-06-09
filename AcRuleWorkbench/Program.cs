@@ -283,8 +283,9 @@ internal static class Program
                 Output(report, context.Json, PrintAcIndex);
                 return 0;
             }
-if (Has(context.Args, "ac-diagnostics"))
+            if (Has(context.Args, "ac-diagnostics"))
             {
+
                 var options = new AcRuleOptions
                 {
                     Path = GetValue(context.Args, "--path"),
