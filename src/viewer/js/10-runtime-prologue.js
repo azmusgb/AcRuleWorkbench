@@ -397,7 +397,7 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const viewerStateBuild='v101-fw-editor-viewer';
+const viewerStateBuild='v103-fw-editor-viewer';
 const storeKey=`fw-editor-viewer-${viewerStateBuild}`;
 const themeStoreKey=`${storeKey}-theme`;
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
@@ -609,31 +609,42 @@ function applyViewportProfile(){
 }
 applyViewportProfile();window.addEventListener('resize',()=>{applyViewportProfile();applyPaneLayout();});
 function clampNumber(value,min,max){return Math.max(min,Math.min(max,Number(value)||0));}
+function paneWidthStep(value,min,max,fallback,step=20){return Math.round(clampNumber(Number(value)||fallback,min,max)/step)*step;}
+function syncPaneLayoutClasses(root,leftWidth,rightWidth,compact=false){
+  if(!root)return;
+  root.className=String(root.className)
+    .replace(/\bshell-left-w-\d+\b/g,'')
+    .replace(/\bshell-right-w-\d+\b/g,'')
+    .replace(/\bshell-compact-widths\b/g,'')
+    .replace(/\s{2,}/g,' ')
+    .trim();
+  if(compact){
+    root.classList.add('shell-compact-widths');
+    return;
+  }
+  root.classList.add(`shell-left-w-${leftWidth}`,`shell-right-w-${rightWidth}`);
+}
 function applyPaneLayout(){
   const root=document.documentElement;
   const shell=optionalElement('mainContent')?.closest?.('.shell');
   if(!shell)return;
   const compact=document.body.classList.contains('compact-shell')&&!isEditorMode();
   if(compact){
-    root.style.setProperty('--left-w','minmax(0,1fr)');
-    root.style.setProperty('--right-w','minmax(0,1fr)');
+    syncPaneLayoutClasses(root,0,0,true);
     return;
   }
   const shellWidth=Math.max(1024,shell.getBoundingClientRect?.().width||window.innerWidth||1024);
   const rightVisible=document.body.classList.contains('inspector-open');
   const splitterSpace=rightVisible?18:10;
   const mainMin=shellWidth>=1700?760:shellWidth>=1280?620:520;
-  const leftMin=shellWidth>=1280?244:220;
-  const rightMin=shellWidth>=1280?288:260;
+  const leftMin=shellWidth>=1280?240:220;
+  const rightMin=shellWidth>=1280?280:260;
   const preferredRight=rightVisible?state.paneRightWidth:rightMin;
   const maxLeft=Math.max(leftMin,Math.min(560,shellWidth-mainMin-preferredRight-splitterSpace));
   const maxRight=Math.max(rightMin,Math.min(680,shellWidth-mainMin-state.paneLeftWidth-splitterSpace));
-  state.paneLeftWidth=clampNumber(state.paneLeftWidth,leftMin,maxLeft);
-  state.paneRightWidth=clampNumber(state.paneRightWidth,rightMin,maxRight);
-  root.style.setProperty('--left-w',`${Math.round(state.paneLeftWidth)}px`);
-  root.style.setProperty('--right-w',`${Math.round(state.paneRightWidth)}px`);
-  root.style.setProperty('--left-pane-w',`${Math.round(state.paneLeftWidth)}px`);
-  root.style.setProperty('--right-pane-w',`${Math.round(state.paneRightWidth)}px`);
+  state.paneLeftWidth=paneWidthStep(state.paneLeftWidth,leftMin,maxLeft,300);
+  state.paneRightWidth=paneWidthStep(state.paneRightWidth,rightMin,maxRight,360);
+  syncPaneLayoutClasses(root,state.paneLeftWidth,state.paneRightWidth,false);
   syncInspectorVisibility();
 }
 function ensurePaneResizers(){

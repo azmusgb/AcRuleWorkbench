@@ -461,13 +461,21 @@ function fweditorViewStripHtml(activeView=state.workspaceView){
   const tabs=groups.map((group,groupIndex)=>`${groupIndex?'<span class="fweditor-view-separator" aria-hidden="true"></span>':''}${group.map(([view,label])=>`<button class="${view===activeView?'active':''}" type="button" data-action="view-${esc(view)}" aria-selected="${view===activeView?'true':'false'}">${esc(label)}</button>`).join('')}`).join('');
   return `<div class="fweditor-view-strip"><div class="fweditor-view-tabs" role="tablist" aria-label="Editor windows">${tabs}</div><label class="fweditor-command-search" for="editorSearch"><span>Find</span><input id="editorSearch" type="search" value="${esc(state.query)}" placeholder="${esc(viewSearchMeta().placeholder)}" autocomplete="off"><button type="button" data-action="clear-tree-search" title="Clear search" aria-label="Clear search" ${text(state.query).trim()?'':'disabled'}>&times;</button><kbd>Ctrl+K</kbd></label></div>`;
 }
-function normalizedEditorTreeWidth(value=state.editorTreeWidth){return clampNumber(Number(value)||276,220,520);}
-function normalizedEditorMessageHeight(value=state.editorMessageHeight){return clampNumber(Number(value)||104,80,420);}
-function fweditorRootClass(baseClass){
-  return `${baseClass}${state.editorMessageExpanded?' message-expanded':''}`;
+function editorPaneStep(value,min,max,fallback,step=20){return Math.round(clampNumber(Number(value)||fallback,min,max)/step)*step;}
+function normalizedEditorTreeWidth(value=state.editorTreeWidth){return editorPaneStep(value,220,520,280);}
+function normalizedEditorMessageHeight(value=state.editorMessageHeight){return editorPaneStep(value,80,420,100);}
+function boundedLevel(value,max=20){return Math.max(0,Math.min(max,Math.round(Number(value)||0)));}
+function treeDepthClass(value){return `depth-${boundedLevel(value)}`;}
+function barWidthClass(value){
+  const pct=Math.max(0,Math.min(100,Math.round(Number(value)||0)));
+  const snapped=Math.max(0,Math.min(100,Math.round(pct/5)*5));
+  return `bar-w-${snapped}`;
 }
-function fweditorRootStyle(){
-  return `--fw-tree-w:${Math.round(normalizedEditorTreeWidth())}px;--fw-message-h:${Math.round(normalizedEditorMessageHeight())}px`;
+function editorPaneSizeClasses(){
+  return `fw-tree-w-${normalizedEditorTreeWidth()} fw-message-h-${normalizedEditorMessageHeight()}`;
+}
+function fweditorRootClass(baseClass){
+  return `${baseClass} ${editorPaneSizeClasses()}${state.editorMessageExpanded?' message-expanded':''}`;
 }
 function fweditorTreeSplitterHtml(){
   return `<div class="fweditor-splitter fweditor-tree-splitter" role="separator" aria-label="Resize FW Editor Viewer navigation" aria-orientation="vertical" tabindex="0" data-editor-resize="tree"></div>`;
@@ -523,7 +531,7 @@ function fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options=
 function fweditorScopeRootHtml(activePage,title,bodyHtml,options={}){
   const scope=currentScope();
   const advancedMessages=isAdvancedMode()?`${fweditorMessageSplitterHtml()}${fweditorScopeMessageWindowHtml(scope)}`:'';
-  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" style="${fweditorRootStyle()}" aria-label="FW Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FW Editor Viewer navigation"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(model.scopes.length)}</b><span>Scopes</span></div><div class="fweditor-filter-note">Search filters the current Editor window.</div></div>${fweditorScopeTreeHtml(scope.scopeId)}</aside>${fweditorTreeSplitterHtml()}${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
+  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" aria-label="FW Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FW Editor Viewer navigation"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(model.scopes.length)}</b><span>Scopes</span></div><div class="fweditor-filter-note">Search filters the current Editor window.</div></div>${fweditorScopeTreeHtml(scope.scopeId)}</aside>${fweditorTreeSplitterHtml()}${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
 }
 
 function severityIsProblem(severity){return /warn|error|fatal/i.test(text(severity));}
@@ -599,7 +607,7 @@ function renderDiagnosticsDock(){
   ].join('');
   host.innerHTML=`<div class="load-status-window-title"><b>Load Status</b><span>${esc(editorScopeKind(scope))} - ${esc(messageFilterLabel())}</span></div><div class="diagnostics-tabbar" role="tablist" aria-label="Message filters">${tabs}</div><div class="diagnostics-feed"><span class="diagnostics-scope">${esc(scope.name||scope.scopeId)}</span>${messageBody}<span class="diagnostics-note">${esc(hydration.label)}</span>${stats.warningCount?`<span class="diagnostics-warn">${fmt(stats.warningCount)} warning${stats.warningCount===1?'':'s'}</span>`:''}</div>`;
 }
-function bars(rows){if(!rows.length)return '<div class="muted">No values.</div>';const max=Math.max(...rows.map(r=>r.count),1);return `<div class="mini-list">${rows.slice(0,10).map(r=>`<div class="mini-row"><span class="mono">${esc(r.name)}</span><b>${fmt(r.count)}</b><div class="bar bar-span-all"><i style="--bar-w:${Math.max(3,r.count/max*100)}%"></i></div></div>`).join('')}</div>`;}
+function bars(rows){if(!rows.length)return '<div class="muted">No values.</div>';const max=Math.max(...rows.map(r=>r.count),1);return `<div class="mini-list">${rows.slice(0,10).map(r=>`<div class="mini-row"><span class="mono">${esc(r.name)}</span><b>${fmt(r.count)}</b><div class="bar bar-span-all"><i class="${barWidthClass(Math.max(3,r.count/max*100))}"></i></div></div>`).join('')}</div>`;}
 function topCounts(values){const m=new Map();values.map(text).filter(Boolean).forEach(v=>m.set(v,(m.get(v)||0)+1));return [...m].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name));}
 function childIds(id){return list(model.childrenByParent.get(String(id))).map(String);}
 function edgeActionListKey(e){return [e?.routeState||'',e?.label||'',first(e?.ActionListIndex,e?.actionListIndex,'')].join('|');}

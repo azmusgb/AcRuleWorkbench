@@ -272,7 +272,7 @@ internal static class WorkbenchSnapshotBuilder
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        string normalized = value.Trim().ToLowerInvariant();
+        string normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
         var builder = new StringBuilder(normalized.Length);
         bool lastWasSpace = false;
         foreach (char c in normalized)

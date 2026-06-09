@@ -323,8 +323,7 @@ function copyTextFallback(textValue){
   const ta=document.createElement('textarea');
   ta.value=textValue;
   ta.setAttribute('readonly','readonly');
-  ta.style.position='fixed';
-  ta.style.left='-9999px';
+  ta.className='copy-sink';
   document.body.appendChild(ta);
   ta.select();
   try { document.execCommand('copy') ? toast('Copied') : toast('Clipboard unavailable'); }
@@ -442,7 +441,7 @@ function selectNode(id){selectNodeInScope(id);}
 function actionListRow(r){
   const g=r.group;const key=r.key;const cls=g.resolved?'resolved':'unresolved';const open=r.open!==false;const selected=state.selectedType==='action-list'&&state.selectedId===key;const hot=g.childIds.length>=10||g.childIds.some(id=>{const n=model.nodesById.get(String(id));return n&&(n.disabled!=='none'||hasDiag(n));});
   const actionLabel=g.resolved?'Status result / action':'Action index';
-  return `<div class="action-list-row ${cls} ${open?'':'collapsed'} ${selected?'selected':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${r.level+1}" aria-expanded="${open?'true':'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-action-list="${esc(key)}" style="--depth:${r.level}"><span class="twisty action-list-twisty" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span><div class="action-list-main"><span class="action-list-label"><span class="action-list-prefix">${esc(actionLabel)}</span> ${esc(g.label)}</span><span class="action-list-meta">${fmt(g.childIds.length)} child ${g.childIds.length===1?'rule':'rules'}</span></div><span class="mini-row-btn" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span></div>`;
+  return `<div class="action-list-row ${treeDepthClass(r.level)} ${cls} ${open?'':'collapsed'} ${selected?'selected':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${r.level+1}" aria-expanded="${open?'true':'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-action-list="${esc(key)}"><span class="twisty action-list-twisty" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span><div class="action-list-main"><span class="action-list-label"><span class="action-list-prefix">${esc(actionLabel)}</span> ${esc(g.label)}</span><span class="action-list-meta">${fmt(g.childIds.length)} child ${g.childIds.length===1?'rule':'rules'}</span></div><span class="mini-row-btn" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span></div>`;
 }
 function renderContextActionMenu(contextLabel){
   return '';
@@ -863,7 +862,7 @@ function productHealthLabel(hydration,warnings){
   if(Number(warnings||0)>0)return ['warn','Configuration warnings',`${fmt(warnings)} warnings are available in Load Status.`];
   return ['ok','Ready for review','Snapshot loaded cleanly with no reader warnings.'];
 }
-function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
+function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();ensureUsefulWorkspaceSelection('render');setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();ensureRenderedContentFallback('empty workspace render');renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
 function renderTop(){
   document.body.classList.toggle('no-scope-selector',!state.scopeId||!currentScope());
   const banner=optionalElement('globalErrorBanner');

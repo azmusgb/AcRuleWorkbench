@@ -37,8 +37,12 @@ function focusActiveSearch(){
 }
 function applyEditorPaneVariables(root=document.querySelector('.fweditor-root,.fweditor-udf-root')){
   if(!root)return;
-  root.style.setProperty('--fw-tree-w',`${Math.round(normalizedEditorTreeWidth())}px`);
-  root.style.setProperty('--fw-message-h',`${Math.round(normalizedEditorMessageHeight())}px`);
+  root.className=String(root.className)
+    .replace(/\bfw-tree-w-\d+\b/g,'')
+    .replace(/\bfw-message-h-\d+\b/g,'')
+    .replace(/\s{2,}/g,' ')
+    .trim();
+  root.classList.add(`fw-tree-w-${normalizedEditorTreeWidth()}`,`fw-message-h-${normalizedEditorMessageHeight()}`);
   root.classList.toggle('message-expanded',state.editorMessageExpanded);
   const messageWindow=root.querySelector('.fweditor-load-status-window');
   messageWindow?.classList.toggle('expanded',state.editorMessageExpanded);

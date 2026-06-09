@@ -88,6 +88,7 @@ function Test-ExcludedPath {
     if ($normalized -match '(^|/)\.archive(/|$)') { return $true }
 
     if ($normalized -match '(^|/)fwd\.cfd$') { return $true }
+    if ($normalized -match '^tests/fixtures/viewer-minimal/ac-rule-viewer\.(rules|rel|tree|fwd)\.json$') { return $false }
     if ($normalized -match '(^|/)ac-rule-viewer\..*\.json$') { return $true }
     if ($normalized -match '(^|/)ac-rule-viewer-live\.(html|css|js)$') { return $true }
     if ($normalized -match '(^|/)runtime-path\.generated\.ps1$') { return $true }

@@ -3,7 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "test:viewer": "node tests/static/fw-editor-viewer.static.test.js && node tests/static/fw-editor-viewer-scripts.static.test.js",
+    "test:viewer": "node tests/static/fw-editor-viewer.static.test.js && node tests/static/fw-editor-viewer-scripts.static.test.js && node tests/static/style-surfaces.static.test.js",
     "test:browser": "playwright test tests/browser/fw-editor-viewer.behavior.spec.js tests/browser/fw-editor-viewer-resource-workspaces.spec.js",
     "lint:viewer": "eslint ac-rule-viewer.js",
     "test": "npm run test:viewer",
@@ -13,5 +13,5 @@
     "@playwright/test": "^1.46.0",
     "eslint": "^9.0.0"
   },
-  "viewerBuild": "v101-fw-editor-viewer"
+  "viewerBuild": "v103-fw-editor-viewer"
 }

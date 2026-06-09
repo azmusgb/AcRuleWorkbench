@@ -187,6 +187,10 @@ Get-ChildItem -LiteralPath $rootPath -Recurse -Force -File | ForEach-Object {
     }
 
     if ($generatedFileNames -contains $fileName) {
+        if ($relativeUnix -match '^tests/fixtures/viewer-minimal/ac-rule-viewer\.(rules|rel|tree|fwd)\.json$') {
+            return
+        }
+
         $script:findings += New-Finding -Type 'GeneratedEvidence' -Rule $fileName -Path $relativePath -Category 'Generated evidence'
         return
     }

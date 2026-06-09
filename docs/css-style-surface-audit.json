@@ -1,0 +1,364 @@
+{
+  "summary": {
+    "reviewedAt": "2026-06-09T00:42:44Z",
+    "htmlFiles": 8,
+    "cssFiles": 12,
+    "jsFiles": 27,
+    "htmlStyleBlocks": 0,
+    "htmlInlineStyleAttributes": 0,
+    "jsGeneratedInlineStyleAttributes": 0,
+    "jsDomInlineStyleMutations": 0,
+    "activeViewerImportant": 2000,
+    "allCssImportant": 10093,
+    "viewerBuild": "v103-fw-editor-viewer"
+  },
+  "html": [
+    {
+      "path": "ac-rule-viewer-test.html",
+      "lines": 115,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link href=\"https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Orbitron:wght@500;700&display=swap\" rel=\"stylesheet\">",
+        "<link id=\"viewerStylesheet\" rel=\"stylesheet\" href=\"ac-rule-viewer.css?v=fw-editor-viewer-v103\">"
+      ]
+    },
+    {
+      "path": "ac-rule-viewer.html",
+      "lines": 115,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link id=\"viewerStylesheet\" rel=\"stylesheet\" href=\"ac-rule-viewer.css?v=fw-editor-viewer-v103\">"
+      ]
+    },
+    {
+      "path": "AcRuleWorkbench.Core/Viewer/ac-rule-viewer.html",
+      "lines": 115,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link id=\"viewerStylesheet\" rel=\"stylesheet\" href=\"ac-rule-viewer.css?v=fw-editor-viewer-v103\">"
+      ]
+    },
+    {
+      "path": "AcRuleWorkbench.Core/Viewer/ac-viewer-template.html",
+      "lines": 115,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link id=\"viewerStylesheet\" rel=\"stylesheet\" href=\"ac-rule-viewer.css?v=fw-editor-viewer-v103\">"
+      ]
+    },
+    {
+      "path": "AcRuleWorkbench/ApiHarness/api-harness.html",
+      "lines": 91,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link rel=\"stylesheet\" href=\"api-harness.css\">"
+      ]
+    },
+    {
+      "path": "docs/archive/design-history/ac-rule-workbench-v37-preview.html",
+      "lines": 67,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link rel=\"stylesheet\" href=\"ac-rule-workbench-v37.css\">"
+      ]
+    },
+    {
+      "path": "docs/design/ac-rule-workbench-v37-preview.html",
+      "lines": 67,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link rel=\"stylesheet\" href=\"ac-rule-workbench-v37.css\">"
+      ]
+    },
+    {
+      "path": "src/viewer/ac-rule-viewer.html",
+      "lines": 115,
+      "styleBlocks": 0,
+      "inlineStyleAttributes": 0,
+      "stylesheets": [
+        "<link id=\"viewerStylesheet\" rel=\"stylesheet\" href=\"ac-rule-viewer.css?v=fw-editor-viewer-v103\">"
+      ]
+    }
+  ],
+  "css": [
+    {
+      "path": "ac-rule-viewer.css",
+      "lines": 11359,
+      "bytes": 367144,
+      "important": 2000,
+      "customProperties": 1028,
+      "mediaQueries": 61,
+      "reducedMotion": true
+    },
+    {
+      "path": "AcRuleWorkbench.Core/Viewer/ac-rule-viewer.css",
+      "lines": 11359,
+      "bytes": 367144,
+      "important": 2000,
+      "customProperties": 1028,
+      "mediaQueries": 61,
+      "reducedMotion": true
+    },
+    {
+      "path": "AcRuleWorkbench.Core/Viewer/ac-viewer-template.css",
+      "lines": 11359,
+      "bytes": 367144,
+      "important": 2000,
+      "customProperties": 1028,
+      "mediaQueries": 61,
+      "reducedMotion": true
+    },
+    {
+      "path": "AcRuleWorkbench/ApiHarness/api-harness.css",
+      "lines": 536,
+      "bytes": 22716,
+      "important": 93,
+      "customProperties": 160,
+      "mediaQueries": 8,
+      "reducedMotion": true
+    },
+    {
+      "path": "docs/archive/design-history/ac-rule-workbench-v37.css",
+      "lines": 13,
+      "bytes": 297,
+      "important": 0,
+      "customProperties": 0,
+      "mediaQueries": 0,
+      "reducedMotion": false
+    },
+    {
+      "path": "docs/design/ac-rule-workbench-v37.css",
+      "lines": 13,
+      "bytes": 297,
+      "important": 0,
+      "customProperties": 0,
+      "mediaQueries": 0,
+      "reducedMotion": false
+    },
+    {
+      "path": "src/viewer/ac-rule-viewer.css",
+      "lines": 11359,
+      "bytes": 367144,
+      "important": 2000,
+      "customProperties": 1028,
+      "mediaQueries": 61,
+      "reducedMotion": true
+    },
+    {
+      "path": "src/viewer/styles/00-base-tokens.css",
+      "lines": 221,
+      "bytes": 16492,
+      "important": 1,
+      "customProperties": 59,
+      "mediaQueries": 0,
+      "reducedMotion": false
+    },
+    {
+      "path": "src/viewer/styles/20-shell-layout.css",
+      "lines": 1085,
+      "bytes": 44278,
+      "important": 6,
+      "customProperties": 214,
+      "mediaQueries": 8,
+      "reducedMotion": true
+    },
+    {
+      "path": "src/viewer/styles/40-rule-list-components.css",
+      "lines": 3023,
+      "bytes": 98618,
+      "important": 20,
+      "customProperties": 313,
+      "mediaQueries": 19,
+      "reducedMotion": true
+    },
+    {
+      "path": "src/viewer/styles/60-resource-workspaces.css",
+      "lines": 4100,
+      "bytes": 103543,
+      "important": 1014,
+      "customProperties": 241,
+      "mediaQueries": 12,
+      "reducedMotion": true
+    },
+    {
+      "path": "src/viewer/styles/80-legacy-compat-overrides.css",
+      "lines": 2930,
+      "bytes": 104213,
+      "important": 959,
+      "customProperties": 201,
+      "mediaQueries": 22,
+      "reducedMotion": true
+    }
+  ],
+  "js": [
+    {
+      "path": "ac-rule-viewer.js",
+      "lines": 5357,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "server.js",
+      "lines": 208,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "AcRuleWorkbench.Core/Viewer/ac-rule-viewer.js",
+      "lines": 5357,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "scripts/generate-workbench-dev-spec.js",
+      "lines": 46,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "scripts/a11y/run-axe-playwright.js",
+      "lines": 26,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/browser/fw-companion.behavior.spec.js",
+      "lines": 142,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/browser/fw-editor-viewer-resource-workspaces.spec.js",
+      "lines": 80,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/browser/fw-editor-viewer.behavior.spec.js",
+      "lines": 99,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-scripts.static.test.js",
+      "lines": 43,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v80.static.test.js",
+      "lines": 72,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v81.static.test.js",
+      "lines": 88,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v82.static.test.js",
+      "lines": 93,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v83.static.test.js",
+      "lines": 108,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v85.static.test.js",
+      "lines": 126,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer-v86.static.test.js",
+      "lines": 138,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/fw-editor-viewer.static.test.js",
+      "lines": 175,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "tests/static/style-surfaces.static.test.js",
+      "lines": 101,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/ac-rule-viewer.js",
+      "lines": 5357,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/00-css-loader.js",
+      "lines": 23,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/10-runtime-prologue.js",
+      "lines": 716,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/15-shell-layout-helpers.js",
+      "lines": 207,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/20-model-indexes.js",
+      "lines": 1648,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/30-resource-workspaces.js",
+      "lines": 829,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/40-inspector-legacy.js",
+      "lines": 78,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/50-rule-list-rendering.js",
+      "lines": 1053,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/70-actions-commands.js",
+      "lines": 427,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    },
+    {
+      "path": "src/viewer/js/90-render-bootstrap.js",
+      "lines": 382,
+      "generatedInlineStyleAttributes": 0,
+      "domInlineStyleMutations": 0
+    }
+  ]
+}

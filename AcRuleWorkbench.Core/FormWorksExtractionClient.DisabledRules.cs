@@ -52,9 +52,10 @@ public sealed partial class FormWorksExtractionClient : IFormWorksExtractionClie
 
         IEnumerable<AcRuleSummary> selected = rules.Rules;
 
-        if (!string.IsNullOrWhiteSpace(options.State))
+        string stateFilter = options.State ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(stateFilter))
         {
-            string state = NormalizeDisabledState(options.State.Trim());
+            string state = NormalizeDisabledState(stateFilter.Trim());
             selected = selected.Where(r => string.Equals(r.DisabledState, state, StringComparison.OrdinalIgnoreCase));
         }
         else

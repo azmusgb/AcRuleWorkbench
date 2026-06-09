@@ -575,7 +575,7 @@ internal sealed class AcStructuralTreeParser
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
 
-        string text = value.Trim()
+        string text = (value ?? string.Empty).Trim()
             .Replace("\\015\\012", Environment.NewLine)
             .Replace("\\r\\n", Environment.NewLine)
             .Replace("\\n", Environment.NewLine)

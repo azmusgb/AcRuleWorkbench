@@ -2861,3 +2861,70 @@ body.product-shell-v70 .product-empty-actions{
 body.product-shell-v70 .product-empty-actions .btn{
   min-height:36px;
 }
+
+
+/* v102 runtime repair: always surface a useful main-pane fallback when the selected workspace is empty. */
+body.fw-editor-viewer-shell .product-fallback-workspace{
+  min-height:100%;
+  display:grid!important;
+  align-items:center;
+  padding:clamp(18px,3vw,40px)!important;
+}
+body.fw-editor-viewer-shell .product-empty-state-actionable{
+  max-width:980px;
+  margin:0 auto;
+  border:1px solid var(--line);
+  border-radius:24px;
+  background:linear-gradient(180deg,var(--surface),color-mix(in srgb,var(--surface-2) 80%,var(--surface)));
+  box-shadow:0 20px 60px rgba(15,23,42,.08);
+}
+.product-empty-choices{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:10px;
+  margin-top:18px;
+}
+.product-empty-choice{
+  min-height:72px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--surface);
+  color:var(--text);
+  padding:13px 14px;
+  text-align:left;
+  cursor:pointer;
+}
+.product-empty-choice:hover,
+.product-empty-choice:focus-visible{
+  border-color:color-mix(in srgb,var(--accent) 55%,var(--line));
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent);
+}
+.product-empty-choice.primary{
+  border-color:color-mix(in srgb,var(--accent) 45%,var(--line));
+  background:color-mix(in srgb,var(--accent) 8%,var(--surface));
+}
+.product-empty-choice b{
+  display:block;
+  font-weight:850;
+}
+.product-empty-choice small{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  line-height:1.35;
+}
+.product-empty-choice em{
+  min-width:34px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  padding:3px 8px;
+  background:var(--surface-2);
+  color:var(--muted);
+  font-style:normal;
+  font-weight:800;
+  text-align:center;
+}

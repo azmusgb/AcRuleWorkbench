@@ -283,16 +283,56 @@ function ensureUsefulWorkspaceSelection(reason='boot'){
     state.workspaceView=explicit;
     return;
   }
-  if(!validWorkspaceViews().includes(current)||!workspaceHasContent(current)){
-    state.workspaceView=preferredInitialWorkspace();
-  }
-  if(reason==='boot'&&current==='structure'&&!workspaceHasContent('structure')){
+
+  const selectedScope=current==='structure'?currentScope():null;
+  const currentIsEmpty=!validWorkspaceViews().includes(current)
+    || !workspaceHasContent(current)
+    || (current==='structure' && selectedScope && !scopeHasRuleContent(selectedScope) && workspaceContentScore('structure')<=0);
+
+  if(currentIsEmpty){
     state.workspaceView=preferredInitialWorkspace();
   }
 }
 
 function applyInitialWorkspaceSelection(){
   ensureUsefulWorkspaceSelection('boot');
+}
+
+function viewerWorkspaceFallbackHtml(reason=''){
+  const c=productCounts();
+  const nav=globalNavigationCounts();
+  const hydrated=fwdHydrationSummary();
+  const cards=[
+    {action:'nav-documents',label:'Documents / Pages',count:c.scopes,detail:'Open document, page, batch, and process scopes.'},
+    {action:'view-drivers',label:'Drivers',count:nav.drivers,detail:'Inspect input, output, and process-private drivers.'},
+    {action:'view-udfs',label:'UDFs',count:nav.udfs,detail:'Review user-defined functions and caller bindings.'},
+    {action:'view-functions',label:'Functions',count:nav.functions,detail:'Review function catalog entries and usage.'},
+    {action:'view-tables',label:'Tables',count:nav.tables,detail:'Open table and lookup resources.'},
+    {action:'view-selection-lists',label:'SelectionLists',count:nav.selectionLists,detail:'Inspect SelectionList configuration.'},
+    {action:'view-resources',label:'Resources',count:nav.resources,detail:'Browse FWD-level shared resources.'},
+    {action:'view-rule-lists',label:'Rule Lists',count:nav.ruleLists,detail:'Open status result and action list packets.'}
+  ].filter(card=>Number(card.count||0)>0);
+  const cardsHtml=cards.slice(0,6).map((card,index)=>`<button class="product-empty-choice ${index===0?'primary':''}" type="button" data-action="${esc(card.action)}"><span><b>${esc(card.label)}</b><small>${esc(card.detail)}</small></span><em>${fmt(card.count)}</em></button>`).join('');
+  const metrics=[
+    ['Documents/pages/processes',c.scopes],
+    ['Rules',c.rules],
+    ['Drivers',nav.drivers],
+    ['Resources',nav.resources]
+  ];
+  return `<section class="product-workspace product-catalog product-fallback-workspace" aria-label="Viewer ready"><div class="product-empty-state product-empty-state-actionable"><div class="empty-status-row"><span class="badge green">${esc(hydrated.label||'FWD connected')}</span><span class="badge blue">Read-only</span></div><h3>FWD loaded. Choose an available workspace.</h3><p>The hosted API is ready, but the selected workspace has no renderable rows${reason?`: ${esc(reason)}`:''}. This FWD still exposes browsable configuration.</p><div class="product-empty-metrics">${metrics.map(([label,value])=>`<span><b>${fmt(value)}</b>${esc(label)}</span>`).join('')}</div><div class="product-empty-choices">${cardsHtml||'<button class="product-empty-choice primary" type="button" data-action="nav-documents"><span><b>Open FWD Tree</b><small>Browse the available scopes.</small></span><em>Open</em></button>'}</div></div></section>`;
+}
+
+function ensureRenderedContentFallback(reason='render'){
+  const host=optionalElement('content');
+  if(!host||!model)return;
+  const hasHtml=host.innerHTML&&host.innerHTML.trim().length>0;
+  const hasText=host.textContent&&host.textContent.trim().length>0;
+  if(hasHtml||hasText)return;
+  host.innerHTML=viewerWorkspaceFallbackHtml(reason);
+  const title=optionalElement('scopeTitle');
+  if(title)title.textContent='FWD configuration ready';
+  const caption=optionalElement('scopeCaption');
+  if(caption)caption.innerHTML='<span class="scope-caption-note">The selected workspace had no rows, so the viewer is showing available configuration areas.</span>';
 }
 
 function noAcRuleListWorkspaceHtml(scope){
