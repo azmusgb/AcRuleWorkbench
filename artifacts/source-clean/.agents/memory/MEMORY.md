@@ -1,2 +1,0 @@
-- [Mockup sandbox port](mockup-sandbox-port.md) — sandbox moved from port 23636 to 3001 after git rebase recovery
-- [Git pull strategy](git-pull-strategy.md) — repo has diverged history; use merge not rebase to pull upstream

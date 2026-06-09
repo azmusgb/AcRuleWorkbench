@@ -464,9 +464,20 @@ private static bool LooksLikeUdfFieldListName(string value)
             },
             usage = new
             {
+                // Back-compat arrays (do not change shape) 
                 directCallers,
                 iteratorCallers,
-                relationshipMatches = relationshipCalls
+                relationshipMatches = relationshipCalls,
+
+                // New call graph view (superset) 
+                callGraph = new
+                {
+                    // Node kinds:
+                    // - callerRule: rule that calls/includes evidence for the UDF
+                    // - udfCallee: the UDF node
+                    nodes = BuildUdfCallGraphNodes(udfName: name, directCallers: directCallers, iteratorCallers: iteratorCallers),
+                    edges = BuildUdfCallGraphEdges(udfName: name, directCallers: directCallers, iteratorCallers: iteratorCallers, relationshipCalls: relationshipCalls)
+                }
             },
             rawResourceDetails = primaryDetails == null ? null : new
             {
@@ -564,6 +575,140 @@ private static List<AcTreeNode> FindParsedUdfNodes(WorkbenchSnapshot snapshot, s
                 canonical = "/api/v1/fwd/udfs"
             }
         };
+    }
+
+private static List<object> BuildUdfCallGraphNodes(string udfName, IEnumerable<object> directCallers, IEnumerable<object> iteratorCallers)
+    {
+        // NOTE: callers are anonymous-type objects; we project them dynamically via reflection.
+        // This file intentionally uses anonymous projections elsewhere; keep it consistent.
+
+        // UDF callee node
+        string udfNodeId = "udf:" + udfName;
+        var nodes = new List<object>
+        {
+            new
+            {
+                id = udfNodeId,
+                kind = "udfCallee",
+                name = udfName
+            }
+        };
+
+        void AddCallerNodes(IEnumerable<object> callers)
+        {
+            foreach (object c in callers)
+            {
+                // expected properties from existing projections:
+                // scopeId, scopePath, scopeType, scopeName, ruleIndex, ruleGuid, ruleId, ruleName, functionName, parameters
+                var t = c.GetType();
+                string? scopeId = t.GetProperty("scopeId")?.GetValue(c)?.ToString();
+                string? ruleGuid = t.GetProperty("ruleGuid")?.GetValue(c)?.ToString();
+                int? ruleIndex = (int?)t.GetProperty("ruleIndex")?.GetValue(c);
+                string? ruleId = t.GetProperty("ruleId")?.GetValue(c)?.ToString();
+                string? ruleName = t.GetProperty("ruleName")?.GetValue(c)?.ToString();
+                string? functionName = t.GetProperty("functionName")?.GetValue(c)?.ToString();
+                string? scopePath = t.GetProperty("scopePath")?.GetValue(c)?.ToString();
+                string? scopeType = t.GetProperty("scopeType")?.GetValue(c)?.ToString();
+                string? scopeName = t.GetProperty("scopeName")?.GetValue(c)?.ToString();
+                var parameters = t.GetProperty("parameters")?.GetValue(c);
+
+                // Stable per-node id: prefer ruleGuid
+                string callerId = !string.IsNullOrWhiteSpace(ruleGuid)
+                    ? "rule:" + scopeId + ":" + ruleGuid
+                    : "rule:" + scopeId + ":idx:" + (ruleIndex.HasValue ? ruleIndex.Value.ToString() : "?" ) + ":" + (ruleId ?? "");
+
+                nodes.Add(new
+                {
+                    id = callerId,
+                    kind = "callerRule",
+                    // carry-through useful context
+                    scopeId,
+                    scopePath,
+                    scopeType,
+                    scopeName,
+                    ruleIndex,
+                    ruleGuid,
+                    ruleId,
+                    ruleName,
+                    functionName,
+                    parameters,
+                    // UI helper
+                    display = !string.IsNullOrWhiteSpace(ruleName) ? ruleName : (functionName ?? "(unknown)")
+                });
+            }
+        }
+
+        AddCallerNodes(directCallers);
+        AddCallerNodes(iteratorCallers);
+
+        return nodes;
+    }
+
+    private static List<object> BuildUdfCallGraphEdges(string udfName, IEnumerable<object> directCallers, IEnumerable<object> iteratorCallers, IEnumerable<object> relationshipCalls)
+    {
+        string udfNodeId = "udf:" + udfName;
+        var edges = new List<object>();
+
+        void AddEdges(IEnumerable<object> callers, string edgeKind)
+        {
+            foreach (object c in callers)
+            {
+                var t = c.GetType();
+                string? scopeId = t.GetProperty("scopeId")?.GetValue(c)?.ToString();
+                string? ruleGuid = t.GetProperty("ruleGuid")?.GetValue(c)?.ToString();
+                int? ruleIndex = (int?)t.GetProperty("ruleIndex")?.GetValue(c);
+                string? ruleId = t.GetProperty("ruleId")?.GetValue(c)?.ToString();
+                string fromId = !string.IsNullOrWhiteSpace(ruleGuid)
+                    ? "rule:" + scopeId + ":" + ruleGuid
+                    : "rule:" + scopeId + ":idx:" + (ruleIndex.HasValue ? ruleIndex.Value.ToString() : "?") + ":" + (ruleId ?? "");
+
+                edges.Add(new
+                {
+                    from = fromId,
+                    to = udfNodeId,
+                    kind = edgeKind
+                });
+            }
+        }
+
+        AddEdges(directCallers, "directCall");
+        AddEdges(iteratorCallers, "iteratorWrapperCall");
+
+        // relationship evidence caller nodes are based on relationshipCalls projections.
+        foreach (object r in relationshipCalls)
+        {
+            var t = r.GetType();
+            string? scopeId = t.GetProperty("scopeId")?.GetValue(r)?.ToString();
+            string? ruleGuid = t.GetProperty("ruleGuid")?.GetValue(r)?.ToString();
+            int? ruleIndex = (int?)t.GetProperty("ruleIndex")?.GetValue(r);
+            string? ruleName = t.GetProperty("ruleName")?.GetValue(r)?.ToString();
+
+            string fromId = !string.IsNullOrWhiteSpace(ruleGuid)
+                ? "rule:" + scopeId + ":" + ruleGuid
+                : "rule:" + scopeId + ":idx:" + (ruleIndex.HasValue ? ruleIndex.Value.ToString() : "?") + ":" + (ruleName ?? "");
+
+            string? kind = t.GetProperty("kind")?.GetValue(r)?.ToString();
+            string? confidence = t.GetProperty("confidence")?.GetValue(r)?.ToString();
+            string? targetType = t.GetProperty("targetType")?.GetValue(r)?.ToString();
+            string? target = t.GetProperty("target")?.GetValue(r)?.ToString();
+            string? functionName = t.GetProperty("functionName")?.GetValue(r)?.ToString();
+
+            edges.Add(new
+            {
+                from = fromId,
+                to = udfNodeId,
+                kind = "relationshipEvidenceCall",
+                // extra metadata
+                evidenceKind = kind,
+                confidence,
+                targetType,
+                target,
+                functionName,
+                ruleName
+            });
+        }
+
+        return edges;
     }
 
 private static ResourceDetail? FindResourceDetail(FwdInspectionReport? report, string resourceType, string resourceName)
