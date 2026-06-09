@@ -821,12 +821,17 @@ function installPaneResizers(){
       state.paneRightWidth=clampNumber(active.startRight-dx,260,maxRight);
       document.body.classList.add('inspector-open');
     }
+    // Avoid feedback loops: keep class + layout sync deterministic during drag.
+    // applyPaneLayout() will call syncInspectorVisibility() and clamp classes.
     applyPaneLayout();
   });
   document.addEventListener('pointerup',()=>{
     if(!active)return;
     active=null;
     document.body.classList.remove('is-resizing-pane');
+    // Ensure inspector-open is consistent after drag ends.
+    syncInspectorVisibility();
+    applyPaneLayout();
     saveState();
   });
   document.addEventListener('keydown',event=>{
@@ -1592,6 +1597,10 @@ function visibleRowsCacheKey(){
 function visibleStructureRows(){
   const cacheKey=visibleRowsCacheKey();
   if(model.visibleRowsCache&&model.visibleRowsCache.key===cacheKey)return model.visibleRowsCache.rows;
+  // Reset tree match cache when key inputs change to avoid stale false negatives.
+  if(model.treeMatchCache&&model.treeMatchCache.key!==treeMatchCacheKey()){
+    model.treeMatchCache={key:treeMatchCacheKey(),map:new Map()};
+  }
   const roots=state.focusNodeId?[String(state.focusNodeId)]:(model.rootsByScope.get(state.scopeId)||[]).map(String);
   const rows=[];
   const filtered=!!text(state.query).trim()||state.treeFilter!=='all';

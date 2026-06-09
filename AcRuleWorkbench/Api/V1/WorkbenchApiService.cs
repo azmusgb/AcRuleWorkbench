@@ -69,6 +69,8 @@ internal sealed partial class WorkbenchApiService
             if (tail.StartsWith("scopes/", StringComparison.OrdinalIgnoreCase)) return DispatchScope(tail, request);
             if (tail.StartsWith("rules/", StringComparison.OrdinalIgnoreCase)) return DispatchRule(tail, request);
             if (tail == "rule-lists" || tail.StartsWith("rule-lists/", StringComparison.OrdinalIgnoreCase)) return DispatchRuleLists(tail, request);
+            if (tail.StartsWith("rule-lists/", StringComparison.OrdinalIgnoreCase) && tail.Contains(":ruleList:") ) return DispatchRuleLists(tail, request);
+
             if (tail == "fwd" || tail.StartsWith("fwd/", StringComparison.OrdinalIgnoreCase)) return DispatchFwd(tail, request);
             if (tail == "diagnostics") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Diagnostics", BuildGlobalDiagnostics(GetSnapshot(request)));
             if (tail == "search") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Search", BuildSearch(GetSnapshot(request), request));
@@ -700,12 +702,134 @@ internal sealed partial class WorkbenchApiService
         if (parts.Length == 1)
             return Ok(request, "AcWorkbench.RuleLists", BuildRuleLists(snapshot, request));
 
+        // Phase-6 key format: ruleList:page:<encodedName>:AC or ruleList:document:<encodedName>:AC
+        // Tail may contain slashes if URL-encoded values were not encoded enough; re-join.
+        string joinedKey = DecodeJoined(parts, 1, parts.Length - 1);
+        if (joinedKey.Contains(":ruleList:", StringComparison.OrdinalIgnoreCase) || joinedKey.StartsWith("ruleList:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Phase6RuleListKeys.TryParse(joinedKey, out Phase6RuleListOwner owner, out string? keyError))
+            {
+                return Fail(request, "rule_key_invalid", keyError ?? "Malformed Phase-6 ruleList key.", 400, joinedKey, "Validate key format.");
+            }
+
+            // Resolve Phase-6 owner to an existing ruleList scope in the snapshot.
+            // We match on kind + display name to locate the correct root RuleList scope.
+            string? scopeRuleListId = snapshot.EditorModel.RuleLists
+                .FirstOrDefault(r =>
+                    RuleCorrelation.Eq(r.Kind, owner.OwnerType) &&
+                    !string.IsNullOrWhiteSpace(r.Name) &&
+                    r.Name!.IndexOf(owner.OwnerDisplayName, StringComparison.OrdinalIgnoreCase) >= 0)
+                ?.RuleListId;
+
+            if (string.IsNullOrWhiteSpace(scopeRuleListId))
+            {
+                return Fail(request, "rule_list_owner_not_found", "AC root rule list owner could not be resolved.", 404, joinedKey, "Inspect editor-model.ruleLists for matching page/document owner name.");
+            }
+
+            EditorRuleListModel? ruleList = snapshot.EditorModel.RuleLists.FirstOrDefault(r => RuleCorrelation.Eq(r.RuleListId, scopeRuleListId));
+            if (ruleList == null)
+                return Fail(request, "rule_list_load_failed", "AC root rule list could not be hydrated.", 500, joinedKey, "Verify snapshot contains owner rule list.");
+
+            var ruleKeysInOrder = ruleList.RuleConfigurations
+                .OrderBy(rc => rc.Ordinal)
+                .Select(rc => Phase6RuleKeys.MakeForStructuralNode(owner.OwnerType, owner.OwnerDisplayName, rc.NodeId))
+                .ToList();
+
+            object[] diagnostics = ruleKeysInOrder.Count == 0
+                ? new object[]
+                {
+                    new
+                    {
+                        code = "rule_list_empty",
+                        severity = "Info",
+                        category = "Phase6",
+                        message = "Rule list is empty.",
+                        technicalDetail = "No rule configurations were found for this AC root.",
+                        affectedObjectKey = joinedKey,
+                        affectedObjectPath = ruleList.RuleListPath,
+                        sourceRefs = (object?)null,
+                        suggestedInspectionStep = "Inspect snapshot editor-model rule lists for this owner."
+                    }
+                }
+                : Array.Empty<object>();
+
+            var payload = new
+            {
+                key = joinedKey,
+                type = "rule-list",
+                name = ruleList.Name,
+                path = ruleList.RuleListPath,
+                scope = owner.OwnerType,
+                ownerKey = scopeRuleListId,
+                ruleKeysInOrder,
+                sourceRefs = Array.Empty<object>(),
+                diagnostics,
+                hydrationState = ruleKeysInOrder.Count == 0 ? "empty" : "hydrated"
+            };
+
+            return Ok(request, "AcWorkbench.RuleListDto", payload);
+        }
+
+        if (joinedKey.Contains(":ruleList:", StringComparison.OrdinalIgnoreCase) || joinedKey.StartsWith("ruleList:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Phase6RuleListKeys.TryParse(joinedKey, out Phase6RuleListOwner owner, out string? keyError))
+            {
+                return Fail(request, "rule_key_invalid", keyError ?? "Malformed Phase-6 ruleList key.", 400, joinedKey, "Validate key format.");
+            }
+
+            // Resolve Phase-6 owner to an existing RuleList scope.
+            // Current EditorModel exposes RuleLists with RuleListId + Kind + Name.
+            // We treat owner resolution as matching kind + name.
+            string? scopeRuleListId = snapshot.EditorModel.RuleLists
+                .FirstOrDefault(r =>
+                    r.RuleListId.Contains(owner.OwnerDisplayName, StringComparison.OrdinalIgnoreCase) ||
+                    (string.Equals(r.Kind, owner.OwnerType, StringComparison.OrdinalIgnoreCase) &&
+                     r.Name != null && r.Name.Contains(owner.OwnerDisplayName, StringComparison.OrdinalIgnoreCase)))
+                ?.RuleListId;
+
+            if (string.IsNullOrWhiteSpace(scopeRuleListId))
+            {
+                return Fail(request, "rule_list_owner_not_found", "AC root rule list owner could not be resolved.", 404, joinedKey, "Inspect editor-model.ruleLists for matching page/document owner name.");
+            }
+
+            EditorRuleListModel? ruleList = snapshot.EditorModel.RuleLists.FirstOrDefault(r => RuleCorrelation.Eq(r.RuleListId, scopeRuleListId));
+            if (ruleList == null)
+                return Fail(request, "rule_list_load_failed", "AC root rule list could not be hydrated.", 500, joinedKey, "Verify snapshot contains owner rule list.");
+
+            // Minimal RuleListDto: stable ordering + lightweight rule keys.
+            // For Phase-6 we expose rule list identity and rule entry pointers derived from RuleConfigurations order.
+            var ruleKeysInOrder = ruleList.RuleConfigurations
+                .OrderBy(rc => rc.Ordinal)
+                .Select(rc => Phase6RuleKeys.MakeForStructuralNode(ruleList.Kind, owner.OwnerDisplayName, rc.NodeId))
+                .ToList();
+
+            var payload = new
+            {
+                key = joinedKey,
+                type = "rule-list",
+                name = ruleList.Name,
+                path = ruleList.RuleListPath,
+                scope = owner.OwnerType,
+                ownerKey = scopeRuleListId,
+                ruleKeysInOrder,
+                sourceRefs = new object[] { },
+                diagnostics = ruleKeysInOrder.Count == 0
+                    ? new[] { new { code = "rule_list_empty", severity = "Info", category = "Phase6", message = "Rule list is empty.", technicalDetail = "No rule configurations were found for this AC root.", affectedObjectKey = joinedKey, affectedObjectPath = ruleList.RuleListPath, sourceRefs = (object?)null, suggestedInspectionStep = "Inspect snapshot editor-model rule lists for this owner." } }
+                    : new object[] { },
+                hydrationState = ruleKeysInOrder.Count == 0 ? "empty" : "hydrated"
+            };
+
+            return Ok(request, "AcWorkbench.RuleListDto", payload);
+        }
+
+        // Legacy / existing behavior: scopeId based rule list detail.
         string scopeId = DecodeJoined(parts, 1, parts.Length - 1);
         EditorRuleListModel? ruleList = snapshot.EditorModel.RuleLists.FirstOrDefault(r => RuleCorrelation.Eq(r.RuleListId, scopeId));
         if (ruleList == null)
             return Fail(request, "RuleListNotFound", "Rule List was not found.", 404, scopeId);
 
         return Ok(request, "AcWorkbench.RuleListDetail", ruleList);
+
     }
 
     private object BuildRuleLists(WorkbenchSnapshot snapshot, HttpListenerRequest request)

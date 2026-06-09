@@ -34,6 +34,9 @@ internal static class ApiV1Routes
         new ApiRouteDescriptor("GET", "/api/v1/rules/{nodeId}/subtree", "Compatibility alias for selected rule and descendants. Accepts node ids and RuleGuid values."),
         new ApiRouteDescriptor("GET", "/api/v1/rule-lists", "Snapshot-wide canonical Rule List and Rule Configuration projections."),
         new ApiRouteDescriptor("GET", "/api/v1/rule-lists/{scopeId}", "Canonical Rule List projection for one scope."),
+        new ApiRouteDescriptor("GET", "/api/v1/rule-lists/{key}", "Phase-6 minimal AC root rule-list hydration. Key format: ruleList:page:<name>:AC or ruleList:document:<name>:AC."),
+        new ApiRouteDescriptor("GET", "/api/v1/rules/{key}", "Phase-6 minimal rule hydration. Key format: rule:<scopeType>:<encodedScopeName>:AC:node:<nodeId>."),
+
         new ApiRouteDescriptor("GET", "/api/v1/fwd", "FWD overview (documents/pages/batches/processes/resources/variants/fields counts)."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/object-graph", "Canonical linked FWD object graph projection, including bounded resource-private nodes when available."),
         new ApiRouteDescriptor("GET", "/api/v1/fwd/overview", "FWD overview alias."),

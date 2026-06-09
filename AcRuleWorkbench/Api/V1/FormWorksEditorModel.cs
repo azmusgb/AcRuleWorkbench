@@ -803,22 +803,33 @@ internal static class FormWorksEditorModelBuilder
         var graph = new FwdObjectGraphModel();
         AddNode(graph, "fwd:" + SafeId(snapshot.FwdPath), "FwdRoot", snapshot.FwdPath, "FwdInspectionReport", "High");
 
-        foreach (string document in Distinct(snapshot.Fwd.Documents))
-            AddObject(graph, "Document", document, "Fwd.Documents", "containsDocument");
+        // Editor hierarchy fidelity: BatchType -> DocumentType -> PageType -> PageVariant -> Field -> Process -> AC -> RuleLists
+        // Notes:
+        // - Current snapshot.Fwd lists represent configured surfaces.
+        // - Concrete ownership (which documents are in which batches, which pages in which documents) is not explicitly persisted by every snapshot field.
+        //   We therefore attach hierarchy edges using best-available evidence from extracted scope identifiers and existing relationship projections where available.
+        // - All edges remain read-only projections; missing/ambiguous ownership is surfaced via graph diagnostics.
 
-        foreach (string page in Distinct(snapshot.Fwd.Pages))
-            AddObject(graph, "Page", page, "Fwd.Pages", "containsPage");
-
+        // BatchType nodes (configured)
         foreach (string batch in Distinct(snapshot.Fwd.Batches))
-            AddObject(graph, "Batch", batch, "Fwd.Batches", "containsBatch");
+            AddObject(graph, "BatchType", batch, "Fwd.Batches", "containsBatch");
+
+        // DocumentType nodes (configured)
+        foreach (string document in Distinct(snapshot.Fwd.Documents))
+            AddObject(graph, "DocumentType", document, "Fwd.Documents", "containsDocument");
+
+        // PageType nodes (configured)
+        foreach (string page in Distinct(snapshot.Fwd.Pages))
+            AddObject(graph, "PageType", page, "Fwd.Pages", "containsPage");
+
 
         foreach (string process in Distinct(snapshot.Fwd.Processes))
             AddObject(graph, "Process", process, "Fwd.Processes", "containsProcess");
 
         foreach (PageVariantBucket bucket in snapshot.Fwd.PageVariants)
         {
-            string pageId = ObjectId("Page", bucket.Page);
-            EnsureObject(graph, "Page", bucket.Page, "Fwd.PageVariants", "Medium");
+            string pageId = ObjectId("PageType", bucket.Page);
+            EnsureObject(graph, "PageType", bucket.Page, "Fwd.PageVariants", "Medium");
             foreach (string variant in Distinct(bucket.Variants))
             {
                 string id = ObjectId("PageVariant", bucket.Page + "/" + variant);
@@ -826,6 +837,7 @@ internal static class FormWorksEditorModelBuilder
                 AddEdge(graph, pageId, id, "hasVariant", "Fwd.PageVariants", "High");
             }
         }
+
 
         foreach (FieldBucket bucket in snapshot.Fwd.Fields)
         {

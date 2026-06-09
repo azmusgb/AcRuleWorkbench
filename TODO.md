@@ -1,26 +1,30 @@
-# TODO (UDF canonical parsing + caller/callee graph)
+# TODO - FW Editor Viewer fixes
 
-## Phase 1 — Shared private-tree decoder
-- [ ] Extract / refactor `CandidatePackedRulePayloads` + packed-rule decode + `TryParseUdfInternalRuleRowsFromPrivateTree` out of `FormWorksExtractionClient.ViewerPrivateTree.cs` into a shared helper under `AcRuleWorkbench.Core`.
-- [ ] Ensure helper returns decoded rule rows and a parse-state classification.
-- [ ] Update viewer export to use the shared helper (optional but preferred to avoid divergence).
+## 1) Fix pane resizing bug
+- [ ] Locate resize wiring + `applyPaneLayout()` + `inspector-open` sync logic in `ac-rule-viewer.js`
+- [ ] Make resize drag state update both pane widths and inspector-open class deterministically
+- [ ] Ensure persisted widths restore correctly and do not get overridden by auto layout
+- [ ] Add small guard to avoid repeated `applyPaneLayout()` during pointermove causing class/state churn
 
-## Phase 2 — Canonical UDF body parsing using preferred order
-- [ ] Update `AcRuleWorkbench/Api/V1/WorkbenchApiService.Udfs.cs`:
-  - [ ] In `BuildFwdUdfsCanonical` and `BuildFwdUdfDetail`, compute `bodyParseState` and `ruleBody` in this order:
-    1) editor model `InternalRuleTree` if `Parsed`
-    2) decoded/internal nodes from `snapshot.Tree.Nodes` (`FindParsedUdfNodes`)
-    3) decoded internal rule rows from `rawDetails.PrivateTree` via shared private-tree helper
-- [ ] Ensure diagnostics only surface `UdfBodyOpaque/UdfBodyUnavailable` after private-tree fallback attempt.
-- [ ] Ensure `internalRuleCount/internalRulePreview` are consistent with the chosen source.
+## 2) Improve tree performance
+- [ ] Identify expensive calls during typing/filter updates (`visibleStructureRows()`, cache invalidation)
+- [ ] Add debounce for `state.query`/`state.treeFilter` changes
+- [ ] Ensure visible rows calculation is done once per render and reused
+- [ ] Verify cache keys include only the needed state (scopeId, expanded, collapsed, etc.)
 
-## Phase 3 — Caller/callee graph normalization
-- [ ] Update `BuildFwdUdfDetail` to add `callGraph: { nodes, edges }`.
-- [ ] Nodes include caller-rule nodes plus a callee node for the UDF.
-- [ ] Edges include: direct call, iterator wrapper call, relationship evidence call.
-- [ ] Keep existing arrays (`directCallers`, `iteratorCallers`, `relationshipMatches`) for compatibility or map them into callGraph.
+## 3) Add new tree filter mode
+- [ ] Choose mode name: `missing-refs`
+- [ ] Implement logic in `passesTreeFilter()` and corresponding UI select/toolbar
+- [ ] Ensure diagnostics/unresolved mapping exists to drive the filter
+- [ ] Add empty-state messaging for when no matches
 
-## Phase 4 — Tests & validation
-- [ ] Add tests for call graph normalization (pure transformation where possible).
-- [ ] Run `dotnet test` and fix compilation issues.
+## 4) Adjust dark mode/layout
+- [ ] Verify theme toggle sets `document.documentElement[data-theme]`
+- [ ] Remove/avoid CSS overrides that conflict with intended dark variables for shell/panes/inspector
+- [ ] Confirm in `ac-rule-viewer.css` that dark theme surfaces apply consistently
+
+## Validation
+- [ ] Run viewer (open `ac-rule-viewer.html`) and smoke-test: resize panes, typing filter, switching modes, theme toggle
+- [ ] Confirm inspector opens/closes correctly after resize
+- [ ] Confirm no console errors during search/filter interactions
 

@@ -1,0 +1,79 @@
+You are working in the existing FormWorks Editor Viewer / AC Rule Workbench solution.
+
+Use the master FormWorks Editor Viewer spec as the governing direction, but implement Phase 4 only.
+
+Goal:
+Replace workbench/dashboard navigation with an Editor-style FWD tree shell driven by normalized FWD inventory.
+
+Scope:
+Frontend only unless small API compatibility changes are required.
+
+Implement:
+- Top application bar:
+  - FormWorks Editor Viewer title
+  - persistent Read-only badge
+  - loaded FWD/config name if available
+  - parse/load/API status
+  - global search input placeholder, even if full search comes later
+  - theme toggle if already supported
+- Left FWD tree:
+  - FWD root
+  - Batches
+  - Documents
+  - Pages
+  - Resources placeholder
+  - Diagnostics placeholder
+  - Source / Raw placeholder
+- Tree node types:
+  - batch type
+  - document type
+  - page type
+  - page variant
+  - field
+  - process placeholder if present
+- Single selected-object state.
+- Expansion state keyed by stable object key.
+- Breadcrumb path.
+- Main selected-object summary shell.
+- Right inspector shell.
+- Bottom diagnostics/source panel collapsed by default.
+- Empty/loading/error states.
+- Light theme as default.
+
+Selection behavior:
+- Selecting a tree item updates selectedKey.
+- Expands ancestors when selected from search/route if applicable.
+- Updates main panel.
+- Updates inspector shell.
+- Preserves expansion state.
+- Does not reset tree unnecessarily.
+
+Do not:
+- Implement full AC rule parser.
+- Implement UDF tree.
+- Implement full diagnostics engine.
+- Implement full search indexing.
+- Add dashboard cards.
+- Use Command Center / Workbench as primary identity.
+- Remove runtime hooks unless they are obsolete and safely replaced.
+- Break existing API wiring.
+
+Deliverable:
+Return a complete unified patch with:
+1. Editor shell UI.
+2. FWD tree component.
+3. Selection state.
+4. Object summary panel.
+5. Inspector shell.
+6. Empty/loading/error states.
+7. CSS updates.
+8. Build/test commands.
+9. Expected behavior.
+10. Quick validation steps.
+
+Validation:
+- App defaults to light mode.
+- Left pane is an FWD tree, not a generic sidebar.
+- Selecting batch/document/page/variant/field updates main and inspector.
+- No edit controls are active.
+- UI is calmer and Editor-like.

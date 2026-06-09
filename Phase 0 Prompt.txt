@@ -1,0 +1,60 @@
+You are working in the existing FormWorks Editor Viewer / AC Rule Workbench solution.
+
+Use the master FormWorks Editor Viewer spec as the governing direction, but perform Phase 0 only.
+
+Goal:
+Establish a safe baseline before refactoring.
+
+Scope:
+- Inspect the current solution structure.
+- Identify current backend projects, frontend files, scripts, API endpoints, DTOs, services, parser classes, viewer state files, and tests.
+- Identify all mutation-risk paths:
+  - FWD write-enabled open paths
+  - CreateDatabase
+  - CloneHandle
+  - SetRule
+  - SetChildValue
+  - SetChildConfig
+  - SaveAttrList
+  - DeleteChild
+  - create/delete/save/rename/move/replace routes
+  - frontend buttons or event handlers that imply mutation
+- Identify current FWD extraction code.
+- Identify current AC rule parsing code.
+- Identify current UDF/function/resource parsing code.
+- Identify current CSS/layout entry points.
+- Identify current startup/build/test scripts.
+- Run or describe the correct build/test command for this solution.
+- Produce a concise implementation map.
+
+Do not:
+- Redesign the UI.
+- Rename the product yet.
+- Change API contracts yet.
+- Refactor parser logic yet.
+- Remove files unless they are clearly broken generated artifacts.
+- Implement new features.
+
+Deliverable:
+Return:
+1. Current architecture map.
+2. Current backend file map.
+3. Current frontend file map.
+4. Current API endpoint map.
+5. Current startup/build/test command list.
+6. Mutation-risk inventory.
+7. Highest-risk defects or blockers.
+8. Recommended Phase 1 patch plan.
+9. Any build/test errors observed.
+
+If you do make code changes:
+- Keep them minimal.
+- Only fix baseline build/test blockers.
+- Return a complete unified patch.
+- Explain exactly why each change was necessary.
+
+Validation:
+- Build command identified.
+- Test command identified.
+- Mutation-risk list produced.
+- No broad refactor performed.

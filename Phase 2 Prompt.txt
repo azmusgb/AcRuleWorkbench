@@ -1,0 +1,87 @@
+You are working in the existing FormWorks Editor Viewer / AC Rule Workbench solution.
+
+Use the master FormWorks Editor Viewer spec as the governing direction, but implement Phase 2 only.
+
+Goal:
+Create the normalized Editor domain contracts before changing extraction or UI.
+
+Scope:
+Add or update shared backend DTOs/enums for the read-only Editor Viewer.
+
+Required enums:
+- EditorObjectType
+- HydrationState
+- DiagnosticSeverity
+- DiagnosticCategory
+- ReferenceEdgeType
+- RuleScope
+- RuleActionKind
+- SourceRecordKind
+- FunctionCategory
+- ParseConfidence
+
+Required DTOs:
+- ApiResponse<T>
+- EditorObjectDto
+- BatchTypeDto
+- DocumentTypeDto
+- PageTypeDto
+- PageVariantDto
+- FieldDto
+- ProcessDto
+- RuleListDto
+- RuleDto
+- StatusResultDto
+- RuleActionDto
+- FunctionDto
+- UdfDto
+- ResourceDto
+- AttributeRefDto
+- ParameterBindingDto
+- FieldRefDto
+- SourceRecordDto
+- DiagnosticDto
+- ReferenceEdgeDto
+- SearchResultDto
+
+DTO requirements:
+- Stable keys.
+- Object type.
+- Display name.
+- Editor-style path.
+- Parent/child keys.
+- Source refs.
+- Diagnostics.
+- Inbound/outbound refs where applicable.
+- Hydration state.
+- Raw/source availability.
+- Scope where applicable.
+
+Also:
+- Add schema/version constants if the project already uses API envelopes.
+- Add contract tests that verify required fields serialize correctly.
+- Preserve existing API behavior unless a compile-safe compatibility shim is needed.
+- Do not wire full extraction yet unless necessary for tests.
+
+Do not:
+- Redesign UI.
+- Implement FWD extraction logic beyond minimal compile shims.
+- Implement AC rule parser changes.
+- Implement UDF parsing.
+- Remove existing endpoints unless they are mutation endpoints already handled in Phase 1.
+- Add fake production business data.
+
+Deliverable:
+Return a complete unified patch with:
+1. DTO/enums.
+2. Serialization/contract tests.
+3. Any compatibility adapters.
+4. Build/test commands.
+5. Expected behavior.
+6. Quick validation steps.
+
+Validation:
+- DTOs compile.
+- Contracts serialize predictably.
+- Existing API still builds.
+- No mutation behavior introduced.
