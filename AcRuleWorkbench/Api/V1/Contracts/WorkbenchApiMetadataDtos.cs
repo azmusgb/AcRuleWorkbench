@@ -10,7 +10,7 @@ namespace AcRuleWorkbench.Api.V1.Contracts;
 internal sealed class ApiHelpDto
 {
     [JsonProperty("name")]
-    public string Name { get; set; } = "AC Rule Workbench API v1";
+    public string Name { get; set; } = "FW Editor Viewer API v1";
 
     [JsonProperty("purpose")]
     public string Purpose { get; set; } = "Stable product API for scope, rule, evidence, relationship, search, and diagnostics workflows.";
@@ -114,6 +114,9 @@ internal sealed class CapabilitySupportDto
     [JsonProperty("snapshotCache")]
     public bool SnapshotCache { get; set; }
 
+    [JsonProperty("liveLazy")]
+    public bool LiveLazy { get; set; }
+
     [JsonProperty("structuralTree")]
     public bool StructuralTree { get; set; }
 
@@ -158,6 +161,15 @@ internal sealed class CapabilityLimitsDto
 
     [JsonProperty("maxReferencesReturned")]
     public int MaxReferencesReturned { get; set; }
+
+    [JsonProperty("maxPendingSnapshotBuilds")]
+    public int MaxPendingSnapshotBuilds { get; set; }
+
+    [JsonProperty("maxPendingLiveSessionBuilds")]
+    public int MaxPendingLiveSessionBuilds { get; set; }
+
+    [JsonProperty("maxCachedLiveSessions")]
+    public int MaxCachedLiveSessions { get; set; }
 }
 
 internal sealed class EvidenceExportProfileDto
@@ -200,7 +212,7 @@ internal sealed class LivenessDto
     public bool Live { get; set; }
 
     [JsonProperty("service")]
-    public string Service { get; set; } = "AC Rule Workbench API";
+    public string Service { get; set; } = "FW Editor Viewer API";
 
     [JsonProperty("apiVersion")]
     public string ApiVersion { get; set; } = string.Empty;
@@ -254,11 +266,12 @@ internal static class WorkbenchApiMetadataBuilder
             ReadOnly = true,
             RefreshEnabled = options.AllowMutatingCommands,
             DebugApiEnabled = options.EnableDebugApi,
-            SnapshotStrategy = options.DisableSnapshotCache ? "rebuild-per-request" : "cached",
+            SnapshotStrategy = options.LiveLazyMode ? (options.StartupSnapshotWarmup ? "live-lazy+snapshot-warmup" : "live-lazy") : (options.DisableSnapshotCache ? "rebuild-per-request" : "cached"),
             EvidenceExport = EvidenceExportProfileDto.FromSettings(profile),
             Supports = new CapabilitySupportDto
             {
                 SnapshotCache = !options.DisableSnapshotCache,
+                LiveLazy = options.LiveLazyMode,
                 StructuralTree = true,
                 FlatInventory = true,
                 RelationshipExtraction = true,
@@ -275,7 +288,10 @@ internal static class WorkbenchApiMetadataBuilder
                 MaxInventoryLimit = 500,
                 DefaultSearchLimit = 100,
                 MaxSearchLimit = 500,
-                MaxReferencesReturned = 1000
+                MaxReferencesReturned = 1000,
+                MaxPendingSnapshotBuilds = options.EffectiveMaxPendingSnapshotBuilds,
+                MaxPendingLiveSessionBuilds = options.EffectiveMaxPendingLiveSessionBuilds,
+                MaxCachedLiveSessions = options.EffectiveMaxCachedLiveSessions
             }
         };
 

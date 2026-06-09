@@ -1,6 +1,6 @@
-# AC Rule Workbench
+﻿# FW Editor Viewer
 
-AC Rule Workbench is a local, evidence-first inspection tool for FormWorks / Document Capture Manager Auto Capture rules. It reads a live `fwd.cfd`, extracts structural AC rule evidence, renders a focused Workbench UI, exposes a local `/api/v1` product API, and generates review-ready evidence packages for RCA, audit, regression review, and vendor escalation.
+FW Editor Viewer is a local, evidence-first inspection tool for FormWorks / Document Capture Manager Auto Capture rules. It reads a live `fwd.cfd`, extracts structural AC rule evidence, renders a focused Workbench UI, exposes a local `/api/v1` product API, and generates review-ready evidence packages for RCA, audit, regression review, and vendor escalation.
 
 This is the only README in the package. All prior help, FAQ, release notes, setup notes, UI notes, evidence notes, and developer notes have been rolled into this file. Reference data remains only where it is not README material, such as the OpenAPI JSON file and source-code references.
 
@@ -37,7 +37,7 @@ This is the only README in the package. All prior help, FAQ, release notes, setu
 
 ## 1. Product purpose
 
-Use AC Rule Workbench to answer a narrow set of reviewer questions:
+Use FW Editor Viewer to answer a narrow set of reviewer questions:
 
 ```text
 Where am I?
@@ -1092,4 +1092,5 @@ Do not treat search hits as dependencies.
 Do not treat action branches as rules.
 Do not treat route labels as observed runtime decisions.
 ```
+
 

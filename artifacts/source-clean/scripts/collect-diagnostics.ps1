@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Collects a product-safe AC Rule Workbench diagnostic bundle from a running server.
+  Collects a product-safe FW Editor Viewer diagnostic bundle from a running server.
 #>
 [CmdletBinding()]
 param(

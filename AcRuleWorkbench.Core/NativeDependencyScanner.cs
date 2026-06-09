@@ -41,7 +41,7 @@ public static class NativeDependencyScanner
 
                     string? dllName = attr?.Value;
                     if (!string.IsNullOrWhiteSpace(dllName))
-                        names.Add(NormalizeDllFileName(dllName));
+                        names.Add(NormalizeDllFileName(dllName!));
                 }
             }
         }

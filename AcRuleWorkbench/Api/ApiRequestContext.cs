@@ -45,7 +45,7 @@ internal sealed class ApiRequestContext
         string? value = Query(name);
         if (string.IsNullOrWhiteSpace(value)) return defaultValue;
         if (bool.TryParse(value, out bool parsed)) return parsed;
-        if (value == "1" || value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("on", StringComparison.OrdinalIgnoreCase)) return true;
+        if (value == "1" || value!.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("on", StringComparison.OrdinalIgnoreCase)) return true;
         if (value == "0" || value.Equals("no", StringComparison.OrdinalIgnoreCase) || value.Equals("off", StringComparison.OrdinalIgnoreCase)) return false;
         throw new ApiBadRequestException("InvalidBooleanQuery", "Query parameter '" + name + "' must be true or false.", value);
     }
@@ -54,7 +54,7 @@ internal sealed class ApiRequestContext
     {
         string? value = Query(name);
         if (string.IsNullOrWhiteSpace(value)) return Array.Empty<string>();
-        return value.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+        return value!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
     }
 
     public void RequireMethod(params string[] allowed)

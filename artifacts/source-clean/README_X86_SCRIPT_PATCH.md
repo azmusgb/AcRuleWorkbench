@@ -1,4 +1,4 @@
-# AC Rule Workbench x86 Script Patch
+﻿# FW Editor Viewer x86 Script Patch
 
 ## Current documentation authority
 
@@ -32,7 +32,7 @@ lib
 AcRuleWorkbench/scripts/build.ps1
 AcRuleWorkbench/scripts/build-and-doctor.ps1
 AcRuleWorkbench/scripts/start-workbench.ps1
-AcRuleWorkbench/scripts/start-workbench.cmd
+AcRuleWorkbench/scripts/start-fw-editor-viewer.cmd
 AcRuleWorkbench/scripts/start-api.ps1
 AcRuleWorkbench/scripts/start-api.cmd
 AcRuleWorkbench/scripts/run-doctor.ps1
@@ -98,3 +98,4 @@ rri_bin\rriwf2.dll
 ```
 
 If `-CopyNativeToOutput` is passed to `build-and-doctor.ps1` or `start-workbench.ps1`, the native DLLs are also copied beside the EXE.
+

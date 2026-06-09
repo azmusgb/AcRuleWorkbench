@@ -54,12 +54,12 @@ public sealed class AcIndexReport
         Warnings.AddRange(relationships.Warnings);
     }
 
-    private static void AddCounts<T>(List<AcRuleCount> target, IEnumerable<IGrouping<string, T>> groups)
+    private static void AddCounts<T>(List<AcRuleCount> target, IEnumerable<IGrouping<string?, T>> groups)
     {
         target.Clear();
         target.AddRange(groups
             .OrderByDescending(g => g.Count())
-            .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .ThenBy(g => g.Key ?? string.Empty)
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
     }
 }

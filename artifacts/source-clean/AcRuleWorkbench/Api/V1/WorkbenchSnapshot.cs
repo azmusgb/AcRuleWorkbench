@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using AcRuleWorkbench.Core;
 
 namespace AcRuleWorkbench.Api.V1;
@@ -94,12 +95,13 @@ internal sealed class RuleFieldResolutionEntry
 
 internal static class WorkbenchSnapshotBuilder
 {
-    public static WorkbenchSnapshot Build(IFormWorksExtractionClient client, string fwdPath, string processName, bool requireNativeOk, EvidenceExportProfile evidenceExportProfile = EvidenceExportProfile.ViewerSafe)
+    public static WorkbenchSnapshot Build(IFormWorksExtractionClient client, string fwdPath, string processName, bool requireNativeOk, EvidenceExportProfile evidenceExportProfile = EvidenceExportProfile.ViewerSafe, CancellationToken cancellationToken = default)
     {
         if (client == null) throw new ArgumentNullException(nameof(client));
         if (string.IsNullOrWhiteSpace(fwdPath)) throw new ArgumentException("FWD/CFD path is required.", nameof(fwdPath));
 
         var started = DateTime.UtcNow;
+        cancellationToken.ThrowIfCancellationRequested();
         EvidenceExportProfileSettings exportProfile = EvidenceExportProfileSettings.Resolve(evidenceExportProfile);
         var fwd = client.Inspect(new FwdInspectionOptions
         {
@@ -109,9 +111,12 @@ internal static class WorkbenchSnapshotBuilder
             IncludeResourcePrivateTrees = exportProfile.IncludeResourcePrivateTrees,
             MaxPrivateTreeDepth = exportProfile.MaxPrivateTreeDepth,
             MaxPrivateTreeNodes = exportProfile.MaxPrivateTreeNodes,
-            RequireNativeOk = requireNativeOk
+            RequireNativeOk = requireNativeOk,
+            CancellationToken = cancellationToken
         });
-        var rules = client.InspectAcRules(new AcRuleOptions { Path = fwdPath, ProcessName = processName, RequireNativeOk = requireNativeOk });
+        cancellationToken.ThrowIfCancellationRequested();
+        var rules = client.InspectAcRules(new AcRuleOptions { Path = fwdPath, ProcessName = processName, RequireNativeOk = requireNativeOk, CancellationToken = cancellationToken });
+        cancellationToken.ThrowIfCancellationRequested();
         var tree = client.BuildAcTree(new AcTreeOptions
         {
             Path = fwdPath,
@@ -121,10 +126,14 @@ internal static class WorkbenchSnapshotBuilder
             MaxHierarchyDepth = 256,
             MaxNodeEntryCount = 100000u,
             MaskSensitiveValues = true,
-            RequireNativeOk = requireNativeOk
+            RequireNativeOk = requireNativeOk,
+            CancellationToken = cancellationToken
         });
-        var relationships = client.TraceAcRelationships(new AcTraceOptions { Path = fwdPath, ProcessName = processName, IncludeRules = false, RequireNativeOk = requireNativeOk });
-        var diagnostics = client.BuildAcDiagnostics(new AcRuleOptions { Path = fwdPath, ProcessName = processName, RequireNativeOk = requireNativeOk });
+        cancellationToken.ThrowIfCancellationRequested();
+        var relationships = client.TraceAcRelationships(new AcTraceOptions { Path = fwdPath, ProcessName = processName, IncludeRules = false, RequireNativeOk = requireNativeOk, CancellationToken = cancellationToken });
+        cancellationToken.ThrowIfCancellationRequested();
+        var diagnostics = client.BuildAcDiagnostics(new AcRuleOptions { Path = fwdPath, ProcessName = processName, RequireNativeOk = requireNativeOk, CancellationToken = cancellationToken });
+        cancellationToken.ThrowIfCancellationRequested();
         var completed = DateTime.UtcNow;
 
         var snapshot = new WorkbenchSnapshot
@@ -142,7 +151,7 @@ internal static class WorkbenchSnapshotBuilder
             Diagnostics = diagnostics
         };
 
-        ReconcileFlatInventoryIntoTree(snapshot.Tree, snapshot.Rules);
+        AcTreeFlatInventoryReconciler.ReconcileFlatInventoryIntoTree(snapshot.Tree, snapshot.Rules);
         IndexSnapshot(snapshot);
         return snapshot;
     }

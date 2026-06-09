@@ -1,0 +1,13 @@
+/* Historical v37 preview shim. Current viewer styling lives in ../../ac-rule-viewer.css. */
+@import url('../../ac-rule-viewer.css');
+.sr-only{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}

@@ -1,0 +1,323 @@
+You are a senior product designer, front-end architect, and UI/UX engineering lead.
+
+Completely redesign all HTML and CSS in this project into a premium, desktop-first AC Rule Workbench.
+
+This is not a cosmetic pass. Treat the current UI as a functional prototype and rebuild the user experience into a serious 2026+ evidence inspection workbench for FormWorks / Document Capture Manager AC rules, rule trees, functions, UDFs, attributes, parsing diagnostics, source evidence, validation, comparison, and exports.
+
+Primary design direction:
+Use Linear as the visual quality reference, Retool as the internal-tool/workbench architecture reference, Stripe Dashboard as the reference for precise search/forms/tables/status/error states, and Vercel Dashboard as the reference for clean, resizable app navigation.
+
+The result should not look like a generic admin dashboard.
+It should look like a premium desktop engineering tool.
+
+Target experience:
+- calm
+- dense
+- polished
+- technical
+- evidence-first
+- keyboard-friendly
+- fast-feeling
+- visually cohesive
+- production-grade
+- suitable for complex internal business tooling
+
+You have full creative freedom to:
+- move sections
+- redesign the shell
+- redesign the navigation
+- redesign the header
+- redesign the sidebar
+- redesign the work surface
+- redesign the inspector
+- redesign tables
+- redesign tree views
+- redesign filters
+- redesign modals
+- redesign toasts
+- redesign empty/loading/error states
+- change colors
+- change fonts
+- change spacing
+- change component structure
+- introduce a new design system
+- replace weak layouts completely
+
+Hard constraints:
+- Preserve actual application functionality.
+- Preserve JavaScript runtime contracts unless you update the JavaScript too.
+- Preserve required IDs, data attributes, form names, event hooks, dynamic containers, modal infrastructure, toast infrastructure, error infrastructure, and render targets.
+- Do not add fake production business data.
+- Do not remove empty containers that are intentionally populated by JavaScript.
+- Do not provide concepts only.
+- Implement the redesign in real working code.
+- Return complete files or a complete unified patch.
+- No placeholders.
+- No pseudo-code.
+- No TODOs.
+- No omitted sections.
+
+Final layout requirement:
+Rebuild the application as a four-zone desktop workbench:
+
+1. Top Command Bar
+- App name
+- loaded source/file indicator
+- parse status
+- global search/command input
+- primary actions
+- help/settings/theme controls
+
+2. Left Navigation and Object Index
+- loaded source summary
+- primary views
+- rule/function/UDF/attribute indexes
+- warning counts
+- search/filter controls
+- collapsible/resizable behavior
+
+3. Main Work Surface
+- active view title
+- contextual toolbar
+- rule tree, table, function inventory, diagnostics, compare, or export review
+- sticky headers where appropriate
+- clean scroll regions
+- strong selected states
+
+4. Right Evidence Inspector
+- selected object summary
+- rule/function/UDF/diagnostic evidence
+- tabs for Summary, Evidence, Attributes, Functions, Children, Source, Diagnostics
+- copy actions for GUIDs/source references
+- empty selected state
+- collapsible/resizable behavior
+
+5. Bottom Diagnostics Console
+- collapsible parse/export/runtime log
+- warnings/errors/activity/export tabs
+- severity filters
+- copy/export diagnostics actions
+
+Primary views to support:
+- Startup / Empty Load
+- Loaded Overview
+- Rule Tree
+- Rule Table
+- AC Functions
+- UDFs
+- Attributes
+- Compare
+- Diagnostics
+- Export Review
+- Settings / Help
+
+Design system requirements:
+Create a complete CSS token system using custom properties:
+- color tokens
+- text tokens
+- spacing tokens
+- radius tokens
+- border tokens
+- shadow tokens
+- z-index tokens
+- transition tokens
+
+Use a dark-first premium neutral theme with restrained accent color.
+Make the CSS theme-ready for future light mode.
+
+Typography:
+Use a modern system font stack.
+Create a clear type hierarchy for:
+- app title
+- page title
+- panel title
+- section title
+- body text
+- metadata
+- table text
+- button text
+- code/evidence blocks
+
+Spacing:
+Normalize all spacing into a consistent scale.
+Fix cramped controls, random margins, inconsistent gutters, and awkward container sizing.
+Keep the UI dense enough for professional work, but substantially cleaner and calmer.
+
+Component requirements:
+Redesign and implement polished versions of:
+- app shell
+- command bar
+- side navigation
+- object index
+- cards
+- panels
+- buttons
+- icon buttons
+- inputs
+- search fields
+- filter chips
+- segmented controls
+- tabs
+- badges
+- tables
+- tree nodes
+- inspector sections
+- modals
+- drawers
+- toasts
+- alerts
+- loading skeletons
+- empty states
+- error states
+- diagnostics console
+- export review panels
+
+Rule tree requirements:
+- clear hierarchy
+- expand/collapse affordances
+- selected node state
+- hover state
+- keyboard navigation state
+- depth guides
+- active path highlighting
+- warning/error markers
+- result badges
+- search match highlighting
+- expand all/collapse all actions
+- avoid overloading each node with too much metadata
+
+Table requirements:
+- sticky headers
+- row hover
+- selected row
+- focus-visible state
+- sort indicators
+- compact density
+- status badges
+- contained horizontal scrolling
+- empty/loading/error states
+- readable numeric/text alignment
+- improved column spacing
+
+Inspector requirements:
+When nothing is selected, show a useful selected-empty state.
+When a rule is selected, show:
+- rule name
+- result
+- ordinal
+- GUID
+- parent
+- children
+- hierarchy level
+- params
+- attributes
+- functions
+- source evidence
+- diagnostics
+- export/copy actions
+
+When a function or UDF is selected, show:
+- name
+- type/category
+- usage count
+- signature/parameters
+- referenced rules
+- source evidence
+- warnings
+
+When a diagnostic is selected, show:
+- severity
+- explanation
+- affected object
+- source evidence
+- suggested action
+- related rows/nodes
+
+State requirements:
+Implement polished states for:
+- app startup
+- no file loaded
+- loading/parsing
+- parse success
+- parse warnings
+- parse failure
+- no selection
+- no search results
+- filtered empty result
+- validation running
+- validation complete
+- export running
+- export success
+- export failure
+- fatal runtime error
+
+Accessibility requirements:
+- semantic HTML
+- proper buttons and links
+- input labels
+- visible focus states
+- keyboard-friendly navigation
+- sufficient color contrast
+- aria-labels for icon-only buttons
+- aria-live for important status updates
+- reduced-motion support
+- accessible modal behavior where applicable
+- no color-only status communication
+
+Motion requirements:
+Use restrained motion only:
+- hover transitions
+- panel reveal/collapse
+- selected-state transitions
+- skeleton loading shimmer if reduced-motion allows
+- no distracting animation
+- respect prefers-reduced-motion
+
+Responsive requirements:
+Desktop-first.
+Optimize for large monitors and normal desktop browser sizes.
+Still provide safe fallback for narrower windows:
+- collapsible sidebars
+- contained tables
+- no horizontal page overflow
+- scrollable panels
+- modals that fit viewport
+- toolbar wrapping or overflow menu where needed
+
+Maintainability requirements:
+- organize CSS into clear sections
+- reduce duplication
+- avoid fragile deeply nested selectors
+- prefer reusable component classes
+- preserve runtime hooks
+- document major layout regions with concise comments
+- no dead CSS
+- no invalid selectors
+- no broken IDs/classes
+
+Deliverables:
+1. Brief summary of the new design direction.
+2. Detailed critique of the current UI grouped by:
+   - Critical
+   - High impact
+   - Medium impact
+   - Polish
+3. File-by-file redesign plan.
+4. Complete updated code:
+   - full files if replacing files
+   - unified git-style patch if modifying multiple files
+   - downloadable zip if requested
+5. Verification checklist:
+   - how to run locally
+   - visual checks
+   - keyboard checks
+   - accessibility checks
+   - responsive checks
+   - runtime hook checks
+   - modal/toast/error checks
+   - no mock business data check
+
+Quality bar:
+The final UI must be obviously better at first glance.
+Do not simply restyle the old layout.
+Rebuild the experience into a premium internal engineering workbench.

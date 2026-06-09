@@ -311,8 +311,7 @@ public sealed class GlobalResourceExportCoordinator
 
     private static bool ContainsIgnoreCase(string? value, string term)
     {
-        return !string.IsNullOrWhiteSpace(value)
-            && value.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
+        return value?.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }
 

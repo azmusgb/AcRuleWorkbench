@@ -1,4 +1,4 @@
-# AC Rule Workbench v62.1 - Light Theme Repair
+﻿# FW Editor Viewer v62.1 - Light Theme Repair
 
 ## Current documentation authority
 
@@ -25,3 +25,4 @@ This update fixes the viewer theme defaults and dark/light toggle behavior.
 ```
 
 Then rebuild/start normally.
+

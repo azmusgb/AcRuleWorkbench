@@ -780,7 +780,7 @@ internal sealed class EditorRuntimeImpactModel
 
 internal static class FormWorksEditorModelBuilder
 {
-    private static readonly string[] UdfResourceTypes = { "Function", "UDF", "UserDefinedFunction", "User Defined" };
+    private static readonly string[] UdfResourceTypes = { "Function", "UDF", "UserDefinedFunction", "UserDefined" };
 
     public static FormWorksEditorModel Build(WorkbenchSnapshot snapshot)
     {
@@ -1017,7 +1017,7 @@ internal static class FormWorksEditorModelBuilder
             schema.UnknownObservedParameterNames.Add(value);
         foreach (string value in behaviorFlags)
             schema.BehaviorFlags.Add(value);
-        foreach (string value in Distinct(defined ? definition.RuntimeImpacts : InferRuntimeImpacts(functionName, behaviorFlags, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())))
+        foreach (string value in Distinct(defined ? definition!.RuntimeImpacts : InferRuntimeImpacts(functionName, behaviorFlags, rule?.Relationships ?? Enumerable.Empty<AcRuleRelationship>())))
             schema.RuntimeImpacts.Add(value);
 
         return schema;

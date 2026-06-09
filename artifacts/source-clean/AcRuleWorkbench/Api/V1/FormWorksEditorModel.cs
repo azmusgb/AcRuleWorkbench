@@ -780,7 +780,7 @@ internal sealed class EditorRuntimeImpactModel
 
 internal static class FormWorksEditorModelBuilder
 {
-    private static readonly string[] UdfResourceTypes = { "Function", "UDF", "UserDefinedFunction", "User Defined" };
+    private static readonly string[] UdfResourceTypes = { "Function", "UDF", "UserDefinedFunction", "UserDefined" };
 
     public static FormWorksEditorModel Build(WorkbenchSnapshot snapshot)
     {

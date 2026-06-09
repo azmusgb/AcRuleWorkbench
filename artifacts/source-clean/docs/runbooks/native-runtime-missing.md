@@ -1,9 +1,30 @@
-# Runbook: Native runtime missing
+# Runbook: Native Runtime Missing
 
-For current FormWorks/AC interpretation, use [../formworks-editor-ac-reference-guide.md](../formworks-editor-ac-reference-guide.md). This runbook only addresses native runtime availability for extraction/inspection.
+This runbook addresses native FormWorks/DCM runtime availability for read-only inspection.
 
 1. Confirm x86 build output is being used.
-2. Run `AcRuleWorkbench.exe doctor`.
-3. Confirm `rrifwd_net.dll`, `rribase_net.dll`, `rridc_net.dll`, and native `rrifwd` dependencies are present or on PATH.
-4. Re-run `scripts/setup-dcm-deps.ps1` if PATH/bootstrap files are missing.
-5. Restart the workbench.
+2. Run:
+
+   ```powershell
+   .\scripts\build-and-doctor.ps1 -FwdPath .\fwd.cfd -Configuration Debug -Platform x86
+   ```
+
+3. Confirm managed DLLs exist in `lib`, including:
+   - `rrifwd_net.dll`
+   - `rribase_net.dll`
+   - `rridc_net.dll`
+   - `rriwf2_net.dll`
+   - `FormWorks.Core.dll`
+4. Confirm native x86 DLLs exist in `rri_bin`, including:
+   - `rrifwd.dll`
+   - `rribase.dll`
+   - `rridc.dll`
+   - `rriwf2.dll`
+5. Confirm `scripts/runtime-path.generated.ps1` exists.
+6. Re-run dependency setup if folders or PATH helper are missing:
+
+   ```powershell
+   .\scripts\setup-dcm-deps.ps1
+   ```
+
+7. Restart FW Companion.

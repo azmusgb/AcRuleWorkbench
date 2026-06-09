@@ -1,4 +1,4 @@
-# v61.6 Industrial Read-Only Editor Layout
+﻿# v61.6 Industrial Read-Only Editor Layout
 
 ## Current documentation authority
 
@@ -8,7 +8,7 @@ This package applies the supplied compact dark workbench prototype direction wit
 
 ## Intent
 
-AC Rule Workbench remains a read-only FW Editor companion for AC-related FWD configuration.
+FW Editor Viewer remains a read-only FW Editor companion for AC-related FWD configuration.
 
 ## Visual/layout changes
 
@@ -25,3 +25,4 @@ AC Rule Workbench remains a read-only FW Editor companion for AC-related FWD con
 ## Functional scope
 
 No backend routes, JSON payload names, selection behavior, rule/UDF navigation, copy actions, search, or inspector wiring were intentionally changed.
+

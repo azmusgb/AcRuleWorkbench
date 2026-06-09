@@ -20,6 +20,11 @@ public sealed class AcRelationshipReport
 
     public string ProcessName { get; set; } = "AC";
 
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    public string? RuleSource { get; set; } = "ac-rule-viewer.rules.json";
+
+    // Distinct rule count represented by this relationship packet.
+    // When Rules is not serialized, this count is computed from relationship rows.
     public int RuleCount { get; set; }
 
     public int RelationshipCount { get; set; }
@@ -29,6 +34,8 @@ public sealed class AcRelationshipReport
     public List<AcRuleRelationship> Relationships { get; } = new();
 
     public List<AcRuleSummary> Rules { get; } = new();
+
+    public bool ShouldSerializeRules() => Rules.Count > 0;
 
     public List<AcRuleCount> RelationshipsByKind { get; } = new();
 
@@ -42,7 +49,11 @@ public sealed class AcRelationshipReport
 
     public void RebuildCounts()
     {
-        RuleCount = Rules.Count;
+        RuleCount = Rules.Count > 0
+            ? Rules.Count
+            : Relationships
+                .GroupBy(r => string.Join("|", r.ScopePath ?? string.Empty, r.RuleGuid ?? string.Empty, r.RuleIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), r.RuleName ?? string.Empty, r.FunctionName ?? string.Empty), StringComparer.OrdinalIgnoreCase)
+                .Count();
         RelationshipCount = Relationships.Count;
 
         RelationshipsByKind.Clear();

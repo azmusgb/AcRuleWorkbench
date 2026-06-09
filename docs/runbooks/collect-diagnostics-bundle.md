@@ -1,10 +1,28 @@
-# Runbook: Collect diagnostics bundle
+# Runbook: Collect Diagnostic Details
 
-For interpretation of collected FormWorks/AC evidence, use [../formworks-editor-ac-reference-guide.md](../formworks-editor-ac-reference-guide.md). Diagnostics support static FWD inspection; they do not prove runtime AC execution.
+Use this only for local engineering analysis. Diagnostic details support reader troubleshooting; they do not prove runtime AC execution.
 
-1. Start diagnostic mode with `-EnableDebugApi -AllowPathQuery`.
-2. Capture `/api/v1/status`.
-3. Capture `/api/v1/diagnostics`.
-4. Capture `/api/debug/probe`.
-5. Capture relevant scope/rule evidence with `/api/v1/export`.
-6. Include server console output and recent logs if available.
+1. Start diagnostic mode:
+
+   ```powershell
+   .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -EnableDebugApi -AllowPathQuery
+   ```
+
+2. Capture current status:
+
+   ```http
+   GET /api/v1/status
+   GET /api/v1/diagnostics
+   ```
+
+3. Capture debug probe output if debug routes are enabled:
+
+   ```http
+   GET /api/debug/probe
+   ```
+
+4. Capture the relevant scope or rule through `/api/v1` first.
+5. Include server console output and recent logs if available.
+6. In any user-facing summary, translate reader/debug details into Reader Status language.
+
+Do not describe diagnostic/debug output as the product contract.

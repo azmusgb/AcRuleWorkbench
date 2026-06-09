@@ -1,4 +1,4 @@
-# AC Rule Workbench UI/UX Authority Workflow Patch
+﻿# FW Editor Viewer UI/UX Authority Workflow Patch
 
 ## Current documentation authority
 
@@ -48,3 +48,4 @@ This patch converts the viewer from a broad analytics-style dashboard into a str
 - root/Core viewer asset sync check
 
 A full .NET compile still needs to be run on a Windows machine with .NET Framework/MSBuild and the x86 FormWorks runtime available.
+

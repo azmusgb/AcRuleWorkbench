@@ -48,8 +48,9 @@ function Resolve-WbFwdFilePath {
     }
 
     $item = Get-Item -LiteralPath $resolved -ErrorAction Stop
-    if ($item.Extension -ne ".cfd") {
-        throw "FwdPath must point to a .cfd file: $resolved"
+    $allowedExtensions = @(".cfd", ".fwd", ".sfd")
+    if ($allowedExtensions -notcontains $item.Extension.ToLowerInvariant()) {
+        throw "FwdPath must point to a .cfd, .fwd, or .sfd file: $resolved"
     }
 
     return $item.FullName

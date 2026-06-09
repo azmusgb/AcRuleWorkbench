@@ -1,57 +1,54 @@
-# Admin Guide
+﻿# FW Companion Admin Guide
 
-AC Rule Workbench is a read-only FormWorks Editor companion. It opens a configured FWD and exposes static configuration evidence for inspection; it does not edit the FWD, save configuration, run AC Rules Tester, or execute AC runtime logic. For the full model, see [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md).
+FW Companion runs a local read-only API and browser viewer over a configured FormWorks/FWD file. It does not edit the FWD, save configuration, run AC Rules Tester, or execute AC runtime logic.
 
-## Default secure local mode
+## Default local posture
 
-Start with a fixed FWD path and no debug API:
+Recommended local startup:
+
+```cmd
+.\start-fw-editor-viewer.cmd -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787
+```
+
+PowerShell equivalent:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd -Port 8787
+.\scripts\start-workbench.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Default posture:
 
-- Loopback URL by default.
-- Debug API disabled.
-- CORS disabled.
-- Path query overrides disabled when `--path` is configured.
-- Refresh is available only when the server is started with `--allow-refresh` by the wrapper script.
+- Listens on loopback (`127.0.0.1`) unless explicitly changed.
+- Debug API is disabled.
+- CORS is disabled.
+- Path-query overrides are disabled when a startup FWD path is configured.
+- Snapshot refresh is controlled by startup flags and script profile.
+- Viewer opens in read-only mode.
 
-## Diagnostic mode
+## Required runtime shape
 
-Use diagnostic mode only for engineering analysis:
-
-```powershell
-.\scripts\start-workbench.ps1 -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd -EnableDebugApi -AllowPathQuery -OpenHarness
-```
-
-<!--  -->
-## API live validation quickstart
-
-Use this when you need to verify all product API endpoints through the harness and scripted checks.
+FormWorks/DCM native dependencies are x86. Use x86 for build and startup.
 
 ```powershell
-.\scripts\start-workbench.ps1 `
-	-FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd `
-	-Port 8788 `
-	-EnableDebugApi `
-	-AllowPathQuery `
-	-OpenHarness
+.\scripts\build-and-doctor.ps1 `
+  -Configuration Debug `
+  -Platform x86 `
+  -FwdPath .\fwd.cfd
 ```
 
-In the harness:
+Expected local folders:
 
-- Use `GET Rule detail /api/v1/rules/{nodeId}` with either `node-000414` or `db5bf065-618b-44ca-8484-0d12384e7d1a`.
-- Expect `POST /api/v1/snapshot/refresh` to take longer than most endpoints.
+| Folder | Purpose |
+|---|---|
+| `lib` | Managed FormWorks/DCM wrapper DLLs used by the .NET project. |
+| `rri_bin` | Native x86 FormWorks/DCM DLLs used at runtime. |
+| `scripts/runtime-path.generated.ps1` | Generated PATH helper for native DLL load order. |
 
-Run endpoint sweep validation:
+Run setup when dependencies are missing or stale:
 
 ```powershell
-.\scripts\validate-api-live.ps1 -BaseUrl http://127.0.0.1:8788
+.\scripts\setup-dcm-deps.ps1
 ```
-
-Expected result is a pass table with `Ok=True` for each API v1 endpoint.
 
 ## Health checks
 
@@ -61,10 +58,74 @@ GET /api/v1/health/ready
 GET /api/v1/status
 ```
 
-Liveness is a cheap process check. Readiness verifies configured source and snapshot readiness.
+Liveness is a process check. Readiness verifies configured source and snapshot readiness.
 
-For rebuild-per-request operation (no snapshot cache reuse), start with `-NoSnapshotCache`. In this mode readiness verifies source path availability and does not require cache warm-up via `/api/v1/snapshot`.
+Scripted verification:
+
+```powershell
+.\scripts\verify-fw-editor-viewer-live.ps1 -BaseUrl http://127.0.0.1:8787
+```
+
+## Port handling
+
+When the requested port is held by a normal process, `-KillExisting` can stop it. When the port is held by HTTP.sys/System PID 4, the startup scripts do not kill System; they can select the next available local port unless `-NoAutoPort` is set.
+
+```cmd
+.\start-fw-editor-viewer.cmd -Port 8787 -NoAutoPort
+```
+
+## Snapshot and viewer refresh
+
+Normal startup builds/doctors, refreshes the viewer when needed, then starts the API.
+
+Useful options:
+
+```cmd
+.\start-fw-editor-viewer.cmd -SkipBuild
+.\start-fw-editor-viewer.cmd -SkipViewerRefresh
+.\start-fw-editor-viewer.cmd -NoBrowser
+.\start-fw-editor-viewer.cmd -Clean -ForceSetup
+```
+
+Use `-SkipViewerRefresh` only when the existing generated viewer and sidecars are known to match the current FWD.
+
+## Debug API
+
+Debug routes are disabled by default and are not product contracts. Enable them only for local engineering analysis.
+
+```powershell
+.\scripts\start-workbench.ps1 `
+  -FwdPath .\fwd.cfd `
+  -Port 8787 `
+  -KillExisting `
+  -EnableDebugApi `
+  -AllowPathQuery `
+  -OpenHarness
+```
+
+For product validation, prefer `/api/v1` routes and the viewer.
+
+## API validation quickstart
+
+```powershell
+.\scripts\validate-api-live.ps1 -BaseUrl http://127.0.0.1:8787
+```
+
+Expected result is a pass table with `Ok=True` for each API v1 endpoint.
 
 ## Legacy routes
 
-Legacy `/api/fwd/*` and `/api/workbench/*` routes remain for compatibility and carry deprecation headers. New integrations must use `/api/v1`.
+Legacy `/api/fwd/*` and `/api/workbench/*` routes remain for compatibility and may carry deprecation headers. New integrations should use `/api/v1`.
+
+## Deployment boundary
+
+FW Companion is safest as a local or tightly controlled internal tool. Before exposing beyond loopback, explicitly review:
+
+- source FWD path access
+- debug API disabled
+- CORS policy
+- firewall rules
+- sensitive-value masking
+- generated viewer sidecar location
+- logs and diagnostic retention
+

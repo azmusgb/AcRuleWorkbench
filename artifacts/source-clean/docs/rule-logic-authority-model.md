@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The workbench must clearly separate evidence tiers. This is the core trust model for FormWorks/DCM AC rule inspection.
+FW Companion must clearly separate reader authority tiers. This is the core trust model for FormWorks/DCM AC rule inspection.
 
 This authority model is grounded in the FormWorks Editor authoring model:
 

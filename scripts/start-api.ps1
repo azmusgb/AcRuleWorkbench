@@ -13,6 +13,7 @@ param(
     [string]$Profile = "viewer-safe",
 
     [switch]$NoOpen,
+    [switch]$OpenBrowser,
     [switch]$KillExisting,
     [switch]$EnableDebugApi,
     [switch]$AllowPathQuery,
@@ -23,7 +24,10 @@ param(
     [switch]$NoBuild,
     [switch]$SkipViewerRefresh,
     [switch]$ForceViewerRefresh,
+    [switch]$CopyNativeToOutput,
+    [switch]$NoCopyNativeToOutput,
     [switch]$WaitForReadyBeforeOpen,
+    [switch]$OpenWhenLive,
     [switch]$NoWaitReady,
     [switch]$NoAutoPort,
     [switch]$SkipRuntimeValidation,
@@ -33,7 +37,7 @@ param(
     [int]$PortSearchLimit = 25,
 
     [ValidateRange(5, 600)]
-    [int]$ReadyTimeoutSeconds = 90,
+    [int]$ReadyTimeoutSeconds = 600,
 
     [string[]]$ExtraArgs = @()
 )
@@ -65,6 +69,7 @@ $argsForStart = @(
 )
 
 if ($NoOpen) { $argsForStart += "-NoBrowser" }
+if ($OpenBrowser) { $argsForStart += "-OpenBrowser" }
 if ($KillExisting) { $argsForStart += "-KillExisting" }
 if ($EnableDebugApi) { $argsForStart += "-EnableDebugApi" }
 if ($AllowPathQuery) { $argsForStart += "-AllowPathQuery" }
@@ -75,13 +80,16 @@ if ($Detached) { $argsForStart += "-Detached" }
 if ($NoBuild) { $argsForStart += "-NoBuild" }
 if ($SkipViewerRefresh) { $argsForStart += "-SkipViewerRefresh" }
 if ($ForceViewerRefresh) { $argsForStart += "-ForceViewerRefresh" }
+if ($CopyNativeToOutput) { $argsForStart += "-CopyNativeToOutput" }
+if ($NoCopyNativeToOutput) { $argsForStart += "-NoCopyNativeToOutput" }
 if ($WaitForReadyBeforeOpen) { $argsForStart += "-WaitForReadyBeforeOpen" }
+if ($OpenWhenLive) { $argsForStart += "-OpenWhenLive" }
 if ($NoWaitReady) { $argsForStart += "-NoWaitReady" }
 if ($NoAutoPort) { $argsForStart += "-NoAutoPort" }
 if ($SkipRuntimeValidation) { $argsForStart += "-SkipRuntimeValidation" }
 if ($CheckWorkingTree) { $argsForStart += "-CheckWorkingTree" }
 if ($ExtraArgs.Count -gt 0) { $argsForStart += @("-ExtraArgs") + $ExtraArgs }
 
-Write-Host "start-api.ps1 delegates to start-workbench.ps1. Use start-workbench.ps1 directly for full launcher options." -ForegroundColor DarkGray
+Write-Host "start-api.ps1 delegates to start-workbench.ps1. Prefer start-fw-editor-viewer.ps1 for normal FW Editor Viewer launches." -ForegroundColor DarkGray
 & $startWorkbench @argsForStart
 exit $LASTEXITCODE

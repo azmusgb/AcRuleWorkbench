@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class FwdInspectionOptions
@@ -16,45 +18,31 @@ public sealed class FwdInspectionOptions
 
     public int MaxPrivateTreeNodes { get; set; } = 2000;
 
+    /// <summary>
+    /// Resource type tokens passed directly to FWD_ResourceListGet.
+    ///
+    /// Keep this list to native resource-type identifiers only. Human-facing labels
+    /// such as User Defined Function or Selection List are not valid FWD
+    /// resource type parameters and cause FWD_ResourceListGet to return -1996
+    /// (unexpected parameter). Those labels belong in the UI/model layer, not in
+    /// the native probe list.
+    /// </summary>
     public string[] ResourceTypes { get; set; } =
     {
-        "Table",
-        "Tables",
-        "SelectionList",
-        "SelectionLists",
+        "ACRuleList",
         "Function",
-        "Functions",
+        "Table",
         "DateFormat",
-        "DateFormats",
-        "UDF",
-        "UDFs",
-        "UserDefinedFunction",
-        "UserDefinedFunctions",
-        "Rule",
-        "Rules",
-        "GlobalResource",
-        "GlobalResources",
-        "Charset",
-        "Charsets",
-        "CharSet",
-        "CharSets",
         "RegExpr",
-        "RegExprs",
-        "Regex",
-        "Regexes",
-        "RegularExpression",
-        "RegularExpressions",
-        "Expression",
-        "Expressions",
+        "CharSet",
+        "Charset",
         "Template",
-        "Templates",
-        "Store",
-        "Stores",
-        "Format",
-        "Formats",
-        "Lookup",
-        "Lookups",
-        "LookupTable",
-        "LookupTables"
+        "TableSelector",
+        "SelectionList",
+        "UDF",
+        "UserDefinedFunction",
+        "UserDefined"
     };
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

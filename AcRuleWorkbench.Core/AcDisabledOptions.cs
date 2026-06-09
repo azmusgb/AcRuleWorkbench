@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcDisabledOptions
@@ -19,4 +21,7 @@ public sealed class AcDisabledOptions
     public bool IncludeRules { get; set; } = true;
 
     public bool InheritDisabled { get; set; } = true;
+
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

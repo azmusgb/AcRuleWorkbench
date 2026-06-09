@@ -1,97 +1,52 @@
-# Workbench startup scripts
+# FW Editor Viewer startup scripts
 
-The repository-root `scripts/` folder is authoritative. The nested `AcRuleWorkbench/scripts/` files are compatibility wrappers only.
-
-## Normal local startup
+Use the hosted API viewer for normal work. This is the source-clean workflow and does **not** require generated `ac-rule-viewer.*.json` sidecars.
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\start-fw-editor-viewer.ps1 `
+  -FwdPath "C:\path\to\fwd.cfd" `
+  -Port 8787 `
+  -KillExisting
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8787/viewer
 ```
 
 Default behavior:
 
-- builds with `build-and-doctor.ps1`
-- validates local runtime folders
-- uses export profile `viewer-safe`
-- reuses current viewer artifacts when they are complete and newer than `fwd.cfd`
-- regenerates `ac-rule-viewer-live.html` only when artifacts are missing/stale or `-ForceViewerRefresh` is used
-- starts the API in the foreground
-- starts a hidden helper that opens `/viewer?...nocache=...` as soon as `/api/v1/health/live` responds
-- lets `/api/v1/health/ready` and snapshot warm-up continue in the background
+- builds the `x86` .NET Framework output when needed
+- validates `lib\` and `rri_bin\`
+- copies native DLLs into the built output by default when `rri_bin\` exists
+- prepends `rri_bin\` and `lib\` to the process `PATH`
+- starts `AcRuleWorkbench.exe api ...` with a fixed `--path`
+- opens the hosted `/viewer` route after health checks
+- skips static sidecar generation in live-lazy mode
 
-## Faster startup after a successful build
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -NoBuild
-```
-
-## Reuse an existing viewer export
+Useful local options:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -NoBuild -SkipViewerRefresh
+# Start but do not open a browser.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-fw-editor-viewer.ps1 -FwdPath "C:\path\to\fwd.cfd" -NoBrowser
+
+# Use the next free port if 8787 is busy; this is the default unless -NoAutoPort is supplied.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-fw-editor-viewer.ps1 -FwdPath "C:\path\to\fwd.cfd" -Port 8787
+
+# Generate standalone HTML and sidecar JSON for offline/static viewing.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-fw-editor-viewer.ps1 -FwdPath "C:\path\to\fwd.cfd" -ForceViewerRefresh
+
+# Validate the hosted API/viewer after startup.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-fw-editor-viewer-live.ps1 -BaseUrl http://127.0.0.1:8787
 ```
 
-`-SkipViewerRefresh` now fails early if `ac-rule-viewer-live.html` does not exist.
+Avoid opening `http://127.0.0.1:5000/ac-rule-viewer.html` for live FWD work. The Node `server.js` file is only a hardened static-file server; it does not start the FWD API. Use `server.js --allow-generated-sidecars` only for local standalone exports that already generated `ac-rule-viewer.*.json`.
 
-## Detached startup with health polling
+Compatibility launchers still delegate to the canonical script:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -NoBuild -Detached
+.\start-fw-editor-viewer.cmd -FwdPath "C:\path\to\fwd.cfd"
+.\start-workbench.cmd -FwdPath "C:\path\to\fwd.cfd"
 ```
-
-Detached mode starts `AcRuleWorkbench.exe`, waits for `/api/v1/health/live`, and then opens the viewer URL. Add `-WaitForReadyBeforeOpen` if you want detached mode to also wait for `/api/v1/health/ready`.
-
-## Verify the running app
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-workbench-live.ps1 -BaseUrl http://127.0.0.1:8787
-```
-
-This checks:
-
-- `/api/v1/health/live`
-- `/api/v1/health/ready`
-- `/api/v1/status`
-- `/viewer`
-- `/ac-rule-viewer.css`
-- `/ac-rule-viewer.js`
-- `/api/v1/fwd/udfs`
-- `/api/v1/fwd/tables`
-- `/api/v1/fwd/resources?includeDetails=true`
-
-## Diagnostic profile
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -Profile diagnostic
-```
-
-## Full evidence profile
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -Profile full-evidence
-```
-
-Use `full-evidence` only for local diagnostics. It enables private/full FWD resource traversal and may generate sensitive evidence output.
-
-## Optional working-tree inventory
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -CheckWorkingTree
-```
-
-This calls `validate-package-boundaries.ps1 -Mode WorkingTree`. It is informational and does not replace strict source package validation.
-
-## Strict source package validation stays separate
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-source-clean.ps1 -Root . -OutDir .\artifacts
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\validate-package-boundaries.ps1 -Root .\artifacts\source-clean -Mode SourcePackage
-```
-
-## Split deliverables
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-split-deliverables.ps1 -Root . -OutDir .\packages
-```
-
-The split-deliverables script is Windows PowerShell 5.1-compatible and avoids `[System.IO.Path]::GetRelativePath`.

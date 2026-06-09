@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Historical AC Rule Workbench v37 preview. Current authority lives in README.md and docs/formworks-editor-ac-reference-guide.md.">
+<title>AC Rule Workbench - Historical Preview (v37)</title>
+<link rel="stylesheet" href="ac-rule-workbench-v37.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar" role="banner">
+      <div class="brand">
+        <div class="brand-title">
+          <div class="logo">AC</div>
+          <div>
+            <h1>AC Rule Workbench</h1>
+            <div class="brand-sub">historical v37 preview - current model is documented in README.md</div>
+          </div>
+        </div>
+      </div>
+      <div class="global-search">
+        <label class="sr-only" for="previewSearch">Search preview content</label>
+        <input id="previewSearch" type="search" autocomplete="off" placeholder="Search rules, functions, fields, status results...">
+        <span class="kbd">/</span>
+      </div>
+      <div class="top-actions">
+        <span class="pill"><span class="dot warn"></span> Historical preview</span>
+        <span class="pill"><span class="dot warn"></span> Preview</span>
+      </div>
+    </header>
+    <div class="shell">
+      <aside class="pane left" aria-label="Scope navigator">
+        <div class="pane-head">
+          <div class="eyebrow">Scope navigator</div>
+          <label class="sr-only" for="previewScopeSearch">Filter scopes</label>
+          <input id="previewScopeSearch" class="scope-search" type="search" autocomplete="off" placeholder="Filter scopes...">
+        </div>
+        <div class="scope-list scroll">
+          <div class="scope-item active"><span class="scope-name">ClaimsEntry - pg1</span></div>
+          <div class="scope-item"><span class="scope-name">ClaimsEntry - pg2</span></div>
+        </div>
+      </aside>
+      <main class="pane main" id="mainContent" tabindex="-1">
+        <div class="main-head">
+          <div class="scope-title"><div class="scope-heading-stack"><div class="scope-kicker">Structure view</div><h2>ClaimsEntry - pg1</h2></div></div>
+          <div class="tabs"><button class="tab active">Rules</button><button class="tab">Diagnostics</button></div>
+          <div class="viewbar"></div>
+        </div>
+        <div class="content scroll">
+          <div class="rule-card expanded selected">
+            <div class="rule-card-head">
+              <span class="rule-id">ACR-001</span>
+              <span class="rule-name">ClaimType visibility - whitelist gate</span>
+              <span class="rule-badge allow">ALLOW</span>
+            </div>
+          </div>
+        </div>
+      </main>
+      <aside class="pane right" aria-label="Inspector">
+        <div class="inspector-head"><div class="inspector-title"><div><h3>Inspector</h3></div></div></div>
+        <div class="inspector-body scroll"></div>
+      </aside>
+    </div>
+  </div>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 The detailed source inventory is in [Project Code Catalog](project-code-catalog.md). The comprehensive bridge from the current codebase to FormWorks Editor parity is in [Editor Gap Closure Plan](editor-gap-closure-plan.md).
 
-This roadmap follows the product baseline in [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md): AC Rule Workbench should become a read-only FormWorks Editor companion with native rule-list/status-result/action-list vocabulary, first-class UDF treatment, configuration-first table/SelectionList inspection, and explicit runtime-UX caveats.
+This roadmap follows the product baseline in [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md): FW Companion should remain a read-only FormWorks Editor companion with native rule-list/status-result/action-list vocabulary, first-class UDF treatment, configuration-first table/SelectionList inspection, and explicit runtime-UX caveats.
 
 ## P0 - correctness
 

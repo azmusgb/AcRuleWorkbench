@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcTreeOptions
@@ -23,4 +25,6 @@ public sealed class AcTreeOptions
     public bool MaskSensitiveValues { get; set; } = true;
 
     public bool RequireNativeOk { get; set; }
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

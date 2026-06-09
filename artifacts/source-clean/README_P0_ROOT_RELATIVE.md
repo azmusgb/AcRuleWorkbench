@@ -1,4 +1,4 @@
-# AC Rule Workbench P0 Root-Relative Replacement Files
+﻿# FW Editor Viewer P0 Root-Relative Replacement Files
 
 This package is intentionally **repository-root-relative**. Extract it directly into:
 
@@ -64,3 +64,4 @@ Remove-Item .\AcRuleWorkbench\ac-rule-viewer.tree.json -Force -ErrorAction Silen
 - `AcRuleWorkbench.Core\Viewer\ac-rule-viewer.js`
 - `scripts\repair-p0-misextract.ps1`
 - `scripts\validate-p0-layout.ps1`
+

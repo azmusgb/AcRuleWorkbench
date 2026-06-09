@@ -1,4 +1,4 @@
-# AC Rule Workbench P0 Replacement Files
+﻿# FW Editor Viewer P0 Replacement Files
 
 Replace these files at the repository root using the included `AcRuleWorkbench/...` paths.
 
@@ -58,3 +58,4 @@ Then rebuild/start normally:
 - Scope counts no longer show missing flat-rule coverage in the static viewer sidecar.
 - Action-list branches display real status-result names instead of `Action 1` where the parent had escaped action names.
 - Any fallback node clearly states that route placement is not proven.
+

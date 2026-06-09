@@ -1,12 +1,12 @@
 # Editor Gap Closure Plan
 
-This plan defines how to close the gap between FormWorks Editor as the native authoring application and AC Rule Workbench as a read-only companion for FWD/AC configuration review.
+This plan defines how to close the gap between FormWorks Editor as the native authoring application and FW Companion as a read-only companion for FWD/AC configuration review.
 
-The target is not to clone FW Editor write behavior. The target is to make the workbench understand and inspect the same configuration model with the same vocabulary, evidence discipline, and runtime-UX consequences.
+The target is not to clone FW Editor write behavior. The target is to make the companion understand and inspect the same configuration model with the same vocabulary, clear reader-status handling, and runtime-UX caveats.
 
 ## Target State
 
-AC Rule Workbench should let an expert inspect the FWD configuration as if reading FW Editor in a purpose-built evidence workbench:
+FW Companion should let an expert inspect the FWD configuration as if reading FW Editor in a purpose-built read-only companion:
 
 ```text
 FWD/STC object graph
@@ -97,7 +97,7 @@ The foundation is strong enough to close the gap by adding canonical semantic la
 | Field catalog | `FieldCatalogEntry`, `/api/v1/fwd/page-designs`, `/api/v1/fwd/fields`, viewer Fields workspace | Closed for static Editor inspection: field resolution now links to page-design fields with container, parsed geometry, type metadata, subfield/OMR-style role flags, variants, processing links, and evidence confidence. | Continue only with typed native field-attribute enrichment beyond currently exposed FWD field config. | Closed |
 | Resource model | `ResourceTypeDetail`, `ResourceDetail`, private nodes | Resources are grouped and attributes are captured, but typed resource models are incomplete. | Add typed projections for functions/UDFs, tables, date formats, TCL/custom functions, stores, and private config. | P1 |
 | API contract | API v1 route catalog and OpenAPI | API route and OpenAPI path drift is now checked by `scripts/test-code-quality.ps1`; canonical Editor concepts are exposed through selected-rule, Rule List, UDF, SelectionList, page-design, function, and runtime-impact packets. | Keep route descriptions/examples synchronized with Editor vocabulary and evidence classes as new canonical payloads are added. | P1 |
-| Viewer UX | Desktop workbench with structure/global definitions/inspector | Viewer now hydrates canonical editor-model, object graph, RuleConfiguration, UDF, SelectionList, and runtime-impact packets. Resources, selected-rule inspector, UDFs, Tables, and Functions expose those packets directly. Field/page packet and process-private packet panels remain partial. | Add first-class field/page packet and process-private panels, then deepen raw evidence drill-through. | P1 |
+| Viewer UX | Desktop companion with structure/global definitions/inspector | Viewer now hydrates canonical editor-model, object graph, RuleConfiguration, UDF, SelectionList, and runtime-impact packets. Resources, selected-rule inspector, UDFs, Tables, and Functions expose those packets directly. Field/page packet and process-private packet panels remain partial. | Add first-class field/page packet and process-private panels, then deepen raw evidence drill-through. | P1 |
 | Tests | API, export, sync, cache tests | Function schema/profile contract tests and OpenAPI route drift checks are in place. Broader golden snapshot tests are still needed for full canonical object graphs. | Add fixture-backed snapshot tests for canonical object graphs, process-private packets, and raw-evidence drill-through. | P0 |
 | Documentation | Multiple docs updated for mental model | Need durable catalog and implementation plan kept current with code. | Keep this plan, code catalog, reference guide, API docs, and operator/developer guides synchronized. | P0 |
 

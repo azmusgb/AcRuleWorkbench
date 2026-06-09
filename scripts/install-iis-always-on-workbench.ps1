@@ -1,10 +1,10 @@
 #Requires -Version 5.1
 <#!
 .SYNOPSIS
-One-step IIS + always-on backend installer for AC Rule Workbench.
+One-step IIS + always-on backend installer for FW Editor Viewer.
 
 .DESCRIPTION
-Generates the AC Rule Workbench HTML, registers the AcRuleWorkbench API backend
+Generates the FW Editor Viewer HTML, registers the AcRuleWorkbench API backend
 as a resilient startup scheduled task, and creates/updates an IIS reverse-proxy
 site that exposes the product viewer and /api/v1/* to users. Diagnostic /harness and legacy /api/fwd/* routes remain opt-in/compatibility surfaces only.
 
@@ -32,7 +32,7 @@ param(
     [string]$BackendHost = '127.0.0.1',
 
     [ValidateNotNullOrEmpty()]
-    [string]$SiteName = 'AC Rule Workbench',
+    [string]$SiteName = 'FW Editor Viewer',
 
     [ValidateNotNullOrEmpty()]
     [string]$SitePath = 'C:\inetpub\ac-rule-workbench',
@@ -94,14 +94,14 @@ if (-not [string]::IsNullOrWhiteSpace($viewerDir)) {
 }
 
 if (-not $SkipGenerateViewer) {
-    Write-Host 'Generating initial AC Rule Workbench HTML...'
+    Write-Host 'Generating initial FW Editor Viewer HTML...'
     & $ExePath ac-viewer --path $FwdPath --out $ViewerPath
     if ($LASTEXITCODE -ne 0) {
         throw "Initial ac-viewer generation failed with exit code $LASTEXITCODE."
     }
 }
 
-Test-RequiredPath -Path $ViewerPath -Label 'AC Rule Workbench viewer HTML' -Leaf
+Test-RequiredPath -Path $ViewerPath -Label 'FW Editor Viewer viewer HTML' -Leaf
 
 if (-not $SkipTaskRegister) {
     $registerScript = Join-Path $PSScriptRoot 'register-workbench-runner-task.ps1'
@@ -162,7 +162,7 @@ if (-not $SkipIisInstall) {
 }
 
 Write-Host ''
-Write-Host 'AC Rule Workbench always-on deployment complete.'
+Write-Host 'FW Editor Viewer always-on deployment complete.'
 Write-Host "Backend: http://$BackendHost`:$BackendPort/"
 if ([string]::IsNullOrWhiteSpace($HostHeader)) {
     Write-Host "IIS URL: http://localhost:$SitePort/viewer"

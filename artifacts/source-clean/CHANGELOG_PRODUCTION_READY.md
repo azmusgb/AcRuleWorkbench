@@ -1,4 +1,4 @@
-# AC Rule Workbench v38 Production-Ready Hardening
+﻿# FW Editor Viewer v38 Production-Ready Hardening
 
 ## Current documentation authority
 
@@ -86,3 +86,4 @@ This environment does not include a .NET Framework build toolchain, MSBuild, Pow
 - Restored selected-rule inspector sections previously hidden behind an early return.
 - Added semantic model tests for disabled states and function-catalog classification.
 - Added clean package script and recommendation/authority-model documentation.
+

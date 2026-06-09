@@ -1,14 +1,22 @@
 # Debug API Guide
 
-For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md), [Project Code Catalog](project-code-catalog.md), and [Editor Gap Closure Plan](editor-gap-closure-plan.md). Debug routes are evidence support only and are not product contracts.
+Debug routes are engineering-only support routes. They are disabled by default and are not product contracts.
 
-Debug routes are disabled by default. Enable explicitly:
+Use the public `/api/v1` routes for FW Companion behavior and integration tests.
+
+## Enable debug routes
 
 ```powershell
-AcRuleWorkbench.exe api --path C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd --port 8787 --enable-debug-api --allow-path-query
+.\scripts\start-workbench.ps1 `
+  -FwdPath .\fwd.cfd `
+  -Port 8787 `
+  -KillExisting `
+  -EnableDebugApi `
+  -AllowPathQuery `
+  -OpenHarness
 ```
 
-Canonical debug routes:
+## Canonical debug routes
 
 ```http
 GET /api/debug/health
@@ -22,4 +30,4 @@ GET /api/debug/ac/relationships
 GET /api/debug/ac/flow-debug
 ```
 
-Debug output is diagnostic evidence only. It is not the public product contract and may change.
+Debug output can help diagnose reader behavior. It should not be used as user-facing FW Companion copy, product terminology, or a stable schema.

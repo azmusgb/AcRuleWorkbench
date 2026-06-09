@@ -1,4 +1,4 @@
-# AC Rule Workbench — Recommendations Applied
+﻿# FW Editor Viewer â€” Recommendations Applied
 
 ## Current documentation authority
 
@@ -110,3 +110,4 @@ Suggested flow:
 .\scripts\build-and-doctor.ps1
 .\scripts\start-workbench.ps1 -FwdPath C:\path\to\fwd.cfd -Port 8787 -KillExisting
 ```
+

@@ -118,6 +118,11 @@ public sealed class ResourcePrivateNode
 
     public string? DataSha256 { get; set; }
 
+    public int DataLength { get; set; }
+
+    [Newtonsoft.Json.JsonIgnore]
+    public byte[]? RawDataBytes { get; set; }
+
     public bool IsBinaryPayload { get; set; }
 
     public List<ResourcePrivateNode> Children { get; } = new();

@@ -1,11 +1,11 @@
-# AC Rule Workbench Resource Hydration Fix
+﻿# FW Editor Viewer Resource Hydration Fix
 
 Apply by extracting this zip directly into the repository root:
 
 ```powershell
 cd C:\dev\AcRuleWorkbench
 Expand-Archive .\AcRuleWorkbench-resource-hydration-viewer-fix.zip -DestinationPath C:\dev\AcRuleWorkbench -Force
-.\scripts\start-workbench.cmd -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.cmd -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Then hard refresh the browser with Ctrl+F5.
@@ -31,3 +31,4 @@ Then hard refresh the browser with Ctrl+F5.
 - `node --check ac-rule-viewer.js`
 - `node --check AcRuleWorkbench.Core/Viewer/ac-rule-viewer.js`
 - No C# files are included in this package.
+

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Starts AC Rule Workbench in explicit diagnostic/developer mode.
+  Starts FW Editor Viewer in explicit diagnostic/developer mode.
 
 .DESCRIPTION
   Diagnostic mode enables /harness and /api/debug/* and permits request-level

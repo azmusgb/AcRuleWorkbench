@@ -616,18 +616,39 @@ public sealed class ApiContractTests
     }
 
     [TestMethod]
-    public void Dispatch_Snapshot_WithSnapshotModeLive_Rebuilds_ForEachRequest()
+    public void Dispatch_Snapshot_WithSnapshotModeLive_DoesNotSynchronouslyRebuildForEachRequest()
     {
         var client = new CountingSnapshotClient();
         var service = new WorkbenchApiService(client, new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
 
-        using (var first = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=live"))
+        using (var first = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=live&liveMinRefreshSeconds=3600"))
         {
             var result = service.Dispatch("api/v1/snapshot", first.Request);
             Assert.AreEqual(200, result.StatusCode);
         }
 
-        using (var second = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=live"))
+        using (var second = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=live&liveMinRefreshSeconds=3600"))
+        {
+            var result = service.Dispatch("api/v1/snapshot", second.Request);
+            Assert.AreEqual(200, result.StatusCode);
+        }
+
+        Assert.AreEqual(1, client.InspectCalls, "Live view should reuse the warm in-memory FWD model for click-time reads instead of rebuilding the full FWD snapshot on every request.");
+    }
+
+    [TestMethod]
+    public void Dispatch_Snapshot_WithSnapshotModeRebuild_ForcesRebuildForEachRequest()
+    {
+        var client = new CountingSnapshotClient();
+        var service = new WorkbenchApiService(client, new WorkbenchApiServerOptions { DefaultFwdPath = "C:\\default.cfd" });
+
+        using (var first = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=rebuild"))
+        {
+            var result = service.Dispatch("api/v1/snapshot", first.Request);
+            Assert.AreEqual(200, result.StatusCode);
+        }
+
+        using (var second = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/snapshot?snapshotMode=rebuild"))
         {
             var result = service.Dispatch("api/v1/snapshot", second.Request);
             Assert.AreEqual(200, result.StatusCode);

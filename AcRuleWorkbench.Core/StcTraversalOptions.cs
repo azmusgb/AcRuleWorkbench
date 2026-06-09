@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class StcTraversalOptions
@@ -17,4 +19,7 @@ public sealed class StcTraversalOptions
     public bool IncludeDotNodes { get; set; } = false;
 
     public bool RequireNativeOk { get; set; }
+
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

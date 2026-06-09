@@ -6,7 +6,8 @@
     <!-- The DCM wrapper/native stack tested here is x86. Default the whole harness to x86 so Visual Studio F5 is safe. -->
     <PlatformTarget>x86</PlatformTarget>
     <Prefer32Bit>true</Prefer32Bit>
-    <NoWarn>$(NoWarn);MSB3270;CS8600;CS8601;CS8602;CS8604;CS8620</NoWarn>
+    <!-- Keep platform mismatch noise suppressed for the x86 native stack, but allow nullable diagnostics to surface. -->
+    <NoWarn>$(NoWarn);MSB3270</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Platform)' == 'x64'">

@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcRuleOptions
@@ -19,4 +21,6 @@ public sealed class AcRuleOptions
     public int MaxRawTokensPerScope { get; set; } = 250;
 
     public int MaxScopeCount { get; set; } = 0;
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

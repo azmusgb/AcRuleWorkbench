@@ -31,11 +31,11 @@ internal static class OpenApiDocument
             openapi = "3.0.3",
             info = new
             {
-                title = "AC Rule Workbench API",
+                title = "FW Editor Viewer API",
                 version = ApiV1Routes.ApiVersion,
                 description = "Read-only FormWorks/DCM AutoCapture configuration API. The API exposes static FWD configuration only; it does not execute AC rules or write to FWD configuration."
             },
-            servers = new[] { new { url, description = "Local AC Rule Workbench server" } },
+            servers = new[] { new { url, description = "Local FW Editor Viewer server" } },
             tags = new[]
             {
                 new { name = "system", description = "Server status, capabilities, health, and OpenAPI." },
@@ -100,7 +100,7 @@ internal static class OpenApiDocument
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
 
-        if (path.EndsWith("/rules/{nodeId}", StringComparison.OrdinalIgnoreCase))
+        if (path!.EndsWith("/rules/{nodeId}", StringComparison.OrdinalIgnoreCase))
         {
             return new Dictionary<string, object>
             {

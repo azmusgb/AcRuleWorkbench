@@ -1,12 +1,12 @@
 # Project Code Catalog
 
-This catalog records the current `AcRuleWorkbench` codebase as a FormWorks/DCM Auto Capture inspection product. It separates maintainable source from generated evidence and packages so future Editor-parity work starts from an accurate map of what exists.
+This catalog records the current `AcRuleWorkbench` codebase behind the FW Companion product. It separates maintainable source from generated viewer data and packages so future Editor-parity work starts from an accurate map of what exists.
 
 Date of inventory: 2026-06-04.
 
 ## Product Shape
 
-AC Rule Workbench is a local, read-only companion for FormWorks Editor. It opens a configured `fwd.cfd`, extracts FWD/STC and AC rule evidence through FormWorks/DCM APIs, normalizes that evidence into reports and API snapshots, and renders it in a desktop browser workbench.
+FW Companion is a local, read-only companion for FormWorks Editor. It opens a configured `fwd.cfd`, reads FWD/STC and AC rule configuration through FormWorks/DCM APIs, normalizes that data into reports and API snapshots, and renders it in a desktop browser companion.
 
 The product is not an AC runtime and not an FWD authoring tool. FW Editor remains the write surface for rule creation, rule movement, UDF editing, table editing, process configuration, and AC Rules Tester execution.
 
@@ -626,4 +626,4 @@ Runtime Evidence
   Rejects / table prompts / keyer impact / tester cases / WR-OCR diffs when externally supplied
 ```
 
-That is the work required for the project to become a full read-only FormWorks Editor companion instead of a strong AC rule evidence viewer.
+That is the work required for the project to remain a full read-only FormWorks Editor companion instead of drifting back into an AC rule extraction/debug viewer.

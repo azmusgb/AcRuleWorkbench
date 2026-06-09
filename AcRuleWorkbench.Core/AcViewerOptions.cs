@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcViewerOptions
@@ -19,4 +21,7 @@ public sealed class AcViewerOptions
     public bool RequireNativeOk { get; set; }
 
     public EvidenceExportProfile ExportProfile { get; set; } = EvidenceExportProfile.ViewerSafe;
+
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

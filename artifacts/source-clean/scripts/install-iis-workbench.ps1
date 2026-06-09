@@ -4,14 +4,14 @@
 Creates an IIS site that reverse-proxies to the AcRuleWorkbench local API backend.
 
 .DESCRIPTION
-The AC Rule Workbench backend remains the existing x86 AcRuleWorkbench API host.
+The FW Editor Viewer backend remains the existing x86 AcRuleWorkbench API host.
 IIS is used as the stable front door for users, TLS, Windows auth, and network access.
 This requires IIS URL Rewrite and Application Request Routing (ARR) to be installed.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [ValidateNotNullOrEmpty()]
-    [string]$SiteName = 'AC Rule Workbench',
+    [string]$SiteName = 'FW Editor Viewer',
 
     [ValidateNotNullOrEmpty()]
     [string]$AppPoolName = 'ACRuleWorkbenchPool',
@@ -122,7 +122,7 @@ if (-not $hasArr) {
 }
 
 if ($OpenFirewall) {
-    $ruleName = "AC Rule Workbench IIS $SitePort"
+    $ruleName = "FW Editor Viewer IIS $SitePort"
     if (-not (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow -Protocol TCP -LocalPort $SitePort | Out-Null
     }

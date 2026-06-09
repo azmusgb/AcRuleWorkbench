@@ -1,12 +1,12 @@
-# v62 Read-only FW Editor Polish
+﻿# v62 Read-only FW Editor Polish
 
 ## Current documentation authority
 
 For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `README.md`, `docs/formworks-editor-ac-reference-guide.md`, `docs/project-code-catalog.md`, and `docs/editor-gap-closure-plan.md`. This file is a historical viewer polish note.
 
-This package refreshes the AC Rule Workbench viewer around the final product boundary:
+This package refreshes the FW Editor Viewer viewer around the final product boundary:
 
-> AC Rule Workbench is a read-only FW Editor companion for AC-related FWD configuration, with enhanced search, navigation, and inspection.
+> FW Editor Viewer is a read-only FW Editor companion for AC-related FWD configuration, with enhanced search, navigation, and inspection.
 
 ## Focus
 
@@ -39,3 +39,4 @@ Open with:
 ```powershell
 Start-Process msedge "http://127.0.0.1:8787/viewer?ui=readonly-editor-v62&nocache=$([guid]::NewGuid())"
 ```
+

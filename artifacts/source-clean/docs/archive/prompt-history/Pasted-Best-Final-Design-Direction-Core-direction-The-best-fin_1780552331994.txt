@@ -1,0 +1,1478 @@
+Best Final Design Direction
+
+Core direction
+
+The best final design is:
+
+Linear-grade visual polish + Retool-style internal-tool architecture + Stripe-quality data/detail states + Vercel-style app navigation.
+
+Do not model this as a generic dashboard. Your app is not a dashboard. It is a desktop-first evidence inspection workbench for AC rules, rule trees, UDFs, functions, parsing diagnostics, source evidence, and exports.
+
+Linear is the strongest reference for calm density, reduced noise, speed, and modern product-tool polish. Linear explicitly positions itself around reducing noise and helping teams maintain focus and momentum.   Retool is the right structural reference because it is built for internal tools and operational software, which is much closer to your use case than a marketing-style SaaS dashboard.   Stripe Dashboard is a strong reference for search-heavy operational UI, resource navigation, keyboard shortcuts, and precise detail states.   Vercel’s 2026 dashboard redesign is also relevant because it moved navigation into a resizable sidebar, improved workflow prioritization, and made navigation more adaptable.  
+
+⸻
+
+Final Design Concept
+
+Product identity
+
+Working title
+
+AC Rule Workbench
+
+Visual/product concept
+
+Evidence Command Center for FormWorks Rule Inspection
+
+The application should feel like a serious internal engineering tool, not a report viewer.
+
+It should communicate:
+
+* loaded configuration state
+* extraction confidence
+* rule tree structure
+* selected rule evidence
+* AC function/UDF inventory
+* parsing warnings
+* missing references
+* export readiness
+* runtime diagnostics
+
+The user should immediately understand:
+
+1. What file/configuration is loaded
+2. What object is selected
+3. What evidence supports it
+4. What issues exist
+5. What actions are available
+6. Where to go next
+
+⸻
+
+Recommended Layout
+
+Primary layout pattern
+
+Use a four-zone desktop workbench:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Top Command Bar                                                             │
+├──────────────┬───────────────────────────────┬──────────────────────────────┤
+│ Left Index   │ Main Work Surface             │ Right Evidence Inspector     │
+│              │                               │                              │
+│ Rule Tree    │ Rule graph / table / details  │ Selected rule evidence       │
+│ Functions    │ Active workflow view          │ Attributes / params / refs   │
+│ UDFs         │                               │ Diagnostics / source lines   │
+│ Exports      │                               │                              │
+├──────────────┴───────────────────────────────┴──────────────────────────────┤
+│ Bottom Diagnostics Console / Parse Log / Warnings / Export Activity          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+This is the strongest structure for your app because it supports:
+
+* persistent navigation
+* large inspection surface
+* selected-object details
+* diagnostics without losing context
+* desktop resizing
+* dense technical workflows
+
+⸻
+
+Exact Layout Specification
+
+1. Top Command Bar
+
+Purpose
+
+The top bar should act like the application control center.
+
+It should not be decorative. It should answer:
+
+* What is loaded?
+* Is the parse valid?
+* What view am I in?
+* What can I do now?
+
+Recommended contents
+
+Left side:
+
+* App mark / product title: AC Rule Workbench
+* Loaded file name
+* Environment/config badge
+* Parse status badge
+
+Center:
+
+* Global search / command input
+* Placeholder: Search rules, functions, UDFs, GUIDs, attributes...
+* Keyboard hint: Ctrl K
+
+Right side:
+
+* Import / Load
+* Validate
+* Export
+* Settings
+* Help
+* Theme toggle
+
+Visual treatment
+
+* Height: 64px
+* Background: deep neutral surface
+* Bottom border: subtle
+* Search field: prominent but calm
+* Status badges: compact
+* Main actions: visually grouped
+
+Behavior
+
+* Command/search should support keyboard-first use.
+* Top bar should remain sticky.
+* Long file names should truncate intelligently.
+* Status should update when parsing/loading/exporting changes.
+
+⸻
+
+2. Left Navigation / Index Pane
+
+Purpose
+
+The left side should become the user’s structural map.
+
+It should replace scattered navigation with a clean object index.
+
+Recommended width
+
+* Default: 300px
+* Collapsed: 72px
+* Resizable range: 240px–420px
+
+Sections
+
+A. Loaded Source
+
+Show current source information:
+
+* file name
+* extracted document/page context
+* parse timestamp
+* total rules
+* total functions
+* total UDFs
+* warning count
+
+B. Primary Views
+
+Use a vertical nav:
+
+* Overview
+* Rule Tree
+* Rule Table
+* AC Functions
+* UDFs
+* Attributes
+* Global Resources
+* Compare
+* Exports
+* Diagnostics
+
+C. Object Index
+
+Below primary nav, include a searchable index:
+
+* Rules
+* Functions
+* UDFs
+* Attributes
+* GUIDs
+* Missing references
+* Warnings
+
+Visual treatment
+
+Use restrained, high-quality list styling:
+
+* selected item with left accent rail
+* hover state
+* count badges
+* warning badges
+* collapsed icons
+* clear grouping
+
+Avoid
+
+* huge icon buttons
+* random cards
+* duplicated filters
+* controls scattered across the page
+* low-contrast tree text
+* uncontrolled vertical scrolling
+
+⸻
+
+3. Main Work Surface
+
+Purpose
+
+The center area is the active inspection surface.
+
+It should change depending on selected mode:
+
+* Overview
+* Rule Tree
+* Rule Detail
+* Function Inventory
+* UDF Inventory
+* Compare
+* Diagnostics
+* Export Review
+
+Recommended behavior
+
+* Use tabbed or segmented view switching inside the center pane.
+* Keep the active view title persistent.
+* Use toolbar actions relevant to the current view only.
+* Never bury the primary data table/tree under decorative dashboard cards.
+
+Recommended center layout
+
+┌───────────────────────────────────────────────┐
+│ View Header                                    │
+│ Title, description, active filters, actions    │
+├───────────────────────────────────────────────┤
+│ View Toolbar                                   │
+│ Search, filters, expand/collapse, export       │
+├───────────────────────────────────────────────┤
+│ Main Data Region                               │
+│ Tree / graph / table / evidence view           │
+└───────────────────────────────────────────────┘
+
+Main work views
+
+Overview View
+
+Use this as the landing state after load.
+
+It should show:
+
+* parse health
+* rule count
+* function count
+* UDF count
+* warning count
+* unmatched references
+* export readiness
+* recent activity
+* top problem areas
+
+Do not use generic dashboard cards unless they are operationally useful.
+
+Good cards:
+
+* Parse Health
+* Rule Coverage
+* Unmatched References
+* High-Risk Branches
+* Export Package
+* Last Validation
+
+Bad cards:
+
+* “Welcome”
+* fake charts
+* random KPI blocks
+* decorative stats without action
+
+Rule Tree View
+
+This should be the core screen.
+
+Recommended structure:
+
+* left mini-toolbar inside center pane
+* expandable/collapsible tree
+* node density control
+* search-highlighted matches
+* result-edge labels
+* selected node state
+* warning markers
+* breadcrumb path above tree
+* zoom or fit controls if graph-based
+
+Each rule node should show:
+
+* rule name
+* result
+* ordinal
+* child count
+* warning/error marker
+* GUID available on hover or metadata line
+
+Do not overload the tree node with every field. Put detailed evidence in the right inspector.
+
+Rule Table View
+
+This should be for sorting/filtering/export.
+
+Columns:
+
+* Rule Name
+* Ordinal
+* GUID
+* Parent
+* Level
+* Result
+* Sub-list
+* Function
+* Attribute References
+* Warning Status
+
+Table requirements:
+
+* sticky header
+* column resizing
+* row hover
+* selected row state
+* compact density option
+* empty state
+* loading skeleton
+* horizontal scroll containment
+* accessible focus state
+
+Function/UDF Views
+
+These should feel like technical inventory screens.
+
+Recommended layout:
+
+* searchable table
+* category filters
+* function usage count
+* source/evidence panel
+* referenced-by list
+* missing/unused indicators
+
+Columns:
+
+* Name
+* Type
+* Category
+* Signature/Parameters
+* Usage Count
+* Referenced By
+* Source
+* Status
+
+Compare View
+
+This should compare two extraction runs or two configs.
+
+Recommended sections:
+
+* added rules
+* removed rules
+* changed rules
+* changed function references
+* changed attributes
+* changed exports
+* warnings introduced/resolved
+
+Use split diff panels. Avoid giant undifferentiated tables.
+
+Diagnostics View
+
+This should be a first-class screen, not an afterthought.
+
+Sections:
+
+* parse errors
+* unmatched WFFileRefs
+* missing $File sections
+* duplicate GUIDs
+* orphan rules
+* invalid parent/child references
+* claim count mismatches
+* export warnings
+* runtime exceptions
+
+Each diagnostic should have:
+
+* severity
+* message
+* affected object
+* evidence/source
+* suggested action
+
+⸻
+
+4. Right Evidence Inspector
+
+Purpose
+
+This is the most important improvement.
+
+The current app should not force users to hunt for evidence. The inspector should always explain the selected object.
+
+Recommended width
+
+* Default: 380px
+* Resizable range: 320px–560px
+* Collapsible
+
+Inspector states
+
+Nothing selected
+
+Show a useful selected-empty state:
+
+Select a rule, function, UDF, attribute, or diagnostic to inspect its evidence.
+
+Include shortcuts:
+
+* search rules
+* open diagnostics
+* view exports
+
+Rule selected
+
+Show:
+
+* rule name
+* result
+* ordinal
+* GUID
+* parent rule
+* child rules
+* hierarchy level
+* parameters
+* attributes read/written
+* function calls
+* source evidence
+* warnings
+* export actions
+
+Recommended tabs:
+
+* Summary
+* Evidence
+* Children
+* Attributes
+* Functions
+* Source
+* Diagnostics
+
+Function selected
+
+Show:
+
+* function name
+* category
+* usage count
+* parameters
+* referenced rules
+* source evidence
+* warnings
+
+Diagnostic selected
+
+Show:
+
+* severity
+* explanation
+* affected object
+* raw evidence
+* recommended fix
+* related export rows
+
+Visual treatment
+
+The inspector should be dense but elegant:
+
+* section headers
+* key-value rows
+* copy buttons for GUIDs
+* code/evidence blocks
+* badges
+* tabs
+* subtle dividers
+* sticky object header
+
+⸻
+
+5. Bottom Diagnostics Console
+
+Purpose
+
+This is where runtime truth lives.
+
+It should support:
+
+* extraction logs
+* validation messages
+* export activity
+* parse warnings
+* errors
+* background activity
+
+Recommended height
+
+* Collapsed: 44px
+* Expanded: 220px
+* Resizable: 160px–420px
+
+Tabs
+
+* Activity
+* Warnings
+* Errors
+* Exports
+* Raw Log
+
+Visual treatment
+
+Use terminal-inspired styling, but not a fake hacker console.
+
+Good:
+
+* compact rows
+* severity chips
+* timestamps
+* source labels
+* copy/export log actions
+* filter by severity
+
+Bad:
+
+* oversized monospace walls
+* glowing green terminal cliché
+* uncontrolled scrolling
+* no filtering
+
+⸻
+
+Visual Design System
+
+Overall mood
+
+The UI should feel:
+
+* premium
+* technical
+* calm
+* confident
+* dense
+* structured
+* evidence-first
+* desktop-grade
+
+It should not feel:
+
+* playful
+* dashboard-template
+* Bootstrap default
+* overly colorful
+* empty
+* marketing-site inspired
+* card soup
+* visually noisy
+
+⸻
+
+Color System
+
+Recommended theme
+
+A dark-first neutral system with restrained blue/violet/cyan accents.
+
+Base palette
+
+--bg-app: #070A0F;
+--bg-shell: #0A0F17;
+--bg-panel: #101722;
+--bg-panel-raised: #141D2B;
+--bg-elevated: #182234;
+--border-subtle: rgba(148, 163, 184, 0.14);
+--border-strong: rgba(148, 163, 184, 0.24);
+--text-primary: #F5F7FA;
+--text-secondary: #B8C1CE;
+--text-muted: #7F8B9D;
+--text-disabled: #536071;
+--accent: #7C9CFF;
+--accent-strong: #9CB5FF;
+--accent-soft: rgba(124, 156, 255, 0.16);
+--success: #4ADE80;
+--success-soft: rgba(74, 222, 128, 0.14);
+--warning: #FBBF24;
+--warning-soft: rgba(251, 191, 36, 0.16);
+--danger: #FB7185;
+--danger-soft: rgba(251, 113, 133, 0.16);
+--info: #38BDF8;
+--info-soft: rgba(56, 189, 248, 0.16);
+
+Accent usage
+
+Use accent color only for:
+
+* selected nav item
+* primary button
+* active tab
+* selected tree node
+* focused input
+* important links
+* graph highlight
+
+Avoid using accent everywhere.
+
+⸻
+
+Typography
+
+Recommended font stack
+
+--font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+--font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+Type scale
+
+--text-xs: 11px;
+--text-sm: 12px;
+--text-md: 13px;
+--text-base: 14px;
+--text-lg: 16px;
+--text-xl: 20px;
+--text-2xl: 24px;
+
+Usage
+
+Element	Size	Weight
+App title	14–15px	700
+Page title	20–24px	700
+Panel title	13–14px	650
+Body text	13–14px	400
+Metadata	11–12px	500
+Table text	12–13px	400
+Button text	12–13px	650
+Code/evidence	12px	400
+
+Typography should be compact, but not tiny.
+
+⸻
+
+Spacing System
+
+Use a consistent spacing scale.
+
+--space-1: 4px;
+--space-2: 8px;
+--space-3: 12px;
+--space-4: 16px;
+--space-5: 20px;
+--space-6: 24px;
+--space-8: 32px;
+--space-10: 40px;
+
+Layout spacing
+
+Area	Recommended spacing
+Top bar horizontal padding	16–20px
+Panel padding	14–18px
+Card padding	16px
+Toolbar gap	8px
+Section gap	16px
+List row padding	8–10px
+Table cell padding	8–12px
+Inspector section gap	18px
+
+⸻
+
+Shape, Borders, Shadows
+
+Radius scale
+
+--radius-sm: 6px;
+--radius-md: 10px;
+--radius-lg: 14px;
+--radius-xl: 18px;
+
+Usage
+
+Element	Radius
+Small buttons	8px
+Inputs	10px
+Cards/panels	14px
+Modals	18px
+Pills/badges	999px
+
+Borders
+
+Prefer subtle borders over heavy shadows.
+
+Good:
+
+border: 1px solid var(--border-subtle);
+
+Use stronger border only for:
+
+* selected states
+* focused controls
+* warnings/errors
+* active drag/resizing boundaries
+
+Shadows
+
+Use restrained shadows:
+
+--shadow-soft: 0 16px 40px rgba(0, 0, 0, 0.22);
+--shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.18);
+
+Avoid exaggerated glow.
+
+⸻
+
+Component Design
+
+Buttons
+
+Types
+
+* Primary
+* Secondary
+* Ghost
+* Danger
+* Icon
+* Split button
+
+Requirements
+
+Every button must have:
+
+* hover state
+* active state
+* disabled state
+* focus-visible state
+* accessible label if icon-only
+
+Visual pattern
+
+Primary buttons should be used sparingly:
+
+* Load file
+* Validate
+* Export
+* Apply filter
+* Confirm dialog
+
+Secondary/ghost buttons should handle the rest.
+
+⸻
+
+Inputs and Search
+
+Global search
+
+The global search should feel like a command palette trigger.
+
+Recommended design:
+
+* large enough to notice
+* compact enough for top bar
+* keyboard hint
+* search icon
+* clear button
+* loading spinner when indexing
+
+Filter search
+
+Panel-level filters should be quieter than global search.
+
+Use:
+
+* chips
+* segmented controls
+* dropdown filters
+* saved views
+* clear all action
+
+⸻
+
+Cards and Panels
+
+Use cards only where they improve comprehension.
+
+Good card types
+
+* Parse health
+* Rule coverage
+* Export package
+* Warning summary
+* Selected object summary
+* Recent validation
+
+Bad card usage
+
+* cards for every random metric
+* cards inside cards inside cards
+* fake KPI dashboard
+* decorative cards with no workflow value
+
+⸻
+
+Tables
+
+Tables are central to this app.
+
+Requirements:
+
+* sticky header
+* row hover
+* selected row
+* keyboard focus
+* sort indicators
+* column resizing if practical
+* compact density
+* empty state
+* loading state
+* error state
+* horizontal overflow wrapper
+* export action
+* clear column alignment
+
+Numeric and counts should align right.
+
+Names and labels should align left.
+
+Status should use compact badges.
+
+⸻
+
+Tree View
+
+Rule tree is core functionality.
+
+Requirements:
+
+* expand/collapse
+* selected node
+* hover state
+* keyboard navigation
+* search highlight
+* branch result labels
+* warning/error indicators
+* active path highlighting
+* expand all/collapse all
+* depth guides
+* virtualized rendering if large
+
+Tree node structure
+
+Each node should show:
+
+Rule Name
+Result Badge · Ordinal · Children Count
+
+On selected or expanded state, optionally show:
+
+GUID · Function · Attribute Ref
+
+Do not show all metadata all the time.
+
+⸻
+
+Tabs
+
+Use tabs in the inspector and main views.
+
+Tabs should be:
+
+* compact
+* clearly selected
+* keyboard accessible
+* not overused
+
+Recommended inspector tabs:
+
+* Summary
+* Evidence
+* Attributes
+* Functions
+* Children
+* Source
+* Diagnostics
+
+⸻
+
+Badges
+
+Badge categories:
+
+* OK
+* Failed
+* Empty
+* Warning
+* Missing Ref
+* Exported
+* Parsed
+* Unused
+* Referenced
+* Changed
+* Added
+* Removed
+
+Badges should be subtle, not neon.
+
+⸻
+
+Modals
+
+Modals should be used for:
+
+* import/load
+* export configuration
+* validation result summary
+* settings
+* destructive confirmations
+
+Modal requirements:
+
+* focus trap
+* Escape to close
+* click outside behavior only where safe
+* clear title
+* clear footer actions
+* scrollable body if needed
+* max width
+* accessible labels
+
+⸻
+
+Toasts
+
+Toasts should be for short confirmations only.
+
+Examples:
+
+* Export created
+* Rule copied
+* Validation complete
+* File loaded
+* Settings saved
+
+Errors that need attention should not be only toasts. They should also appear in diagnostics.
+
+⸻
+
+State Design
+
+Loading State
+
+Use skeletons for:
+
+* tables
+* tree
+* inspector
+* overview cards
+
+Use progress details when parsing/exporting:
+
+Parsing rules...
+Extracted 412 of 818 rules
+Resolving references...
+Building function index...
+
+Empty State
+
+Empty states should be specific.
+
+Bad:
+
+No data.
+
+Good:
+
+No rule selected.
+Select a rule from the tree or search by name, GUID, function, or attribute.
+
+Error State
+
+Errors should include:
+
+* title
+* plain-language explanation
+* technical details toggle
+* next action
+* copy diagnostics button
+
+Selected State
+
+Selected object should be visible in:
+
+* tree/table row
+* inspector header
+* breadcrumb
+* optional active path
+
+Warning State
+
+Warnings should appear in:
+
+* left nav count
+* affected row/node
+* inspector diagnostics tab
+* bottom diagnostics console
+
+⸻
+
+Workflow Design
+
+Primary workflow
+
+The ideal user flow:
+
+1. Load file/config
+2. Parse/validate
+3. Review summary health
+4. Search or browse rule tree
+5. Select rule
+6. Inspect evidence
+7. Check diagnostics
+8. Export selected/full package
+
+The UI should be built around this flow.
+
+⸻
+
+Recommended Screens
+
+Screen 1: Empty Startup
+
+Layout
+
+* App shell visible
+* centered import panel
+* recent files if available
+* supported file types
+* short explanation of what the app does
+* no fake data
+
+Primary action
+
+Load FWD / WR / Export Package
+
+Secondary actions
+
+* Open recent
+* View sample schema documentation
+* Import previous export
+
+⸻
+
+Screen 2: Loaded Overview
+
+Sections
+
+* Parse Health
+* Extraction Summary
+* Rule Coverage
+* Function/UDF Inventory
+* Diagnostics Summary
+* Export Readiness
+* Recent Activity
+
+Primary actions
+
+* Open Rule Tree
+* Run Validation
+* Export Package
+
+⸻
+
+Screen 3: Rule Tree Inspection
+
+Layout
+
+* left index shows rule groups/search
+* center shows rule tree
+* right inspector shows selected rule
+* bottom console collapsed unless warnings exist
+
+Key UX
+
+* selected rule path highlighted
+* warnings shown inline
+* search results jump to matches
+* inspector updates immediately
+
+⸻
+
+Screen 4: Function/UDF Inventory
+
+Layout
+
+* table in center
+* filters above
+* selected function details in inspector
+
+Key UX
+
+* usage count links to referencing rules
+* unused/missing warnings visible
+* source/evidence view available
+
+⸻
+
+Screen 5: Diagnostics
+
+Layout
+
+* severity summary top
+* grouped diagnostic list/table
+* inspector explains selected diagnostic
+* bottom console can show raw logs
+
+Key UX
+
+* each diagnostic has a next action
+* jump to affected rule/function
+* copy diagnostic payload
+
+⸻
+
+Screen 6: Export Review
+
+Layout
+
+* export package summary
+* selectable output formats
+* included entities
+* warnings before export
+* export history/activity
+
+Key UX
+
+* clear destination
+* clear included data
+* validation before export
+* success state with open/copy location actions
+
+⸻
+
+Best Final Prompt
+
+Use this prompt for the actual redesign request.
+
+You are a senior product designer, front-end architect, and UI/UX engineering lead.
+Completely redesign all HTML and CSS in this project into a premium, desktop-first AC Rule Workbench.
+This is not a cosmetic pass. Treat the current UI as a functional prototype and rebuild the user experience into a serious 2026+ evidence inspection workbench for FormWorks / Document Capture Manager AC rules, rule trees, functions, UDFs, attributes, parsing diagnostics, source evidence, validation, comparison, and exports.
+Primary design direction:
+Use Linear as the visual quality reference, Retool as the internal-tool/workbench architecture reference, Stripe Dashboard as the reference for precise search/forms/tables/status/error states, and Vercel Dashboard as the reference for clean, resizable app navigation.
+The result should not look like a generic admin dashboard.
+It should look like a premium desktop engineering tool.
+Target experience:
+- calm
+- dense
+- polished
+- technical
+- evidence-first
+- keyboard-friendly
+- fast-feeling
+- visually cohesive
+- production-grade
+- suitable for complex internal business tooling
+You have full creative freedom to:
+- move sections
+- redesign the shell
+- redesign the navigation
+- redesign the header
+- redesign the sidebar
+- redesign the work surface
+- redesign the inspector
+- redesign tables
+- redesign tree views
+- redesign filters
+- redesign modals
+- redesign toasts
+- redesign empty/loading/error states
+- change colors
+- change fonts
+- change spacing
+- change component structure
+- introduce a new design system
+- replace weak layouts completely
+Hard constraints:
+- Preserve actual application functionality.
+- Preserve JavaScript runtime contracts unless you update the JavaScript too.
+- Preserve required IDs, data attributes, form names, event hooks, dynamic containers, modal infrastructure, toast infrastructure, error infrastructure, and render targets.
+- Do not add fake production business data.
+- Do not remove empty containers that are intentionally populated by JavaScript.
+- Do not provide concepts only.
+- Implement the redesign in real working code.
+- Return complete files or a complete unified patch.
+- No placeholders.
+- No pseudo-code.
+- No TODOs.
+- No omitted sections.
+Final layout requirement:
+Rebuild the application as a four-zone desktop workbench:
+1. Top Command Bar
+- App name
+- loaded source/file indicator
+- parse status
+- global search/command input
+- primary actions
+- help/settings/theme controls
+2. Left Navigation and Object Index
+- loaded source summary
+- primary views
+- rule/function/UDF/attribute indexes
+- warning counts
+- search/filter controls
+- collapsible/resizable behavior
+3. Main Work Surface
+- active view title
+- contextual toolbar
+- rule tree, table, function inventory, diagnostics, compare, or export review
+- sticky headers where appropriate
+- clean scroll regions
+- strong selected states
+4. Right Evidence Inspector
+- selected object summary
+- rule/function/UDF/diagnostic evidence
+- tabs for Summary, Evidence, Attributes, Functions, Children, Source, Diagnostics
+- copy actions for GUIDs/source references
+- empty selected state
+- collapsible/resizable behavior
+5. Bottom Diagnostics Console
+- collapsible parse/export/runtime log
+- warnings/errors/activity/export tabs
+- severity filters
+- copy/export diagnostics actions
+Primary views to support:
+- Startup / Empty Load
+- Loaded Overview
+- Rule Tree
+- Rule Table
+- AC Functions
+- UDFs
+- Attributes
+- Compare
+- Diagnostics
+- Export Review
+- Settings / Help
+Design system requirements:
+Create a complete CSS token system using custom properties:
+- color tokens
+- text tokens
+- spacing tokens
+- radius tokens
+- border tokens
+- shadow tokens
+- z-index tokens
+- transition tokens
+Use a dark-first premium neutral theme with restrained accent color.
+Make the CSS theme-ready for future light mode.
+Typography:
+Use a modern system font stack.
+Create a clear type hierarchy for:
+- app title
+- page title
+- panel title
+- section title
+- body text
+- metadata
+- table text
+- button text
+- code/evidence blocks
+Spacing:
+Normalize all spacing into a consistent scale.
+Fix cramped controls, random margins, inconsistent gutters, and awkward container sizing.
+Keep the UI dense enough for professional work, but substantially cleaner and calmer.
+Component requirements:
+Redesign and implement polished versions of:
+- app shell
+- command bar
+- side navigation
+- object index
+- cards
+- panels
+- buttons
+- icon buttons
+- inputs
+- search fields
+- filter chips
+- segmented controls
+- tabs
+- badges
+- tables
+- tree nodes
+- inspector sections
+- modals
+- drawers
+- toasts
+- alerts
+- loading skeletons
+- empty states
+- error states
+- diagnostics console
+- export review panels
+Rule tree requirements:
+- clear hierarchy
+- expand/collapse affordances
+- selected node state
+- hover state
+- keyboard navigation state
+- depth guides
+- active path highlighting
+- warning/error markers
+- result badges
+- search match highlighting
+- expand all/collapse all actions
+- avoid overloading each node with too much metadata
+Table requirements:
+- sticky headers
+- row hover
+- selected row
+- focus-visible state
+- sort indicators
+- compact density
+- status badges
+- contained horizontal scrolling
+- empty/loading/error states
+- readable numeric/text alignment
+- improved column spacing
+Inspector requirements:
+When nothing is selected, show a useful selected-empty state.
+When a rule is selected, show:
+- rule name
+- result
+- ordinal
+- GUID
+- parent
+- children
+- hierarchy level
+- params
+- attributes
+- functions
+- source evidence
+- diagnostics
+- export/copy actions
+When a function or UDF is selected, show:
+- name
+- type/category
+- usage count
+- signature/parameters
+- referenced rules
+- source evidence
+- warnings
+When a diagnostic is selected, show:
+- severity
+- explanation
+- affected object
+- source evidence
+- suggested action
+- related rows/nodes
+State requirements:
+Implement polished states for:
+- app startup
+- no file loaded
+- loading/parsing
+- parse success
+- parse warnings
+- parse failure
+- no selection
+- no search results
+- filtered empty result
+- validation running
+- validation complete
+- export running
+- export success
+- export failure
+- fatal runtime error
+Accessibility requirements:
+- semantic HTML
+- proper buttons and links
+- input labels
+- visible focus states
+- keyboard-friendly navigation
+- sufficient color contrast
+- aria-labels for icon-only buttons
+- aria-live for important status updates
+- reduced-motion support
+- accessible modal behavior where applicable
+- no color-only status communication
+Motion requirements:
+Use restrained motion only:
+- hover transitions
+- panel reveal/collapse
+- selected-state transitions
+- skeleton loading shimmer if reduced-motion allows
+- no distracting animation
+- respect prefers-reduced-motion
+Responsive requirements:
+Desktop-first.
+Optimize for large monitors and normal desktop browser sizes.
+Still provide safe fallback for narrower windows:
+- collapsible sidebars
+- contained tables
+- no horizontal page overflow
+- scrollable panels
+- modals that fit viewport
+- toolbar wrapping or overflow menu where needed
+Maintainability requirements:
+- organize CSS into clear sections
+- reduce duplication
+- avoid fragile deeply nested selectors
+- prefer reusable component classes
+- preserve runtime hooks
+- document major layout regions with concise comments
+- no dead CSS
+- no invalid selectors
+- no broken IDs/classes
+Deliverables:
+1. Brief summary of the new design direction.
+2. Detailed critique of the current UI grouped by:
+   - Critical
+   - High impact
+   - Medium impact
+   - Polish
+3. File-by-file redesign plan.
+4. Complete updated code:
+   - full files if replacing files
+   - unified git-style patch if modifying multiple files
+   - downloadable zip if requested
+5. Verification checklist:
+   - how to run locally
+   - visual checks
+   - keyboard checks
+   - accessibility checks
+   - responsive checks
+   - runtime hook checks
+   - modal/toast/error checks
+   - no mock business data check
+Quality bar:
+The final UI must be obviously better at first glance.
+Do not simply restyle the old layout.
+Rebuild the experience into a premium internal engineering workbench.
+
+⸻
+
+Final Design Summary
+
+The best final design is a three-pane-plus-console evidence workbench:
+
+Top:    Command, search, file state, primary actions
+Left:   Navigation, loaded source, rule/function/UDF index
+Center: Active work view: tree, table, compare, diagnostics, exports
+Right:  Evidence inspector for selected object
+Bottom: Diagnostics/activity console
+
+The visual language should be:
+
+* Linear for calm density and polish
+* Retool for internal workbench structure
+* Stripe for tables, search, forms, and state handling
+* Vercel for modern navigation and resizable shell behavior
+
+That is the strongest final design model for this app.

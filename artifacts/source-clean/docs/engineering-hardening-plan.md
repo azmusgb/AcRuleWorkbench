@@ -1,4 +1,4 @@
-# AC Rule Workbench Engineering Hardening Plan
+# FW Companion Engineering Hardening Plan
 
 This plan records the current production direction for the Workbench. It is intentionally practical: reduce ambiguity, keep the product read-only, and make evidence limitations visible at API and UI boundaries.
 
@@ -6,7 +6,7 @@ The deeper product model is recorded in [FormWorks Editor And AC Function Refere
 
 ## Product intent
 
-AC Rule Workbench is a static configuration inspection tool for FormWorks / Document Capture Manager FWD/CFD files. It does not execute native AC rules and must not claim runtime truth that it did not observe.
+FW Companion is a static configuration inspection tool for FormWorks / Document Capture Manager FWD/CFD files. It does not execute native AC rules and must not claim runtime truth that it did not observe.
 
 The core product questions are:
 

@@ -50,14 +50,14 @@ public sealed class AcRuleReport
             .GroupBy(r => string.IsNullOrWhiteSpace(r.ScopeType) ? "Unknown" : r.ScopeType)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
 
         RulesByFunction.Clear();
         RulesByFunction.AddRange(Rules
             .GroupBy(r => string.IsNullOrWhiteSpace(r.FunctionName) ? "(missing)" : r.FunctionName)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
 
         RulesBySource.Clear();
         var sourceNames = new List<string>();
@@ -77,7 +77,7 @@ public sealed class AcRuleReport
             .GroupBy(s => s)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
 
         RulesByActionName.Clear();
         var actionNames = new List<string>();
@@ -97,14 +97,14 @@ public sealed class AcRuleReport
             .GroupBy(s => s)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
 
         RulesByDisabledState.Clear();
         RulesByDisabledState.AddRange(Rules
             .GroupBy(r => string.IsNullOrWhiteSpace(r.DisabledState) ? AcDisabledStates.Enabled : r.DisabledState)
             .OrderByDescending(g => g.Count())
             .ThenBy(g => g.Key)
-            .Select(g => new AcRuleCount { Name = g.Key, Count = g.Count() }));
+            .Select(g => new AcRuleCount { Name = g.Key ?? "(missing)", Count = g.Count() }));
     }
 }
 

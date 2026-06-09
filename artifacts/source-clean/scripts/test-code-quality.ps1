@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Static quality checks for AC Rule Workbench source and package assets.
+  Static quality checks for FW Editor Viewer source and package assets.
 
 .DESCRIPTION
   This script is intentionally Windows PowerShell 5.1 compatible. It validates
@@ -159,7 +159,7 @@ function Test-OpenApiRouteDrift {
     }
 }
 
-Write-Host "AC Rule Workbench static quality checks"
+Write-Host "FW Editor Viewer static quality checks"
 Write-Host "Root: $Root"
 Write-Host ""
 

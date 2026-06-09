@@ -26,6 +26,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         bool json = Has(args, "--json");
+        bool apiMode = Has(args, "api") || Has(args, "serve-api") || Has(args, "web-test");
+        bool verbose = Has(args, "--verbose") || Has(args, "-v");
         _jsonOutputPath = GetValue(args, "--out-json") ?? GetValue(args, "--json-out");
         if (!string.IsNullOrWhiteSpace(_jsonOutputPath))
             json = true;
@@ -38,8 +40,9 @@ internal static class Program
                 options.TimestampFormat = "HH:mm:ss ";
             });
 
-            // Keep JSON output clean. Human mode gets info logs; JSON mode suppresses them.
-            builder.SetMinimumLevel(json ? LogLevel.Warning : LogLevel.Information);
+            // Keep JSON output clean. Keep foreground API startup readable by default;
+            // pass --verbose when native extraction trace logs are needed.
+            builder.SetMinimumLevel(json ? LogLevel.Warning : (apiMode && !verbose ? LogLevel.Warning : LogLevel.Information));
         });
 
         ILogger<FormWorksExtractionClient> logger = loggerFactory.CreateLogger<FormWorksExtractionClient>();
@@ -370,6 +373,9 @@ if (Has(context.Args, "ac-diagnostics"))
                 prefix = $"http://{host}:{port}/";
 
             bool enableDebugApi = Has(context.Args, "--enable-debug-api") && !Has(context.Args, "--disable-debug-api") && !Has(context.Args, "--no-debug-api");
+            bool startupSnapshotWarmup = Has(context.Args, "--snapshot-warmup") || Has(context.Args, "--warm-snapshot") || Has(context.Args, "--prebuild-snapshot");
+            bool liveLazyMode = !startupSnapshotWarmup && !Has(context.Args, "--no-live-lazy") && !Has(context.Args, "--disable-live-lazy");
+            bool allowPathQuery = Has(context.Args, "--allow-path-query");
             var serverOptions = new WorkbenchApiServerOptions
             {
                 Prefix = prefix,
@@ -379,10 +385,43 @@ if (Has(context.Args, "ac-diagnostics"))
                 EnableCors = Has(context.Args, "--enable-cors") && !Has(context.Args, "--no-cors"),
                 AllowMutatingCommands = Has(context.Args, "--allow-refresh") || Has(context.Args, "--allow-mutations"),
                 EnableDebugApi = enableDebugApi,
-                AllowPathQuery = Has(context.Args, "--allow-path-query") || enableDebugApi,
+                AllowPathQuery = allowPathQuery,
+                AllowRemoteBindings = Has(context.Args, "--allow-remote-bind"),
+                AllowUnsafeRemoteControls = Has(context.Args, "--allow-unsafe-remote-controls"),
+                RedactOperationalDetails = !Has(context.Args, "--expose-operational-details"),
                 DisableSnapshotCache = Has(context.Args, "--no-snapshot-cache") || Has(context.Args, "--disable-snapshot-cache"),
+                LiveLazyMode = liveLazyMode,
+                StartupSnapshotWarmup = startupSnapshotWarmup,
+                MaxPendingSnapshotBuilds = Math.Max(1, GetInt(context.Args, "--max-pending-snapshot-builds", 4)),
+                MaxPendingLiveSessionBuilds = Math.Max(1, GetInt(context.Args, "--max-pending-live-builds", 4)),
+                MaxCachedLiveSessions = Math.Max(1, GetInt(context.Args, "--max-cached-live-sessions", 8)),
                 EvidenceExportProfile = EvidenceExportProfileSettings.Parse(GetValue(context.Args, "--profile") ?? GetValue(context.Args, "--export-profile"))
             };
+
+            foreach (string allowedRoot in GetValues(context.Args, "--allowed-path-root"))
+            {
+                if (!string.IsNullOrWhiteSpace(allowedRoot))
+                    serverOptions.AllowedFwdPathRoots.Add(allowedRoot);
+            }
+
+            foreach (string allowedProcess in GetValues(context.Args, "--allowed-process"))
+            {
+                foreach (string item in allowedProcess.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (!string.IsNullOrWhiteSpace(item))
+                        serverOptions.AllowedProcessNames.Add(item.Trim());
+                }
+            }
+
+            WorkbenchApiSafetyPolicy.AddDefaultAllowedPathRoot(serverOptions);
+            IReadOnlyList<string> policyErrors = WorkbenchApiSafetyPolicy.Validate(serverOptions);
+            if (policyErrors.Count > 0)
+            {
+                Console.Error.WriteLine("Refusing to start API listener because the requested binding/control policy is unsafe:");
+                foreach (string error in policyErrors)
+                    Console.Error.WriteLine("- " + error);
+                return 2;
+            }
 
             ILogger<WorkbenchApiServer> apiLogger = context.LoggerFactory.CreateLogger<WorkbenchApiServer>();
             var server = new WorkbenchApiServer(context.Client, apiLogger, serverOptions);
@@ -488,6 +527,18 @@ if (Has(context.Args, "ac-diagnostics"))
         return args.Any(a => string.Equals(a, value, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static IReadOnlyList<string> GetValues(string[] args, string name)
+    {
+        var values = new List<string>();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                values.Add(args[i + 1]);
+        }
+
+        return values;
+    }
+
     private static string? GetValue(string[] args, string name)
     {
         for (int i = 0; i < args.Length - 1; i++)
@@ -567,7 +618,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("  ac-viewer                      Export a local interactive HTML hierarchy/rule viewer.");
         Console.WriteLine("  api | serve-api                Start the local product API and optional static viewer host.");
         Console.WriteLine("  web-test                       Start the local API and open the viewer automatically.");
-        Console.WriteLine("    API options: --path <fwd.cfd> --port <n> --viewer <ac-rule-viewer.html> --open --allow-refresh [--enable-debug-api] [--allow-path-query] [--enable-cors] [--no-snapshot-cache]");
+        Console.WriteLine("    API options: --path <fwd.cfd> --port <n> --viewer <ac-rule-viewer.html> --open --allow-refresh [--enable-debug-api] [--allow-path-query --allowed-path-root <dir>] [--enable-cors] [--no-snapshot-cache]");
         Console.WriteLine("  fip                            Inspect FIP dropout regions and OMR field config.");
         Console.WriteLine("  ocr                            Open OCR2 result file and list fields.");
         Console.WriteLine("  smoke                          Validate actual FWD/OCR fixtures.");
@@ -597,11 +648,15 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("  --state <text>                 Disabled state filter: direct, inherited, possible, enabled.");
         Console.WriteLine("  --target <text>                Alternate shorthand for --field/--attr in focused commands.");
         Console.WriteLine("  --out <path>                   Output path for ac-viewer HTML.");
-        Console.WriteLine("  --profile <name>               Evidence export profile: viewer-safe, diagnostic, or full-evidence. Default viewer-safe.");
+        Console.WriteLine("  --profile <name>               Developer export depth: viewer-safe, diagnostic, or full-evidence. Default viewer-safe.");
         Console.WriteLine("  --open                         Open generated viewer/API test harness in the default browser.");
         Console.WriteLine("  --port <n>                     API server port. Default 8787.");
         Console.WriteLine("  --host <host>                  API server host. Default 127.0.0.1.");
         Console.WriteLine("  --prefix <url>                 API server HttpListener prefix, e.g. http://127.0.0.1:8787/.");
+        Console.WriteLine("  --allow-remote-bind            Permit a non-loopback API prefix after explicit review.");
+        Console.WriteLine("  --allow-unsafe-remote-controls Permit CORS/debug/refresh/path-query on a non-loopback API prefix.");
+        Console.WriteLine("  --allowed-path-root <dir>      Required allowlist root when --allow-path-query is used without --path.");
+        Console.WriteLine("  --allowed-process <names>      Optional comma-separated process allowlist for snapshot/live caches.");
         Console.WriteLine("  --no-cors                      Disable CORS headers on the local API server.");
         Console.WriteLine("  --include-raw-tokens           Include parser raw token samples per AC scope/rule.");
         Console.WriteLine("  --max-raw-tokens <n>           Raw token cap per AC scope. Default 250.");
@@ -619,6 +674,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("  --require-native-ok            Fail command if official native version checks fail.");
         Console.WriteLine("  --json                         Emit clean JSON. Logs are suppressed in JSON mode.");
         Console.WriteLine("  --out-json <path>              Write JSON directly to a file atomically instead of stdout; prevents PowerShell truncation/encoding problems.");
+        Console.WriteLine("  --verbose | -v                 Show detailed native extraction info logs during API startup.");
     }
 
     private static void PrintProbe(ProbeReport report)
@@ -805,7 +861,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("FWD           : " + report.FwdPath);
         Console.WriteLine("Process       : " + report.ProcessName);
         Console.WriteLine("Rules         : " + report.RuleCount);
-        Console.WriteLine("Relationships : " + report.RelationshipCount);
+        Console.WriteLine("Action refs   : " + report.RelationshipCount);
         Console.WriteLine("Truncated     : " + report.Truncated);
         Console.WriteLine();
 
@@ -838,7 +894,7 @@ if (Has(context.Args, "ac-diagnostics"))
         Console.WriteLine("FWD           : " + report.FwdPath);
         Console.WriteLine("Process       : " + report.ProcessName);
         Console.WriteLine("Rules         : " + report.RuleCount);
-        Console.WriteLine("Relationships : " + report.RelationshipCount);
+        Console.WriteLine("Action refs   : " + report.RelationshipCount);
         Console.WriteLine();
 
         PrintCounts("Rules by scope", report.RulesByScope, 20);
@@ -1007,15 +1063,14 @@ if (Has(context.Args, "ac-diagnostics"))
 
     private static void PrintAcViewer(AcViewerReport report)
     {
-        Console.WriteLine("AC Live Viewer Export");
-        Console.WriteLine("=====================");
+        Console.WriteLine("FW Editor Viewer Export");
+        Console.WriteLine("=======================");
         Console.WriteLine("FWD           : " + report.FwdPath);
         Console.WriteLine("Output        : " + report.OutputPath);
         Console.WriteLine("Scopes        : " + report.ScopeCount);
         Console.WriteLine("Rules         : " + report.RuleCount);
-        Console.WriteLine("Relationships : " + report.RelationshipCount);
-        Console.WriteLine("Profile       : " + report.EvidenceExportProfile);
-        Console.WriteLine("Opened browser: " + report.OpenedBrowser);
+        Console.WriteLine("Action refs   : " + report.RelationshipCount);
+                Console.WriteLine("Opened browser: " + report.OpenedBrowser);
         PrintWarnings(report.Warnings);
     }
 

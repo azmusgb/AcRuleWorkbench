@@ -1,6 +1,6 @@
 # Evidence Model
 
-This model supports the broader FormWorks Editor / AC mental model in [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md). AC Rule Workbench inspects static FWD configuration. It does not execute AC, run AC Rules Tester, or prove runtime operator outcomes.
+This model supports the broader FormWorks Editor / AC mental model in [FormWorks Editor And AC Function Reference](formworks-editor-ac-reference-guide.md). FW Companion inspects static FWD configuration. It does not execute AC, run AC Rules Tester, or prove runtime operator outcomes.
 
 ## Evidence classes
 

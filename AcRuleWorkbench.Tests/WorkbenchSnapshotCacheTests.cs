@@ -93,7 +93,7 @@ public sealed class WorkbenchSnapshotCacheTests
 
             Assert.AreEqual("C:\\slow.cfd", slowSnapshot.FwdPath);
             Assert.AreEqual("C:\\fast.cfd", cache.Current?.FwdPath);
-            Assert.IsFalse(cache.HasCurrent("C:\\slow.cfd", "AC", requireNativeOk: false));
+            Assert.IsTrue(cache.HasCurrent("C:\\slow.cfd", "AC", requireNativeOk: false));
         }
         finally
         {

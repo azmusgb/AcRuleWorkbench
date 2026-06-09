@@ -1,45 +1,44 @@
 <!doctype html>
-<html lang="en" data-theme="light" data-ui-build="v62-16-message-workspace">
+<html lang="en" data-theme="light" data-ui-build="v101-fw-editor-viewer">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="Read-only FormWorks Editor companion for FWD/STC, AC rules, UDFs, tables, and SelectionLists.">
-<title>FormWorks Editor Viewer - Read-only FWD Companion</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=readonly-editor-v62-16">
+<meta name="description" content="Read-only FW Editor-style viewer for FWD configuration, rule lists, UDFs, tables, SelectionLists, fields, pages, documents, and resources.">
+<title>FW Editor Viewer - Read-only FWD Configuration</title>
+<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=fw-editor-viewer-v101">
 </head>
-<body class="density-standard calm-workspace layout-v61 tabbed-workbench">
+<body class="product-shell-v70 fw-editor-viewer-shell ui-2026 density-standard">
 <a class="skip-link" href="#mainContent">Skip to content</a>
 
 <div class="app">
   <header class="topbar" role="banner">
-    <div class="brand" aria-label="FormWorks Editor Viewer">
-      <div class="logo" aria-hidden="true">AC</div>
+    <button class="btn icon-btn nav-toggle" type="button" data-action="toggle-mobile-nav" aria-label="Open navigation" aria-controls="globalNav" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+    </button>
+    <div class="brand" aria-label="FW Editor Viewer">
+      <div class="logo" aria-hidden="true">FW</div>
       <div class="brand-copy">
-        <h1>FormWorks Editor Viewer</h1>
-        <div class="brand-sub" id="sourceSubtitle">Loading FWD snapshot...</div>
+        <h1>FW Editor Viewer</h1>
+        <div class="brand-sub" id="sourceSubtitle">Read-only FW Editor-style configuration viewer</div>
       </div>
     </div>
 
     <div class="global-search">
       <label class="sr-only" for="globalSearch">Search FWD rules, functions, UDFs, fields, attributes, status results, and actions</label>
-      <input id="globalSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="searchPopover" autocomplete="off" placeholder="Search rules, functions, fields, UDFs, tables, attributes...">
+      <input id="globalSearch" type="search" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-expanded="false" aria-controls="searchPopover" autocomplete="off" placeholder="Search configuration, rules, UDFs, tables, resources...">
       <span class="kbd">/</span>
       <div id="searchPopover" class="search-popover" role="listbox" aria-label="Search results"></div>
     </div>
 
 
-    <div class="snapshot-rail" aria-label="Snapshot summary">
-      <div class="snapshot-stat"><span>Config</span><b id="sourceSummaryConfig">Loading</b></div>
-      <div class="snapshot-stat"><span>Rules</span><b id="sourceSummaryRules">Pending</b></div>
-      <div class="snapshot-stat"><span>Messages</span><b id="sourceSummaryWarnings">Pending</b></div>
+    <div class="snapshot-rail" aria-label="Configuration status">
+      <div class="snapshot-stat"><span>Mode</span><b>Read-only</b></div>
+      <div class="snapshot-stat"><span>Status</span><b id="sourceSummaryWarnings">Loading</b></div>
     </div>
-    <div class="top-actions" role="toolbar" aria-label="Editor viewer actions">
-      <span class="pill" id="statusPill"><span class="dot warn"></span> Loading</span>
-      <button class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme">
+    <div class="top-actions" role="toolbar" aria-label="FW Editor Viewer actions">
+      <span class="pill" id="statusPill" role="status" aria-live="polite"><span class="dot warn"></span> Loading</span>
+      <button id="themeToggleBtn" class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18V3z" fill="currentColor"></path></svg>
       </button>
       <button class="btn icon-btn" type="button" data-action="open-help" title="Open help" aria-label="Open help">
@@ -50,40 +49,40 @@
   </header>
 
   <div class="shell">
-    <aside class="pane left" aria-label="FWD Tree">
-      <div id="globalNav" class="global-nav" role="navigation" aria-label="Global definitions"></div>
+    <aside class="pane left" aria-label="FWD tree navigation">
+      <div id="globalNav" class="global-nav" role="navigation" aria-label="FWD tree"><div class="left-nav-shell product-left-nav"><div class="fwd-tree-root"><b>FWD</b><span>Read-only FW Editor-style configuration</span></div><div class="scope-group global-nav-heading"><span>Processing</span></div><button class="global-view-row active" type="button" data-action="view-structure"><span class="global-view-name">AC Rule List</span></button><button class="global-view-row" type="button" data-action="view-rule-lists"><span class="global-view-name">Rule Lists</span></button><div class="scope-group global-nav-heading"><span>Resources</span></div><button class="global-view-row" type="button" data-action="view-udfs"><span class="global-view-name">User Defined Functions</span></button><button class="global-view-row" type="button" data-action="view-functions"><span class="global-view-name">Functions</span></button><button class="global-view-row" type="button" data-action="view-tables"><span class="global-view-name">Tables</span></button><button class="global-view-row" type="button" data-action="view-selection-lists"><span class="global-view-name">SelectionLists</span></button><button class="global-view-row" type="button" data-action="view-resources"><span class="global-view-name">Resources</span></button></div></div>
       <div id="recentScopes" class="recent-scopes" role="region" aria-label="Recently viewed scopes"></div>
-      <div id="scopeList" class="scope-list scroll" role="navigation" tabindex="0" aria-label="Rule scopes"></div>
+      <div id="scopeList" class="scope-list scroll" role="navigation" tabindex="0" aria-label="Document and page scopes"></div>
     </aside>
 
     <main class="pane main" id="mainContent" tabindex="-1">
       <div class="main-head">
         <div class="scope-title">
           <div class="scope-heading-stack">
-            <div class="scope-kicker">Configuration Window</div>
-            <h2 id="scopeTitle">No scope selected</h2>
+            <div class="scope-kicker">FW Editor Viewer</div>
+            <h2 id="scopeTitle">Loading FWD configuration...</h2>
             <div id="scopeCaption" class="caption"></div>
             <div id="crumbs" class="crumbs"></div>
           </div>
           <div class="scope-actions">
-            <button class="btn inspector-mobile" type="button" data-action="show-inspector">Inspector</button>
+            <button class="btn inspector-mobile" type="button" data-action="show-inspector">Details</button>
           </div>
         </div>
         <div id="tabs" class="tabs" role="tablist" aria-label="Scope views"></div>
         <div id="viewbar" class="viewbar"></div>
       </div>
       <div id="content" class="content scroll" tabindex="0" aria-busy="false"></div>
-      <div id="diagnosticsDock" class="diagnostics-dock" role="region" aria-label="Diagnostics and snapshot messages"></div>
+      <div id="diagnosticsDock" class="diagnostics-dock advanced-only" role="region" aria-label="Advanced diagnostics" hidden></div>
       <div id="contentStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </main>
 
-    <aside class="pane right" aria-label="Inspector">
+    <aside class="pane right" aria-label="Rule properties" aria-hidden="true">
       <div class="inspector-head">
         <div class="inspector-title">
           <div class="inspector-title-copy">
-            <div class="eyebrow">Inspector</div>
+            <div class="eyebrow">Details</div>
             <h3 id="inspectorTitle">No rule selected</h3>
-            <div id="inspectorCaption" class="caption">Select a rule, branch, field, or reference.</div>
+            <div id="inspectorCaption" class="caption">Select a rule, Action List, field, UDF, table, or resource to inspect configuration.</div>
           </div>
           <div class="inspector-head-actions">
             <button id="copyConfigBtn" class="btn" type="button" data-action="copy-rule-config" title="Copy selected object configuration" disabled>Copy</button>
@@ -101,8 +100,8 @@
 <section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1">
   <div class="modal-head">
     <div>
-      <h2 id="helpTitle">Editor viewer help</h2>
-      <div id="helpCaption" class="caption">Read-only FormWorks Editor companion for FWD/STC configuration, AC rules, UDFs, and SelectionLists.</div>
+      <h2 id="helpTitle">FW Editor Viewer help</h2>
+      <div id="helpCaption" class="caption">Read-only FW Editor-style viewer for FWD configuration, rule lists, UDFs, tables, SelectionLists, fields, pages, documents, and resources.</div>
     </div>
     <button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">&times;</button>
   </div>
@@ -111,6 +110,6 @@
 
 <div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script defer src="ac-rule-viewer.js?v=readonly-editor-v62-16"></script>
+<script defer src="ac-rule-viewer.js?v=fw-editor-viewer-v101"></script>
 </body>
 </html>

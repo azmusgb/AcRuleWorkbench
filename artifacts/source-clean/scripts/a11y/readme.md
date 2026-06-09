@@ -1,13 +1,21 @@
-Current documentation authority:
+# Accessibility test scripts
 
-For current FormWorks Editor, AC function, UDF, SelectionList/table, project-code, and Editor-gap interpretation, use `../../README.md`, `../../docs/formworks-editor-ac-reference-guide.md`, `../../docs/project-code-catalog.md`, and `../../docs/editor-gap-closure-plan.md`. This file only covers accessibility test tooling.
+These scripts support FW Editor Viewer accessibility checks.
 
-Run this from PowerShell:
+Current product docs:
 
-cd scripts/a11y
-npm ci
-node run-axe-playwright.js http://127.0.0.1:8787/
+- `../../README.md`
+- `../../docs/README.md`
 
-Notes:
-- The WorkbenchApiServer must be started using scripts/start-workbench.ps1 with a valid FWD path.
-- The script writes a11y-report.json in this folder.
+Requirements:
+
+- Start the viewer with `scripts/start-fw-editor-viewer.ps1` or `start-fw-editor-viewer.cmd` and a valid FWD path.
+- Open the viewer at `/viewer` for normal mode.
+- Use `/viewer?advanced=1` only for diagnostics/raw-payload validation.
+- Run accessibility checks against the rendered viewer, not a stale generated HTML file unless the test explicitly targets static output.
+
+Product boundary reminders:
+
+- The viewer is read-only.
+- Default mode is FW Editor-style configuration browsing.
+- Advanced diagnostic surfaces are opt-in only.

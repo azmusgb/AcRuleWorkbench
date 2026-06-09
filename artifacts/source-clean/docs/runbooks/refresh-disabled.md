@@ -1,15 +1,21 @@
-# Runbook: Refresh disabled
+# Runbook: Snapshot Refresh Disabled
 
-For current FormWorks/AC interpretation, use [../formworks-editor-ac-reference-guide.md](../formworks-editor-ac-reference-guide.md). Refresh rebuilds static snapshot evidence; it does not run AC rules.
+Snapshot refresh rebuilds static reader data. It does not run AC rules and does not write to the FWD.
 
-Refresh is disabled unless the server starts with `--allow-refresh`. Use the wrapper:
+Refresh may be unavailable unless the server was started with a profile/flag that allows it. Use the normal wrapper for local development:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd
+.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
-Refresh must use POST:
+Refresh uses POST:
 
 ```http
 POST /api/v1/snapshot/refresh
+```
+
+If refresh is still unavailable, restart the companion with a fresh viewer refresh:
+
+```powershell
+.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -ForceViewerRefresh
 ```

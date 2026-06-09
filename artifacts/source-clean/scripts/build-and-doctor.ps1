@@ -15,10 +15,26 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
+$script:ProgressCurrent = 0
+$script:ProgressTotal = 0
+
+function Initialize-Progress {
+    param([ValidateRange(0, 99)][int]$TotalSteps = 0)
+    $script:ProgressCurrent = 0
+    $script:ProgressTotal = $TotalSteps
+}
+
 function Write-Section {
     param([Parameter(Mandatory = $true)][string]$Text)
     Write-Host ""
-    Write-Host "== $Text ==" -ForegroundColor Cyan
+    if ($script:ProgressTotal -gt 0) {
+        $script:ProgressCurrent++
+        $prefix = "[{0}/{1}]" -f $script:ProgressCurrent, $script:ProgressTotal
+        Write-Host "$prefix $Text" -ForegroundColor Cyan
+    }
+    else {
+        Write-Host "== $Text ==" -ForegroundColor Cyan
+    }
 }
 
 function Write-Ok {
@@ -26,9 +42,20 @@ function Write-Ok {
     Write-Host "[OK] $Text" -ForegroundColor Green
 }
 
+function Write-ProgressLine {
+    param([Parameter(Mandatory = $true)][string]$Text)
+    Write-Host "[...] $Text" -ForegroundColor DarkCyan
+}
+
 function Write-Fail {
     param([Parameter(Mandatory = $true)][string]$Text)
     Write-Host "[FAIL] $Text" -ForegroundColor Red
+}
+
+function Write-Complete {
+    param([Parameter(Mandatory = $true)][string]$Text)
+    Write-Host ""
+    Write-Host "[COMPLETE] $Text" -ForegroundColor Green
 }
 
 function Resolve-RepoRoot {
@@ -117,6 +144,7 @@ function Invoke-NativeCommand {
         Push-Location $WorkingDirectory
     }
 
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         & $FilePath @Arguments
         $exitCode = $LASTEXITCODE
@@ -124,8 +152,14 @@ function Invoke-NativeCommand {
         if ($exitCode -ne 0) {
             throw "Command failed with exit code $exitCode"
         }
+
+        $timer.Stop()
+        Write-Ok "Command completed in $([Math]::Round($timer.Elapsed.TotalSeconds, 1))s."
     }
     finally {
+        if ($timer.IsRunning) {
+            $timer.Stop()
+        }
         if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) {
             Pop-Location
         }
@@ -168,6 +202,7 @@ function Copy-DllsToOutputs {
     }
 
     foreach ($outputDir in $OutputDirs) {
+        $copiedCount = 0
         foreach ($dll in $dlls) {
             $destination = Join-Path $outputDir.FullName $dll.Name
 
@@ -181,9 +216,15 @@ function Copy-DllsToOutputs {
             }
 
             Copy-Item -LiteralPath $dll.FullName -Destination $outputDir.FullName -Force -ErrorAction Stop
+            $copiedCount++
         }
 
-        Write-Ok "Copied $Label DLLs to $($outputDir.FullName)"
+        if ($copiedCount -gt 0) {
+            Write-Ok "Copied $copiedCount $Label DLL(s) to $($outputDir.FullName)"
+        }
+        else {
+            Write-Ok "$Label DLLs already current in $($outputDir.FullName)"
+        }
     }
 }
 
@@ -263,12 +304,14 @@ $expectedNativeDlls = @(
     "rriwf2.dll"
 )
 
+Initialize-Progress -TotalSteps $(if ($Clean) { 5 } else { 4 })
+
 Write-Section "Runtime layout"
-Write-Host "Repo root  : $repoRoot"
-Write-Host "Managed lib: $managedLibDir"
-Write-Host "Native bin : $nativeLibDir"
-Write-Host "Config     : $Configuration"
-Write-Host "Platform   : $Platform"
+Write-Host "  Repo root  : $repoRoot"
+Write-Host "  Managed lib: $managedLibDir"
+Write-Host "  Native bin : $nativeLibDir"
+Write-Host "  Config     : $Configuration"
+Write-Host "  Platform   : $Platform"
 
 $managedOk = Test-ExpectedFiles -Directory $managedLibDir -ExpectedNames $expectedManagedDlls -Label "Managed DLLs"
 $nativeOk = Test-ExpectedFiles -Directory $nativeLibDir -ExpectedNames $expectedNativeDlls -Label "Native DLLs"
@@ -311,6 +354,7 @@ if (-not $SkipBuild) {
 
     if ($null -ne $dotnet) {
         try {
+            Write-ProgressLine "Building $($solution.Name) with dotnet ($Configuration / $Platform)."
             Invoke-NativeCommand -FilePath $dotnet.Source -WorkingDirectory $repoRoot -Arguments @(
                 "build",
                 $solution.FullName,
@@ -355,8 +399,9 @@ if ($outputDirs.Count -eq 0) {
     throw "No executable output directory found under bin for configuration '$Configuration'. Build may have failed or output path differs."
 }
 
+Write-ProgressLine "Found $($outputDirs.Count) executable output folder(s)."
 foreach ($dir in $outputDirs) {
-    Write-Host "Output: $($dir.FullName)"
+    Write-Host "  Output: $($dir.FullName)" -ForegroundColor DarkGray
 }
 
 Copy-DllsToOutputs -SourceDir $managedLibDir -OutputDirs $outputDirs -Label "managed"
@@ -365,7 +410,7 @@ if ($CopyNativeToOutput) {
     Copy-DllsToOutputs -SourceDir $nativeLibDir -OutputDirs $outputDirs -Label "native"
 }
 else {
-    Write-Host "Native DLLs are not copied to output. They will be loaded from PATH via rri_bin."
+    Write-ProgressLine "Native DLLs are loaded from PATH via rri_bin; not copied to output."
 }
 
 foreach ($dir in $outputDirs) {
@@ -380,8 +425,9 @@ Write-Ok "Managed DLL source layout is valid."
 Write-Ok "Native DLL source layout is valid."
 Write-Ok "runtime-path.generated.ps1 is valid."
 Write-Ok "Build/output doctor completed."
+Write-Complete "Build and runtime output validation are complete."
 
 Write-Host ""
 Write-Host "Next:" -ForegroundColor Cyan
-Write-Host ".\run-workbench.cmd"
-Write-Host "or: .\scripts\start-workbench.cmd -FwdPath .\fwd.cfd -Port 8787 -KillExisting"
+Write-Host "  .\start-fw-editor-viewer.cmd -FwdPath .\fwd.cfd -Port 8787 -KillExisting"
+Write-Host "  or: .\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting"

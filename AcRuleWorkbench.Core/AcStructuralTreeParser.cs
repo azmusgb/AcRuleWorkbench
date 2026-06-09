@@ -58,16 +58,39 @@ internal sealed class AcStructuralTreeParser
             while (stream.HasRemainingPayload)
             {
                 int startOffset = stream.Offset;
+                int nodeCheckpoint = _nodeCounter;
+                int ruleCheckpoint = _ruleCounter;
+                int reportNodeCheckpoint = _report.Nodes.Count;
+                int reportEdgeCheckpoint = _report.Edges.Count;
+                int scopeEdgeCheckpoint = scope.EdgeCount;
+                int diagnosticCheckpoint = _report.Diagnostics.Count;
                 try
                 {
                     DumpRuleTree(stream, scope);
                     parsedRootCount++;
                     stream.SkipTrailingNullPadding();
                 }
-                catch when (parsedRootCount > 0)
+                catch
                 {
+                    RollBackPartialRoot(scope, nodeCheckpoint, ruleCheckpoint, reportNodeCheckpoint, reportEdgeCheckpoint, scopeEdgeCheckpoint, diagnosticCheckpoint);
+                    if (TrySeekNextLikelyRootPayload(data, startOffset + 1, _options.MaxAttrListPayloadBytes, out int nextOffset))
+                    {
+                        _report.Diagnostics.Add(new AcTreeDiagnostic
+                        {
+                            Severity = "Info",
+                            ScopePath = scope.ScopePath,
+                            Category = parsedRootCount == 0 ? "StructuralInitialResync" : "StructuralResync",
+                            Message = $"Structural parser skipped unread bytes from offset {startOffset} to candidate root offset {nextOffset} and resumed parsing."
+                        });
+                        stream.Offset = nextOffset;
+                        continue;
+                    }
+
                     stream.Offset = startOffset;
-                    break;
+                    if (parsedRootCount > 0)
+                        break;
+
+                    throw;
                 }
             }
 
@@ -76,11 +99,10 @@ internal sealed class AcStructuralTreeParser
 
             if (stream.HasRemainingPayload)
             {
-                string message = $"Structural parser stopped with {stream.Remaining} unread byte(s) in {scope.ScopePath}. Remaining bytes are retained as diagnostic evidence; flat inventory reconciliation will preserve searchable rules.";
-                scope.Warnings.Add(message);
+                string message = $"Structural parser decoded {parsedRootCount} root payload(s) for {scope.ScopePath}, then reached {stream.Remaining} unread trailing byte(s) at offset {stream.Offset}. The remaining bytes are retained as diagnostic evidence. Flat inventory reconciliation will add unmatched rules as read-only fallback nodes for search/display completeness, but fallback nodes are not parent/action-order proof.";
                 _report.Diagnostics.Add(new AcTreeDiagnostic
                 {
-                    Severity = "Warning",
+                    Severity = "Info",
                     ScopePath = scope.ScopePath,
                     Category = "StructuralTrailingPayload",
                     Message = message
@@ -89,7 +111,7 @@ internal sealed class AcStructuralTreeParser
         }
         catch (Exception ex)
         {
-            bool nonRulePayload = IsLikelyNonRuleTreePayload(scopeType, scopeName, ex);
+            bool nonRulePayload = IsLikelyNonRuleTreePayload(scopeType ?? string.Empty, scopeName ?? string.Empty, ex);
             string category = nonRulePayload ? "NotRuleTreePayload" : "StructuralParseFailure";
             string severity = nonRulePayload ? "Info" : "Error";
             string message = nonRulePayload
@@ -108,6 +130,48 @@ internal sealed class AcStructuralTreeParser
                 Message = message
             });
         }
+    }
+
+
+    private void RollBackPartialRoot(AcTreeScopeReport scope, int nodeCheckpoint, int ruleCheckpoint, int reportNodeCheckpoint, int reportEdgeCheckpoint, int scopeEdgeCheckpoint, int diagnosticCheckpoint)
+    {
+        _nodeCounter = nodeCheckpoint;
+        _ruleCounter = ruleCheckpoint;
+        if (_report.Nodes.Count > reportNodeCheckpoint)
+            _report.Nodes.RemoveRange(reportNodeCheckpoint, _report.Nodes.Count - reportNodeCheckpoint);
+        if (_report.Edges.Count > reportEdgeCheckpoint)
+            _report.Edges.RemoveRange(reportEdgeCheckpoint, _report.Edges.Count - reportEdgeCheckpoint);
+        if (_report.Diagnostics.Count > diagnosticCheckpoint)
+            _report.Diagnostics.RemoveRange(diagnosticCheckpoint, _report.Diagnostics.Count - diagnosticCheckpoint);
+        scope.EdgeCount = scopeEdgeCheckpoint;
+    }
+
+    private static bool TrySeekNextLikelyRootPayload(byte[] data, int startOffset, uint maxAttrListPayloadBytes, out int nextOffset)
+    {
+        nextOffset = -1;
+        if (data == null || data.Length - startOffset < 12)
+            return false;
+        int maxOffset = data.Length - 12;
+        for (int offset = Math.Max(0, startOffset); offset <= maxOffset; offset++)
+        {
+            uint attrLength = ReadUInt32LittleEndian(data, offset);
+            if (attrLength > maxAttrListPayloadBytes)
+                continue;
+            if (offset + 4L + attrLength + 4L > data.Length)
+                continue;
+            int ruleCountOffset = offset + 4 + (int)attrLength;
+            uint possibleRuleCount = ReadUInt32LittleEndian(data, ruleCountOffset);
+            if (possibleRuleCount == 0 || possibleRuleCount > 100000u)
+                continue;
+            nextOffset = offset;
+            return true;
+        }
+        return false;
+    }
+
+    private static uint ReadUInt32LittleEndian(byte[] data, int offset)
+    {
+        return (uint)(data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24));
     }
 
     private void DumpRuleTree(RuleByteReader ups, AcTreeScopeReport scope)

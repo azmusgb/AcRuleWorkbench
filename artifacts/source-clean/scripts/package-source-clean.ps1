@@ -7,7 +7,7 @@
     artifacts from the exported source package and writes both:
 
       - <OutDir>\source-clean\              staged source-clean folder
-      - <OutDir>\AcRuleWorkbench_source_clean.zip
+      - <OutDir>\AcRuleWorkbench_FWEditorViewer_source_clean.zip
 
     This script is intended to run from a developer working tree that may contain
     lib, rri_bin, fwd.cfd, generated viewer JSON, bin, obj, and other local files.
@@ -16,7 +16,7 @@
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-source-clean.ps1 -Root . -OutDir .\artifacts
 
 .EXAMPLE
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-source-clean.ps1 -Root . -OutputZip .\artifacts\AcRuleWorkbench_source_clean.zip
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-source-clean.ps1 -Root . -OutputZip .\artifacts\AcRuleWorkbench_FWEditorViewer_source_clean.zip
 #>
 [CmdletBinding()]
 param(
@@ -84,6 +84,8 @@ function Test-ExcludedPath {
     if ($normalized -match '(^|/)lib(/|$)') { return $true }
     if ($normalized -match '(^|/)rri_bin(/|$)') { return $true }
     if ($normalized -match '(^|/)docs/.*\.(pdf|extracted\.txt)$') { return $true }
+    if ($normalized -match '^AcRuleWorkbench/scripts(/|$)') { return $true }
+    if ($normalized -match '(^|/)\.archive(/|$)') { return $true }
 
     if ($normalized -match '(^|/)fwd\.cfd$') { return $true }
     if ($normalized -match '(^|/)ac-rule-viewer\..*\.json$') { return $true }
@@ -144,7 +146,7 @@ $outDirPath = Get-FullPathSafe -Path $OutDir
 $stagePath = Join-Path $outDirPath 'source-clean'
 
 if ([string]::IsNullOrWhiteSpace($OutputZip)) {
-    $outputZipPath = Join-Path $outDirPath 'AcRuleWorkbench_source_clean.zip'
+    $outputZipPath = Join-Path $outDirPath 'AcRuleWorkbench_FWEditorViewer_source_clean.zip'
 }
 else {
     $outputZipPath = Get-FullPathSafe -Path $OutputZip

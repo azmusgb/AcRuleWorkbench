@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace AcRuleWorkbench.Core;
 
 public sealed class AcTraceOptions
@@ -23,4 +25,6 @@ public sealed class AcTraceOptions
     public int MaxRelationships { get; set; } = 0;
 
     public bool RequireNativeOk { get; set; }
+    public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
 }

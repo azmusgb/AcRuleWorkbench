@@ -16,7 +16,7 @@ using Newtonsoft.Json;
 
 namespace AcRuleWorkbench;
 
-internal sealed class WorkbenchApiServer
+internal sealed partial class WorkbenchApiServer
 {
     private static readonly HashSet<string> ViewerRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -38,6 +38,7 @@ internal sealed class WorkbenchApiServer
     private readonly WorkbenchApiServerOptions _options;
     private readonly object _refreshGate = new object();
     private readonly WorkbenchSnapshotCache _snapshotCache;
+    private readonly LiveFwdSessionCache _liveSessionCache;
     private readonly WorkbenchApiService _v1Api;
     private readonly LegacyRouteDispatcher _legacyDispatcher;
     private readonly ApiResponseWriter _responseWriter;
@@ -52,8 +53,9 @@ internal sealed class WorkbenchApiServer
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _snapshotCache = new WorkbenchSnapshotCache(_client, _options.EvidenceExportProfile);
-        _v1Api = new WorkbenchApiService(_client, _options, _snapshotCache);
+        _snapshotCache = new WorkbenchSnapshotCache(_client, _options.EvidenceExportProfile, _options.AllowedFwdPathRoots, _options.AllowedProcessNames, _options.EffectiveMaxPendingSnapshotBuilds);
+        _liveSessionCache = new LiveFwdSessionCache(_client, _options.AllowedFwdPathRoots, _options.AllowedProcessNames, _options.EffectiveMaxPendingLiveSessionBuilds, _options.EffectiveMaxCachedLiveSessions);
+        _v1Api = new WorkbenchApiService(_client, _options, _snapshotCache, _liveSessionCache);
         _responseWriter = new ApiResponseWriter();
         _requestConcurrencyGate = new SemaphoreSlim(Math.Max(4, Environment.ProcessorCount * 4));
         _legacyDispatcher = new LegacyRouteDispatcher(
@@ -74,6 +76,14 @@ internal sealed class WorkbenchApiServer
     public int Run()
     {
         string prefix = NormalizePrefix(_options.Prefix);
+        IReadOnlyList<string> policyErrors = WorkbenchApiSafetyPolicy.Validate(_options);
+        if (policyErrors.Count > 0)
+        {
+            Console.Error.WriteLine("Refusing to start API listener because the requested binding/control policy is unsafe:");
+            foreach (string error in policyErrors) Console.Error.WriteLine("- " + error);
+            return 2;
+        }
+
         using var listener = new HttpListener();
         listener.Prefixes.Add(prefix);
 
@@ -100,38 +110,24 @@ internal sealed class WorkbenchApiServer
             return 1;
         }
 
-        Console.WriteLine("AC Rule Workbench");
-        Console.WriteLine("============================");
-        Console.WriteLine("Mode          : " + (_options.EnableDebugApi ? "Diagnostic / developer" : "Local production"));
-        Console.WriteLine("Listening     : " + prefix);
-        Console.WriteLine("Viewer        : " + CombineUrl(prefix, "viewer"));
-        Console.WriteLine("API           : " + CombineUrl(prefix, "api/v1/status"));
-        Console.WriteLine("OpenAPI       : " + CombineUrl(prefix, "api/v1/openapi.json"));
-        Console.WriteLine("Health live   : " + CombineUrl(prefix, "api/v1/health/live"));
-        Console.WriteLine("Health ready  : " + CombineUrl(prefix, "api/v1/health/ready"));
-        Console.WriteLine("Debug API     : " + (_options.EnableDebugApi ? CombineUrl(prefix, "harness") + " (enabled with --enable-debug-api)" : "disabled by default"));
-        Console.WriteLine("CORS          : " + (_options.EnableCors ? "enabled" : "disabled"));
-        Console.WriteLine("Path override : " + (_options.AllowPathQuery ? "enabled" : "disabled"));
-        Console.WriteLine("Default FWD   : " + (_options.DefaultFwdPath ?? "(not set; pass --path)"));
-        Console.WriteLine("Press Ctrl+C to stop.");
+        WriteServerStartupBanner(prefix);
 
-        // Pre-build the snapshot in the background so the first viewer request hits the cache.
-        // This eliminates the 60â€“120 s cold-start stall on /scopes and /snapshot when a default
-        // FWD path is configured.
-        if (!string.IsNullOrWhiteSpace(_options.DefaultFwdPath) && !_options.DisableSnapshotCache)
+        if (!string.IsNullOrWhiteSpace(_options.DefaultFwdPath) && _options.LiveLazyMode)
         {
-            string warmFwdPath = _options.DefaultFwdPath!;
-            Console.WriteLine("Snapshot      : pre-building in background (open /api/v1/health/ready to check progress)...");
-            _snapshotCache.WarmUpAsync(warmFwdPath, "AC", false)
-                .ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                        Console.WriteLine("Snapshot warm-up failed: " + (t.Exception?.GetBaseException().Message ?? "unknown error"));
-                    else
-                        Console.WriteLine("Snapshot warm-up complete.");
-                }, TaskScheduler.Default);
+            StartLiveSessionWarmupMonitor(prefix, _options.DefaultFwdPath!, "AC", false);
         }
-
+        else if (!string.IsNullOrWhiteSpace(_options.DefaultFwdPath) && !_options.DisableSnapshotCache && _options.StartupSnapshotWarmup)
+        {
+            StartSnapshotWarmupMonitor(prefix, _options.DefaultFwdPath!, "AC", false);
+        }
+        else
+        {
+            string snapshotStatus = _options.DisableSnapshotCache
+                ? "Snapshot cache disabled; full extraction routes rebuild on demand."
+                : "Snapshot warm-up skipped; full extraction routes build on demand.";
+            Console.WriteLine("[3/3] " + snapshotStatus);
+            WriteServerFullyReady(prefix, snapshotStatus);
+        }
         if (_options.OpenBrowser)
             TryOpenBrowser(prefix);
 
@@ -190,6 +186,128 @@ internal sealed class WorkbenchApiServer
         return 0;
     }
 
+    private void WriteServerStartupBanner(string prefix)
+    {
+        string viewerUrl = CombineUrl(prefix, "viewer");
+        string statusUrl = CombineUrl(prefix, "api/v1/status");
+        string openApiUrl = CombineUrl(prefix, "api/v1/openapi.json");
+        string liveHealthUrl = CombineUrl(prefix, "api/v1/health/live");
+        string readyHealthUrl = CombineUrl(prefix, "api/v1/health/ready");
+
+        Console.WriteLine();
+        Console.WriteLine("== FW Editor Viewer API ==");
+        WriteConsoleKeyValue("Mode", _options.EnableDebugApi ? "Diagnostic / developer" : "Local production");
+        WriteConsoleKeyValue("Listening", prefix);
+        WriteConsoleKeyValue("Viewer", viewerUrl);
+        WriteConsoleKeyValue("API status", statusUrl);
+        WriteConsoleKeyValue("OpenAPI", openApiUrl);
+        WriteConsoleKeyValue("Health live", liveHealthUrl);
+        WriteConsoleKeyValue("Health ready", readyHealthUrl);
+        WriteConsoleKeyValue("Debug API", _options.EnableDebugApi ? CombineUrl(prefix, "harness") + " (enabled)" : "disabled");
+        WriteConsoleKeyValue("CORS", _options.EnableCors ? "enabled" : "disabled");
+        WriteConsoleKeyValue("Path override", _options.AllowPathQuery ? "enabled" : "disabled");
+        WriteConsoleKeyValue("Default FWD", _options.DefaultFwdPath ?? "(not set; pass --path)");
+
+        Console.WriteLine();
+        Console.WriteLine("[1/3] API listener is live.");
+        Console.WriteLine("[2/3] Viewer and API routes are available.");
+        Console.WriteLine("      Press Ctrl+C to stop.");
+    }
+
+    private void StartSnapshotWarmupMonitor(string prefix, string fwdPath, string processName, bool requireNativeOk)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        string readyHealthUrl = CombineUrl(prefix, "api/v1/health/ready");
+        string fileName = Path.GetFileName(fwdPath);
+
+        Console.WriteLine("[3/3] Snapshot warm-up started for " + (string.IsNullOrWhiteSpace(fileName) ? fwdPath : fileName) + ".");
+        Console.WriteLine("      Progress: poll " + readyHealthUrl + " for machine-readable status.");
+
+        Task warmupTask = _snapshotCache.WarmUpAsync(fwdPath, processName, requireNativeOk);
+        if (warmupTask.IsCompleted)
+        {
+            CompleteSnapshotWarmup(prefix, fwdPath, processName, requireNativeOk, stopwatch, warmupTask);
+            return;
+        }
+
+        Timer? progressTimer = null;
+        progressTimer = new Timer(
+            _ => Console.WriteLine("[BUILDING] Snapshot warm-up still running (" + FormatDuration(stopwatch.Elapsed) + " elapsed)."),
+            null,
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(15));
+
+        warmupTask.ContinueWith(t =>
+        {
+            try
+            {
+                progressTimer?.Dispose();
+            }
+            catch
+            {
+                // Best-effort cleanup for console progress timer.
+            }
+
+            CompleteSnapshotWarmup(prefix, fwdPath, processName, requireNativeOk, stopwatch, t);
+        }, TaskScheduler.Default);
+    }
+
+    private void CompleteSnapshotWarmup(string prefix, string fwdPath, string processName, bool requireNativeOk, Stopwatch stopwatch, Task warmupTask)
+    {
+        stopwatch.Stop();
+
+        if (warmupTask.IsFaulted)
+        {
+            Exception failure = warmupTask.Exception?.GetBaseException() ?? new InvalidOperationException("Unknown snapshot warm-up failure.");
+            Console.WriteLine("[FAIL] Snapshot warm-up failed after " + FormatDuration(stopwatch.Elapsed) + ": " + failure.Message);
+            Console.WriteLine("[READY] API listener is still live, but full snapshot readiness did not complete. Check " + CombineUrl(prefix, "api/v1/status") + ".");
+            return;
+        }
+
+        if (warmupTask.IsCanceled)
+        {
+            Console.WriteLine("[FAIL] Snapshot warm-up was cancelled after " + FormatDuration(stopwatch.Elapsed) + ".");
+            Console.WriteLine("[READY] API listener is still live, but full snapshot readiness did not complete. Check " + CombineUrl(prefix, "api/v1/status") + ".");
+            return;
+        }
+
+        WorkbenchSnapshot? snapshot = _snapshotCache.GetCurrent(fwdPath, processName, requireNativeOk);
+        string snapshotStatus = snapshot == null
+            ? "Snapshot warm-up finished; cache was already current."
+            : "Snapshot cache ready in " + FormatDuration(TimeSpan.FromMilliseconds(snapshot.BuildDurationMs)) + " (snapshot " + snapshot.SnapshotId + ").";
+
+        Console.WriteLine("[READY] " + snapshotStatus);
+        WriteServerFullyReady(prefix, snapshotStatus);
+    }
+
+    private void WriteServerFullyReady(string prefix, string snapshotStatus)
+    {
+        Console.WriteLine();
+        Console.WriteLine("[COMPLETE] FW Editor Viewer startup is complete.");
+        WriteConsoleKeyValue("Viewer", CombineUrl(prefix, "viewer"));
+        WriteConsoleKeyValue("Status", CombineUrl(prefix, "api/v1/status"));
+        WriteConsoleKeyValue("Ready health", CombineUrl(prefix, "api/v1/health/ready"));
+        WriteConsoleKeyValue("Snapshot", snapshotStatus);
+        WriteConsoleKeyValue("Stop", "Press Ctrl+C");
+        Console.WriteLine();
+    }
+
+    private static void WriteConsoleKeyValue(string name, string value)
+    {
+        Console.WriteLine("  " + name.PadRight(14) + ": " + value);
+    }
+
+    private static string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalHours >= 1)
+            return duration.ToString(@"h\:mm\:ss");
+
+        if (duration.TotalMinutes >= 1)
+            return duration.ToString(@"m\:ss");
+
+        return Math.Max(0.1, Math.Round(duration.TotalSeconds, 1)).ToString("0.0") + "s";
+    }
+
     // Handles a single request in the concurrent worker pipeline and preserves existing error contracts.
     private void HandleContextSafe(HttpListenerContext context)
     {
@@ -202,8 +320,8 @@ internal sealed class WorkbenchApiServer
             _responseWriter.WriteJson(context.Response, new ApiError
             {
                 Error = "Route not found.",
-                ExceptionType = nameof(ApiRouteNotFoundException),
-                ExceptionMessage = ex.Route
+                ExceptionType = _options.ShouldExposeOperationalDetails ? nameof(ApiRouteNotFoundException) : SensitiveValueRedactor.Redacted,
+                ExceptionMessage = _options.ShouldExposeOperationalDetails ? ex.Route : SensitiveValueRedactor.Redacted
             }, 404, _options.EnableCors);
         }
         catch (FormWorksInteropException ex)
@@ -211,8 +329,8 @@ internal sealed class WorkbenchApiServer
             _responseWriter.WriteJson(context.Response, new ApiError
             {
                 Error = ex.Message,
-                ExceptionType = ex.GetType().Name,
-                ExceptionMessage = ex.InnerException?.Message
+                ExceptionType = SensitiveValueRedactor.ExceptionType(ex, _options.ShouldExposeOperationalDetails),
+                ExceptionMessage = SensitiveValueRedactor.ExceptionMessage(ex.InnerException, _options.ShouldExposeOperationalDetails)
             }, 400, _options.EnableCors);
         }
         catch (Exception ex) when (ApiResponseWriter.IsClientDisconnectedException(ex))
@@ -227,8 +345,8 @@ internal sealed class WorkbenchApiServer
                 _responseWriter.WriteJson(context.Response, new ApiError
                 {
                     Error = "Unhandled server error.",
-                    ExceptionType = ex.GetType().Name,
-                    ExceptionMessage = ex.Message
+                    ExceptionType = SensitiveValueRedactor.ExceptionType(ex, _options.ShouldExposeOperationalDetails),
+                    ExceptionMessage = SensitiveValueRedactor.ExceptionMessage(ex, _options.ShouldExposeOperationalDetails)
                 }, 500, _options.EnableCors);
             }
             catch (Exception writeEx) when (ApiResponseWriter.IsClientDisconnectedException(writeEx))
@@ -241,7 +359,6 @@ internal sealed class WorkbenchApiServer
             _requestConcurrencyGate.Release();
         }
     }
-
     private static bool IsRootRequest(HttpListenerRequest request)
     {
         string path = request.Url?.AbsolutePath ?? "/";
@@ -434,8 +551,8 @@ internal sealed class WorkbenchApiServer
                 service = "AcRuleWorkbench local API",
                 version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
                 processBitness = Environment.Is64BitProcess ? "64-bit" : "32-bit",
-                machineName = Environment.MachineName,
-                defaultFwdPath = _options.DefaultFwdPath,
+                machineName = SensitiveValueRedactor.MachineName(_options.ShouldExposeOperationalDetails),
+                defaultFwdPath = SensitiveValueRedactor.Path(_options.DefaultFwdPath, _options.ShouldExposeOperationalDetails),
                 utc = DateTime.UtcNow
             };
         }
@@ -680,9 +797,9 @@ internal sealed class WorkbenchApiServer
     {
         return new
         {
-            service = "AC Rule Workbench",
+            service = "FW Editor Viewer",
             mode = _options.EnableDebugApi ? "diagnostic / developer" : "local production",
-            defaultFwdPath = _options.DefaultFwdPath,
+            defaultFwdPath = SensitiveValueRedactor.Path(_options.DefaultFwdPath, _options.ShouldExposeOperationalDetails),
             debugApiEnabled = _options.EnableDebugApi,
             pathQueryEnabled = _options.AllowPathQuery,
             publicContract = "/api/v1/openapi.json",
@@ -767,7 +884,7 @@ internal sealed class WorkbenchApiServer
             schemaVersion = "2.0.0",
             source = new
             {
-                path = fwd.Path,
+                path = SensitiveValueRedactor.Path(fwd.Path, _options.ShouldExposeOperationalDetails),
                 releaseNumber = fwd.ReleaseNumber,
                 releaseString = fwd.ReleaseString,
                 releaseDateString = fwd.ReleaseDateString,
@@ -775,7 +892,7 @@ internal sealed class WorkbenchApiServer
                 openedBy = "AcRuleWorkbench local API",
                 openedAtUtc = DateTime.UtcNow,
                 processBitness = Environment.Is64BitProcess ? "64-bit" : "32-bit",
-                machineName = Environment.MachineName
+                machineName = SensitiveValueRedactor.MachineName(_options.ShouldExposeOperationalDetails)
             },
             counts = new
             {
@@ -806,8 +923,8 @@ internal sealed class WorkbenchApiServer
             service = "FWD semantic inspection API",
             apiVersion = "2.0.0",
             mode = "read-mostly semantic inspection",
-            fwd = new { path = fwd.Path, releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString },
-            runtime = new { processBitness = Environment.Is64BitProcess ? "64-bit" : "32-bit", machineName = Environment.MachineName, utc = DateTime.UtcNow },
+            fwd = new { path = SensitiveValueRedactor.Path(fwd.Path, _options.ShouldExposeOperationalDetails), releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString },
+            runtime = new { processBitness = Environment.Is64BitProcess ? "64-bit" : "32-bit", machineName = SensitiveValueRedactor.MachineName(_options.ShouldExposeOperationalDetails), utc = DateTime.UtcNow },
             nativeProbe = probe,
             warnings = fwd.Warnings
         };
@@ -860,7 +977,7 @@ internal sealed class WorkbenchApiServer
             schemaVersion = "2.1.0",
             snapshotId = "fwd-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Math.Abs((fwd.Path ?? string.Empty).GetHashCode()),
             generatedAtUtc = DateTime.UtcNow,
-            source = new { path = fwd.Path, releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString, readMode = "read-only" },
+            source = new { path = SensitiveValueRedactor.Path(fwd.Path, _options.ShouldExposeOperationalDetails), releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString, readMode = "read-only" },
             truthModel = BuildTruthModelPayload(),
             hierarchy = BuildHierarchyPayload(fwd),
 
@@ -1189,11 +1306,11 @@ internal sealed class WorkbenchApiServer
             && !HasValue(request, "function");
     }
 
-    private static object BuildHierarchyPayload(FwdInspectionReport fwd)
+    private object BuildHierarchyPayload(FwdInspectionReport fwd)
     {
         return new
         {
-            root = new { id = "fwd", kind = "fwd", path = fwd.Path },
+            root = new { id = "fwd", kind = "fwd", path = SensitiveValueRedactor.Path(fwd.Path, _options.ShouldExposeOperationalDetails) },
             batches = fwd.Batches.Select(b => new { id = b, kind = "batchType" }).ToList(),
             documents = fwd.Documents.Select(d => new { id = d, kind = "documentType" }).ToList(),
             pages = fwd.Pages.Select(p => new { id = p, kind = "pageType", variants = fwd.PageVariants.FirstOrDefault(v => Eq(v.Page, p))?.Variants ?? new List<string>(), fieldCount = fwd.Fields.FirstOrDefault(f => Eq(f.ScopeName, p))?.Fields.Count ?? 0 }).ToList(),
@@ -1229,17 +1346,16 @@ internal sealed class WorkbenchApiServer
         };
     }
 
-    private static object BuildEvidenceSummaryPayload(FwdInspectionReport fwd, AcRuleReport rules, AcTreeReport tree, AcRelationshipReport rels, AcDiagnosticsReport diag)
+    private object BuildEvidenceSummaryPayload(FwdInspectionReport fwd, AcRuleReport rules, AcTreeReport tree, AcRelationshipReport rels, AcDiagnosticsReport diag)
     {
         var flatKeys = rules.Rules.Select(FlatRuleCorrelationKey).ToList();
         var uniqueFlatKeys = new HashSet<string>(flatKeys, StringComparer.OrdinalIgnoreCase);
         var structuralKeys = new HashSet<string>(tree.Nodes.Where(n => n.IsRuleNode).Select(StructuralRuleCorrelationKey), StringComparer.OrdinalIgnoreCase);
         int structuralHeuristicEdgeCount = tree.Edges.Count(e => !string.Equals(e.Confidence, "Proven", StringComparison.OrdinalIgnoreCase));
         int flatPossiblyInheritedCount = rules.Rules.Count(r => string.Equals(r.DisabledState, AcDisabledStates.PossiblyDisabledInherited, StringComparison.OrdinalIgnoreCase));
-
         return new
         {
-            source = new { path = fwd.Path, releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString },
+            source = new { path = SensitiveValueRedactor.Path(fwd.Path, _options.ShouldExposeOperationalDetails), releaseNumber = fwd.ReleaseNumber, releaseString = fwd.ReleaseString, releaseDateString = fwd.ReleaseDateString },
             flatRuleCount = rules.RuleCount,
             flatScopeCount = rules.ScopeCount,
             flatUniqueRuleCount = uniqueFlatKeys.Count,
@@ -1504,7 +1620,7 @@ internal sealed class WorkbenchApiServer
     private string GetFwdPath(HttpListenerRequest request)
     {
         string? queryPath = Get(request, "path");
-        if (!string.IsNullOrWhiteSpace(queryPath) && !_options.AllowPathQuery && !string.IsNullOrWhiteSpace(_options.DefaultFwdPath))
+        if (!string.IsNullOrWhiteSpace(queryPath) && !_options.AllowPathQuery)
         {
             throw new FormWorksInteropException("Request-level ?path= overrides are disabled for this server process. Restart with --allow-path-query for diagnostic use, or configure the source with --path at startup.");
         }
@@ -1542,7 +1658,7 @@ internal sealed class WorkbenchApiServer
         if (bool.TryParse(value, out bool parsed))
             return parsed;
 
-        return value == "1" || value.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("on", StringComparison.OrdinalIgnoreCase);
+        return value == "1" || value!.Equals("yes", StringComparison.OrdinalIgnoreCase) || value.Equals("on", StringComparison.OrdinalIgnoreCase);
     }
 
     private object BuildWorkbenchStatus(HttpListenerRequest request)
@@ -1558,21 +1674,21 @@ internal sealed class WorkbenchApiServer
         {
             schema = "AcRuleWorkbench.WorkbenchStatus",
             schemaVersion = "1.0.0",
-            service = "AC Rule Workbench",
+            service = "FW Editor Viewer",
             utc = DateTime.UtcNow,
             refreshEnabled = _options.AllowMutatingCommands,
             refreshMethod = "POST /api/v1/snapshot/refresh",
             fwd = new
             {
-                path = fwdPath,
+                path = SensitiveValueRedactor.Path(fwdPath, _options.ShouldExposeOperationalDetails),
                 exists = fwd != null,
                 length = fwd?.Length,
                 lastWriteUtc = fwd?.LastWriteTimeUtc
             },
             viewer = new
             {
-                configuredPath = configuredViewerPath,
-                resolvedPath = viewerPath,
+                configuredPath = SensitiveValueRedactor.Path(configuredViewerPath, _options.ShouldExposeOperationalDetails),
+                resolvedPath = SensitiveValueRedactor.Path(viewerPath, _options.ShouldExposeOperationalDetails),
                 exists = viewer != null || configuredViewer != null,
                 length = (viewer ?? configuredViewer)?.Length,
                 lastWriteUtc = (viewer ?? configuredViewer)?.LastWriteTimeUtc
@@ -1585,10 +1701,22 @@ internal sealed class WorkbenchApiServer
                 status = "/api/v1/status",
                 snapshot = "/api/v1/snapshot"
             },
-            lastRefresh = _lastRefresh
+            lastRefresh = BuildRefreshStatePayload(_lastRefresh)
         };
     }
 
+    private object BuildRefreshStatePayload(WorkbenchRefreshState state)
+    {
+        bool expose = _options.ShouldExposeOperationalDetails;
+        return new
+        {
+            state.HasRun, state.Ok, state.StartedUtc, state.CompletedUtc,
+            fwdPath = SensitiveValueRedactor.Path(state.FwdPath, expose), viewerPath = SensitiveValueRedactor.Path(state.ViewerPath, expose),
+            state.ScopeCount, state.RuleCount, state.RelationshipCount, state.ViewerLength, state.ViewerLastWriteUtc,
+            error = expose ? state.Error : (state.Error == null ? null : "Operational details are redacted. Restart with --enable-debug-api only for local diagnostic use."),
+            exceptionType = expose ? state.ExceptionType : (state.ExceptionType == null ? null : SensitiveValueRedactor.Redacted)
+        };
+    }
     private object RefreshWorkbench(HttpListenerRequest request)
     {
         if (!_options.AllowMutatingCommands)
@@ -1648,11 +1776,11 @@ internal sealed class WorkbenchApiServer
                 return new
                 {
                     ok = true,
-                    message = "AC Rule Workbench refreshed from the current FWD/CFD configuration.",
+                    message = "FW Editor Viewer refreshed from the current FWD/CFD configuration.",
                     startedUtc = started,
                     completedUtc = DateTime.UtcNow,
-                    fwd = new { path = fwdPath, exists = fwd != null, lastWriteUtc = fwd?.LastWriteTimeUtc, length = fwd?.Length },
-                    viewer = new { path = viewerPath, exists = true, lastWriteUtc = viewer.LastWriteTimeUtc, length = viewer.Length },
+                    fwd = new { path = SensitiveValueRedactor.Path(fwdPath, _options.ShouldExposeOperationalDetails), exists = fwd != null, lastWriteUtc = fwd?.LastWriteTimeUtc, length = fwd?.Length },
+                    viewer = new { path = SensitiveValueRedactor.Path(viewerPath, _options.ShouldExposeOperationalDetails), exists = true, lastWriteUtc = viewer.LastWriteTimeUtc, length = viewer.Length },
                     links = new { viewer = "/viewer", harness = "/harness", status = "/api/v1/status" }
                 };
             }
@@ -1664,12 +1792,12 @@ internal sealed class WorkbenchApiServer
                 {
                     ok = false,
                     error = "Workbench refresh failed.",
-                    exceptionType = ex.GetType().Name,
-                    exceptionMessage = ex.Message,
+                    exceptionType = SensitiveValueRedactor.ExceptionType(ex, _options.ShouldExposeOperationalDetails),
+                    exceptionMessage = SensitiveValueRedactor.ExceptionMessage(ex, _options.ShouldExposeOperationalDetails),
                     startedUtc = started,
                     completedUtc = DateTime.UtcNow,
-                    fwdPath,
-                    viewerPath
+                    fwdPath = SensitiveValueRedactor.Path(fwdPath, _options.ShouldExposeOperationalDetails),
+                    viewerPath = SensitiveValueRedactor.Path(viewerPath, _options.ShouldExposeOperationalDetails)
                 };
             }
         }
@@ -1707,12 +1835,12 @@ internal sealed class WorkbenchApiServer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unable to serve AC Rule Workbench from {Path}", viewerPath);
+            _logger.LogError(ex, "Unable to serve FW Editor Viewer from {Path}", viewerPath);
             _responseWriter.WriteJson(context.Response, new ApiError
             {
-                Error = "Unable to serve AC Rule Workbench.",
-                ExceptionType = ex.GetType().Name,
-                ExceptionMessage = ex.Message
+                Error = "Unable to serve FW Editor Viewer.",
+                ExceptionType = SensitiveValueRedactor.ExceptionType(ex, _options.ShouldExposeOperationalDetails),
+                ExceptionMessage = SensitiveValueRedactor.ExceptionMessage(ex, _options.ShouldExposeOperationalDetails)
             }, 500, _options.EnableCors);
         }
     }
@@ -1728,9 +1856,10 @@ internal sealed class WorkbenchApiServer
 
             try
             {
-                string resolved = Path.IsPathRooted(candidate)
-                    ? candidate
-                    : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), candidate));
+                string trimmedCandidate = candidate!.Trim();
+                string resolved = Path.IsPathRooted(trimmedCandidate)
+                    ? trimmedCandidate
+                    : Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), trimmedCandidate));
                 candidates.Add(resolved);
             }
             catch
@@ -1760,63 +1889,6 @@ internal sealed class WorkbenchApiServer
         }
 
         return null;
-    }
-
-    private string BuildViewerMissingHtml()
-    {
-        string path = HtmlEncode(_options.DefaultFwdPath ?? @"C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd");
-        string oneCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\scripts\\start-workbench.ps1 -FwdPath \"" + path + "\" -Port 8787 -KillExisting";
-        string manualCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe ac-viewer --path \"" + path + "\" --out .\\ac-rule-viewer-live.html\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe api --path \"" + path + "\" --port 8787 --viewer .\\ac-rule-viewer-live.html --allow-refresh";
-        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>AC Rule Workbench not generated</title>" +
-               "<style>body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}main{max-width:1040px;margin:44px auto;padding:0 22px}.card{background:white;border:1px solid #d7e0eb;border-radius:22px;padding:26px;box-shadow:0 18px 50px rgba(15,23,42,.10)}h1{margin:0 0 10px;font-size:28px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:24px 0 8px}p{color:#64748b;line-height:1.55}.facts{display:grid;grid-template-columns:160px 1fr;gap:8px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:16px 0}.facts b{color:#334155}pre{background:#101827;color:#eaf2ff;border-radius:14px;padding:16px;overflow:auto;white-space:pre-wrap}a{color:#3157d5;font-weight:800}.note{border-left:4px solid #3157d5;background:#eef3ff;padding:12px 14px;border-radius:12px;color:#334155}</style></head>" +
-               "<body><main><section class=\"card\"><h1>Workbench file missing</h1><p>The API process is running, but no static <code>ac-rule-viewer.html</code> is attached or discoverable. This is a server setup issue, not an extraction failure.</p>" +
-               "<div class=\"facts\"><b>FWD path</b><span><code>" + path + "</code></span><b>Expected viewer</b><span><code>ac-rule-viewer.html</code></span><b>Best fix</b><span>Use the unified start script below. It prepares the viewer and starts the API.</span></div>" +
-               "<h2>Recommended command</h2><pre>" + oneCommand + "</pre>" +
-               "<h2>Manual command</h2><pre>" + manualCommand + "</pre>" +
-               "<p class=\"note\">After running the command, open <a href=\"/viewer\">/viewer</a> or <a href=\"/harness\">/harness</a>.</p></section></main></body></html>";
-    }
-
-    private static string InjectApiWorkbenchBridge(string html)
-    {
-        // Server-side bridge injection was removed to keep /viewer focused on inspection.
-        return html;
-    }
-
-    private static void AddDeprecationHeaders(HttpListenerResponse response, string replacement)
-    {
-        if (response == null) return;
-        response.Headers["Deprecation"] = "true";
-        response.Headers["X-Deprecated-Route"] = "true";
-        if (!string.IsNullOrWhiteSpace(replacement))
-            response.Headers["X-Replacement-Route"] = replacement;
-    }
-
-    private static string NormalizePrefix(string prefix)
-    {
-        if (string.IsNullOrWhiteSpace(prefix))
-            return "http://127.0.0.1:8787/";
-        return prefix.EndsWith("/", StringComparison.Ordinal) ? prefix : prefix + "/";
-    }
-
-    private static string CombineUrl(string prefix, string path)
-    {
-        return NormalizePrefix(prefix) + path.TrimStart('/');
-    }
-
-    private static void TryOpenBrowser(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
-            // Browser launch is a convenience only. The URL is printed to the console.
-        }
     }
 
     private string BuildHarnessHtml()
@@ -1940,7 +2012,7 @@ internal sealed class WorkbenchApiServer
         // Intentionally obvious fallback. If this appears in the browser, the server is
         // running but cannot locate the real viewer stylesheet beside the generated viewer.
         return "body{font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}"
-             + "body:before{content:'AC Rule Workbench CSS asset was not found by the server.';display:block;padding:10px 14px;background:#7c2d12;color:white;font-weight:700}";
+             + "body:before{content:'FW Editor Viewer CSS asset was not found by the server.';display:block;padding:10px 14px;background:#7c2d12;color:white;font-weight:700}";
     }
 
     // Serves viewer JavaScript/JSON sidecar assets so the hosted Workbench UI can fully bootstrap.
@@ -2062,47 +2134,7 @@ internal sealed class WorkbenchApiServer
         }
     }
 
-    private static string BuildFallbackHarnessHtml(string encodedDefaultPath)
-    {
-        var html = new StringBuilder();
-        html.AppendLine("<!doctype html>");
-        html.AppendLine("<html lang=\"en\">");
-        html.AppendLine("<head>");
-        html.AppendLine("<meta charset=\"utf-8\">");
-        html.AppendLine("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
-        html.AppendLine("<title>AC Rule Workbench Diagnostic Harness</title>");
-        html.AppendLine("<style>");
-        html.AppendLine("body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}");
-        html.AppendLine("main{max-width:1100px;margin:40px auto;padding:0 20px}");
-        html.AppendLine(".card{background:#fff;border:1px solid #d7e0eb;border-radius:18px;padding:20px;box-shadow:0 14px 36px rgba(15,23,42,.08)}");
-        html.AppendLine("h1{margin:0 0 8px;font-size:26px}.muted{color:#64748b}code,pre{font-family:Cascadia Mono,Consolas,monospace}");
-        html.AppendLine("input{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:12px;padding:10px;margin:8px 0 12px}");
-        html.AppendLine("button{border:0;border-radius:12px;background:#3157d5;color:white;padding:10px 14px;font-weight:700;cursor:pointer}");
-        html.AppendLine("pre{white-space:pre-wrap;background:#101827;color:#e5edf8;border-radius:14px;padding:14px;min-height:260px;overflow:auto}");
-        html.AppendLine("</style>");
-        html.AppendLine("</head>");
-        html.AppendLine("<body><main><section class=\"card\">");
-        html.AppendLine("<h1>AC Rule Workbench Diagnostic Harness</h1>");
-        html.AppendLine("<p class=\"muted\">Fallback diagnostic harness loaded. Product clients should use /api/v1 and /api/v1/openapi.json.</p>");
-        html.AppendLine("<label>FWD path</label>");
-        html.Append("<input id=\"path\" value=\"");
-        html.Append(encodedDefaultPath);
-        html.AppendLine("\">");
-        html.AppendLine("<button id=\"info\">GET /api/v1/status</button> <button id=\"hier\">GET /api/v1/scopes</button> <button id=\"diag\">GET /api/v1/diagnostics</button>");
-        html.AppendLine("<pre id=\"out\">Ready.</pre>");
-        html.AppendLine("<script>");
-        html.AppendLine("const $=id=>document.getElementById(id);");
-        html.AppendLine("async function run(path){const u=new URL(path,location.origin);const p=$('path').value;if(p)u.searchParams.set('path',p);$('out').textContent='GET '+u+'\n\nLoading...';try{const r=await fetch(u);const t=await r.text();let body=t;try{body=JSON.stringify(JSON.parse(t),null,2)}catch{}if(!r.ok||(body&&body.ok===false)){throw new Error((body&&(body.error||body.exceptionMessage||body.fix))||t||('HTTP '+r.status));}$('#out').textContent='HTTP '+r.status+' '+r.statusText+'\nGET '+u+'\n\n'+body}catch(e){$('out').textContent='REQUEST FAILED\n'+(e.stack||e.message||e)}}");
-        html.AppendLine("$('info').onclick=()=>run('/api/v1/status');$('hier').onclick=()=>run('/api/v1/scopes');$('diag').onclick=()=>run('/api/v1/diagnostics');");
-        html.AppendLine("</script>");
-        html.AppendLine("</section></main></body></html>");
-        return html.ToString();
-    }
 
-    private static string HtmlEncode(string value)
-    {
-        return WebUtility.HtmlEncode(value ?? string.Empty);
-    }
 
 
     private sealed class WorkbenchRefreshState

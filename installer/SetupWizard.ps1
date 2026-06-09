@@ -1,10 +1,10 @@
 #Requires -Version 5.1
 <#!
 .SYNOPSIS
-Graphical installer/configuration wizard for AC Rule Workbench on Windows Server.
+Graphical installer/configuration wizard for FW Editor Viewer on Windows Server.
 
 .DESCRIPTION
-This wizard installs AcRuleWorkbench/AC Rule Workbench into a selected folder,
+This wizard installs AcRuleWorkbench/FW Editor Viewer into a selected folder,
 builds the x86 Release executable if needed, generates the static viewer,
 registers the always-on backend scheduled task, optionally configures IIS as the
 front door, and enables browser-based refresh/update from the current fwd.cfd.
@@ -83,12 +83,12 @@ function Test-IsAdmin {
 
 function Show-ErrorBox {
     param([string]$Message)
-    [System.Windows.Forms.MessageBox]::Show($Message, 'AC Rule Workbench Installer', 'OK', 'Error') | Out-Null
+    [System.Windows.Forms.MessageBox]::Show($Message, 'FW Editor Viewer Installer', 'OK', 'Error') | Out-Null
 }
 
 function Show-InfoBox {
     param([string]$Message)
-    [System.Windows.Forms.MessageBox]::Show($Message, 'AC Rule Workbench Installer', 'OK', 'Information') | Out-Null
+    [System.Windows.Forms.MessageBox]::Show($Message, 'FW Editor Viewer Installer', 'OK', 'Information') | Out-Null
 }
 
 function Add-Log {
@@ -291,7 +291,7 @@ function Apply-DeploymentPreset {
         if ($script:ModeLocalRadio) { $script:ModeLocalRadio.Checked = $true }
         if ($script:ModeServerRadio) { $script:ModeServerRadio.Checked = $false }
         $script:InstallRootBox.Text = 'C:\dev\AcRuleWorkbench'
-        $script:SiteNameBox.Text = 'AC Rule Workbench Local'
+        $script:SiteNameBox.Text = 'FW Editor Viewer Local'
         $script:SitePathBox.Text = 'C:\dev\AcRuleWorkbench\iis-site'
         $script:SitePortBox.Text = '8080'
         $script:HostHeaderBox.Text = ''
@@ -307,7 +307,7 @@ function Apply-DeploymentPreset {
         if ($script:ModeServerRadio) { $script:ModeServerRadio.Checked = $true }
         if ($script:ModeLocalRadio) { $script:ModeLocalRadio.Checked = $false }
         $script:InstallRootBox.Text = 'D:\rri\ACRuleWorkbench'
-        $script:SiteNameBox.Text = 'AC Rule Workbench'
+        $script:SiteNameBox.Text = 'FW Editor Viewer'
         $script:SitePathBox.Text = 'D:\rri\ACRuleWorkbench\iis'
         $script:SitePortBox.Text = '80'
         $script:HostHeaderBox.Text = ''
@@ -337,7 +337,7 @@ function Show-DeploymentModePrompt {
     $choiceForm.TopMost = $true
 
     $titleLabel = [System.Windows.Forms.Label]::new()
-    $titleLabel.Text = 'Where are you installing AC Rule Workbench?'
+    $titleLabel.Text = 'Where are you installing FW Editor Viewer?'
     $titleLabel.Font = [System.Drawing.Font]::new('Segoe UI Variable Display', 16, [System.Drawing.FontStyle]::Bold)
     $titleLabel.Location = [System.Drawing.Point]::new(24, 22)
     $titleLabel.Size = [System.Drawing.Size]::new(660, 32)
@@ -458,7 +458,7 @@ function Install-Workbench {
         throw "AcRuleWorkbench.exe was not found: $exePath"
     }
 
-    Add-Log 'Generating initial AC Rule Workbench viewer.'
+    Add-Log 'Generating initial FW Editor Viewer viewer.'
     Invoke-LoggedProcess -FilePath $exePath -Arguments @('ac-viewer', '--path', $fwdPath, '--out', $viewerPath) -WorkingDirectory $installRoot -LogPrefix 'generate-viewer' -TimeoutMinutes 20
     $script:ProgressBar.Value = 50
 
@@ -527,10 +527,10 @@ function Install-Workbench {
         "http://127.0.0.1:$backendPort/viewer"
     }
 
-    $shortcutDir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\AC Rule Workbench'
+    $shortcutDir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\FW Editor Viewer'
     New-Item -ItemType Directory -Path $shortcutDir -Force | Out-Null
-    New-ShortcutFile -ShortcutPath (Join-Path $shortcutDir 'AC Rule Workbench.url') -TargetUrl $publicUrl
-    New-ShortcutFile -ShortcutPath (Join-Path $shortcutDir 'AC Rule Workbench API Harness.url') -TargetUrl ($publicUrl -replace '/viewer$', '/harness')
+    New-ShortcutFile -ShortcutPath (Join-Path $shortcutDir 'FW Editor Viewer.url') -TargetUrl $publicUrl
+    New-ShortcutFile -ShortcutPath (Join-Path $shortcutDir 'FW Editor Viewer API Harness.url') -TargetUrl ($publicUrl -replace '/viewer$', '/harness')
 
     $script:PublicUrl = $publicUrl
     $script:ProgressBar.Value = 100
@@ -547,14 +547,14 @@ if (-not (Test-IsAdmin)) {
 }
 
 $form = [System.Windows.Forms.Form]::new()
-$form.Text = 'AC Rule Workbench Setup'
+$form.Text = 'FW Editor Viewer Setup'
 $form.Size = [System.Drawing.Size]::new(930, 760)
 $form.StartPosition = 'CenterScreen'
 $form.MinimumSize = [System.Drawing.Size]::new(880, 700)
 $form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 251)
 
 $title = [System.Windows.Forms.Label]::new()
-$title.Text = 'AC Rule Workbench Setup'
+$title.Text = 'FW Editor Viewer Setup'
 $title.Font = [System.Drawing.Font]::new('Segoe UI Variable Display', 18, [System.Drawing.FontStyle]::Bold)
 $title.Location = [System.Drawing.Point]::new(24, 18)
 $title.Size = [System.Drawing.Size]::new(620, 34)
@@ -661,7 +661,7 @@ $script:IisCheckBox = New-CheckBox 'Configure IIS front-door site' 24 24 $true 3
 $script:IisCheckBox.Add_CheckedChanged({ Update-DeploymentUi })
 $tabServer.Controls.Add($script:IisCheckBox)
 $tabServer.Controls.Add((New-Label 'IIS site name' 24 66))
-$script:SiteNameBox = New-TextBox 'AC Rule Workbench' 190 64 360
+$script:SiteNameBox = New-TextBox 'FW Editor Viewer' 190 64 360
 $tabServer.Controls.Add($script:SiteNameBox)
 $tabServer.Controls.Add((New-Label 'IIS site path' 24 106))
 $script:SitePathBox = New-TextBox 'D:\rri\ACRuleWorkbench\iis' 190 104 520
