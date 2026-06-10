@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const { test, expect } = require('@playwright/test');
@@ -20,10 +20,16 @@ test.beforeAll(async () => {
   server = http.createServer((req, res) => {
     try {
       const url = new URL(req.url || '/', 'http://127.0.0.1');
+      if (url.pathname === '/favicon.ico') {
+        res.writeHead(204, { 'Cache-Control': 'no-store' });
+        res.end();
+        return;
+      }
       const requested = url.pathname === '/' ? '/ac-rule-viewer.html' : url.pathname;
       const decoded = decodeURIComponent(requested);
       const fixturePath = path.resolve(fixtureDir, decoded.replace(/^\//, ''));
-      const fullPath = fs.existsSync(fixturePath) ? fixturePath : path.resolve(rootDir, `.${decoded}`);
+      const sourceViewerPath = path.resolve(rootDir, 'src', 'viewer', decoded.replace(/^\//, ''));
+      const fullPath = fs.existsSync(fixturePath) ? fixturePath : (fs.existsSync(sourceViewerPath) ? sourceViewerPath : path.resolve(rootDir, `.${decoded}`));
       if (!fullPath.startsWith(rootDir + path.sep) && fullPath !== rootDir) {
         res.writeHead(403);
         res.end('Forbidden');
@@ -43,7 +49,7 @@ test.beforeAll(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
-  viewerUrl = `http://127.0.0.1:${port}/ac-rule-viewer.html`;
+  viewerUrl = `http://127.0.0.1:${port}/ac-rule-viewer.html?fwdApi=off`;
 });
 
 test.afterAll(async () => {
@@ -90,10 +96,11 @@ test.describe('FW Editor Viewer normal mode', () => {
   });
 });
 
-describeWithPayloads('FW Editor Viewer advanced mode', () => {
+test.describe('FW Editor Viewer advanced mode', () => {
   test('exposes advanced diagnostics only when advanced is enabled', async ({ page }) => {
-    await page.goto(`${viewerUrl}?advanced=1`);
+    await page.goto(`${viewerUrl}&advanced=1`);
     await expect(page.getByRole('button', { name: /Object Graph/i }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Runtime Impact/i }).first()).toBeVisible();
   });
 });
+

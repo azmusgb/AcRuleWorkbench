@@ -54,11 +54,10 @@ foreach ($asset in $assets) {
         throw "Missing canonical viewer asset: $source"
     }
 
-    Copy-Item -LiteralPath $source -Destination (Join-Path $Root $asset) -Force
     Copy-Item -LiteralPath $source -Destination (Join-Path $coreDir $asset) -Force
 }
 
 Copy-Item -LiteralPath (Join-Path $sourceDir 'ac-rule-viewer.html') -Destination (Join-Path $coreDir 'ac-viewer-template.html') -Force
 Copy-Item -LiteralPath (Join-Path $sourceDir 'ac-rule-viewer.css') -Destination (Join-Path $coreDir 'ac-viewer-template.css') -Force
 
-Write-Host "Viewer assets synchronized from src\viewer." -ForegroundColor Green
+Write-Host "Viewer assets synchronized from src\viewer to AcRuleWorkbench.Core\Viewer." -ForegroundColor Green

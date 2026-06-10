@@ -1,4 +1,4 @@
-(function(){
+﻿(function(){
   const cssCandidates = [
     'ac-rule-viewer.css',
     './ac-rule-viewer.css',
@@ -40,6 +40,75 @@ let treeData = null;
 let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
+const viewerDiagnostics = {
+  build: 'v103-fw-editor-viewer',
+  bootStartedAtUtc: new Date().toISOString(),
+  events: [],
+  fetches: [],
+  errors: [],
+  latestCounts: {}
+};
+
+function diagnosticCount(value){
+  if(Array.isArray(value))return value.length;
+  if(value&&Array.isArray(value.items))return value.items.length;
+  if(value&&Array.isArray(value.Items))return value.Items.length;
+  if(value&&typeof value.count==='number')return value.count;
+  if(value&&typeof value.Count==='number')return value.Count;
+  return 0;
+}
+function payloadCounts(){
+  const counts={
+    rules: diagnosticCount(rulesData?.Rules||rulesData?.rules),
+    scopes: diagnosticCount(treeData?.Scopes||treeData?.scopes),
+    nodes: diagnosticCount(treeData?.Nodes||treeData?.nodes),
+    edges: diagnosticCount(treeData?.Edges||treeData?.edges),
+    relationships: diagnosticCount(relData?.Relationships||relData?.relationships||relData?.Edges||relData?.edges),
+    fwdResources: diagnosticCount(fwdData?.resources||fwdSidecarData?.resources),
+    fwdRuleLists: diagnosticCount(fwdData?.ruleLists||fwdSidecarData?.ruleLists),
+    fwdUdfs: diagnosticCount(fwdData?.udfs||fwdSidecarData?.udfs),
+    fwdTables: diagnosticCount(fwdData?.tables||fwdSidecarData?.tables),
+    fwdFunctions: diagnosticCount(fwdData?.functions||fwdSidecarData?.functions)
+  };
+  viewerDiagnostics.latestCounts=counts;
+  return counts;
+}
+function recordViewerDiagnostic(level,event,details={}){
+  const entry={utc:new Date().toISOString(),level,event,details};
+  viewerDiagnostics.events.push(entry);
+  if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
+  if(level==='error')viewerDiagnostics.errors.push(entry);
+  const method=level==='error'?'error':level==='warn'?'warn':'info';
+  try{ console[method](`[FW Viewer] ${event}`,details); }catch{}
+}
+function recordViewerFetch(key,url,status,elapsedMs,extra={}){
+  const entry={utc:new Date().toISOString(),key,url,status,elapsedMs,...extra};
+  viewerDiagnostics.fetches.push(entry);
+  if(viewerDiagnostics.fetches.length>300)viewerDiagnostics.fetches.shift();
+  try{ console.info('[FW Viewer] fetch',entry); }catch{}
+}
+function modelCounts(){
+  if(!model)return {model:false};
+  return {
+    model:true,
+    scopes:diagnosticCount(model.scopes),
+    nodes:diagnosticCount(model.nodes),
+    rules:diagnosticCount(model.nodes?.filter?.(n=>n&&n.isRule)),
+    inventory:diagnosticCount(model.inventory),
+    relationships:diagnosticCount(model.rels),
+    diagnostics:diagnosticCount(model.diags)
+  };
+}
+window.fwViewerDiagnostics=function(){
+  return {
+    href: window.location.href,
+    bootState: typeof bootState==='undefined'?null:{phase:bootState.phase,detail:bootState.detail},
+    payloadCounts: payloadCounts(),
+    modelCounts: modelCounts(),
+    fwdApiHydrationState: typeof fwdApiHydrationState==='undefined'?null:{mode:fwdApiHydrationState.mode,failedEndpoints:[...list(fwdApiHydrationState.failedEndpoints||[])]},
+    diagnostics: viewerDiagnostics
+  };
+};
 
 const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
@@ -67,9 +136,11 @@ function applyEmbeddedPayloadIfPresent(){
     rulesData = parsed.rulesData;
     relData = parsed.relData;
     treeData = parsed.treeData;
+    recordViewerDiagnostic('info','embedded-payload-loaded',{counts:payloadCounts()});
     return true;
   }
 
+  recordViewerDiagnostic('info','embedded-payload-not-present',{});
   return false;
 }
 
@@ -86,6 +157,7 @@ function applyEmbeddedFwdDataIfPresent(failedEndpoints=[]){
   applyAdvancedSidecarsToFwdData();
   fwdApiHydrationState.mode='embedded';
   fwdApiHydrationState.failedEndpoints=list(failedEndpoints);
+  recordViewerDiagnostic('info','embedded-fwd-data-applied',{failedEndpoints:list(failedEndpoints),counts:payloadCounts()});
   return true;
 }
 
@@ -103,7 +175,11 @@ function shouldHydrateFwdApiOnBoot(missingStaticFwd=false){
   return !!missingStaticFwd;
 }
 function scheduleFwdApiHydration(reason='idle'){
-  if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  if(fwdApiHydrationPromise){
+    recordViewerDiagnostic('info','fwd-api-hydration-already-scheduled',{reason});
+    return fwdApiHydrationPromise;
+  }
+  recordViewerDiagnostic('info','fwd-api-hydration-scheduled',{reason});
   const run=()=>beginFwdApiHydration(reason);
   if(typeof window.requestIdleCallback==='function'){
     window.requestIdleCallback(run,{timeout:2500});
@@ -114,9 +190,13 @@ function scheduleFwdApiHydration(reason='idle'){
 }
 function beginFwdApiHydration(reason='manual'){
   if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  const started=Date.now();
+  recordViewerDiagnostic('info','fwd-api-hydration-start',{reason});
   fwdApiHydrationPromise=loadFwdApiData().then(()=>{
+    recordViewerDiagnostic('info','fwd-api-hydration-data-loaded',{reason,elapsedMs:Date.now()-started,mode:fwdApiHydrationState.mode,failedEndpoints:list(fwdApiHydrationState.failedEndpoints||[]),counts:payloadCounts()});
     if(typeof model!=='undefined'&&model){
       model=buildModel();
+      recordViewerDiagnostic('info','model-rebuilt-after-api-hydration',{counts:modelCounts()});
       globalDefinitionLookupCache=null;
       globalTableDefinitionsCache=null;
       globalUdfDefinitionsCache=null;
@@ -130,6 +210,7 @@ function beginFwdApiHydration(reason='manual'){
       renderAll();
     }
   }).catch(error=>{
+    recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
     console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
@@ -155,6 +236,13 @@ async function loadAdvancedStaticFwdSidecars(fetchJsonWithFallback){
 }
 
 
+
+function isFwdApiDisabledByQuery(){
+  const params = new URLSearchParams(window.location.search || '');
+  const value = params.get('fwdApi') || params.get('api');
+  return !!(value && /^(off|false|0|no)$/i.test(value));
+}
+
 function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayload){
   const ruleCount=list(first(rulesPayload?.Rules,rulesPayload?.rules,[])).length;
   const scopeCount=list(first(treePayload?.Scopes,treePayload?.scopes,[])).length;
@@ -166,19 +254,29 @@ function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayloa
 
 async function loadHostedApiViewerBootstrap(){
   const protocol=(window.location&&window.location.protocol)||'';
-  if(!/^https?:$/i.test(protocol))return false;
+  if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'non-http-protocol',protocol});
+    return false;
+  }
   const bases=['/api/v1','./api/v1','../api/v1','../../api/v1'];
+  recordViewerDiagnostic('info','hosted-bootstrap-start',{bases,href:window.location.href});
   for(const base of bases){
+    const slash=base.endsWith('/')?'':'/';
+    const url=`${base}${slash}viewer/bootstrap?snapshotMode=live`;
+    const started=Date.now();
     try{
-      const slash=base.endsWith('/')?'':'/';
       const controller=new AbortController();
       const timeoutId=window.setTimeout(()=>controller.abort(),15000);
-      const response=await fetch(`${base}${slash}viewer/bootstrap?snapshotMode=live`,{cache:'no-store',signal:controller.signal});
+      const response=await fetch(url,{cache:'no-store',signal:controller.signal});
       window.clearTimeout(timeoutId);
+      recordViewerFetch('viewer/bootstrap',url,response.status,Date.now()-started,{ok:response.ok});
       if(!response.ok)continue;
       const payload=await response.json();
       const data=payload&&payload.ok===true?payload.data:payload;
-      if(!data||!data.rulesData||!data.treeData)continue;
+      if(!data||!data.rulesData||!data.treeData){
+        recordViewerDiagnostic('warn','hosted-bootstrap-invalid-payload',{base,hasData:!!data,keys:data?Object.keys(data):[]});
+        continue;
+      }
       rulesData=data.rulesData||{Rules:[]};
       relData=data.relData||{Relationships:[]};
       treeData=data.treeData||{Scopes:[],Nodes:[],Edges:[]};
@@ -188,16 +286,20 @@ async function loadHostedApiViewerBootstrap(){
         fwdApiHydrationState.mode='live-bootstrap';
         fwdApiHydrationState.failedEndpoints=[];
       }
+      const hasContent=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+      recordViewerDiagnostic(hasContent?'info':'warn','hosted-bootstrap-loaded',{base,hasContent,mode:data.mode||'unknown',counts:payloadCounts(),bootstrap:data.counts||null});
       scheduleFwdApiHydration('live-bootstrap');
-      return snapshotSidecarsHaveContent(rulesData,treeData,relData);
-    }catch{
-      // Try the next base candidate.
+      return hasContent;
+    }catch(error){
+      recordViewerFetch('viewer/bootstrap',url,'error',Date.now()-started,{message:error&&error.message?error.message:String(error||'Unknown error')});
     }
   }
+  recordViewerDiagnostic('warn','hosted-bootstrap-unavailable',{});
   return false;
 }
 
 async function loadViewerData(){
+  recordViewerDiagnostic('info','load-viewer-data-start',{href:window.location.href});
   if(applyEmbeddedPayloadIfPresent()){
     const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
     if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('embedded-boot');
@@ -208,7 +310,11 @@ async function loadViewerData(){
   // sidecar probing so /viewer does not spam optional ac-rule-viewer.*.json 404s.
   // Standalone static exports still work because we fall back to sidecars below.
   const hostedBootstrap=await loadHostedApiViewerBootstrap();
-  if(hostedBootstrap)return;
+  if(hostedBootstrap){
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'hosted-bootstrap',counts:payloadCounts()});
+    return;
+  }
+  recordViewerDiagnostic('warn','load-viewer-data-falling-back-to-sidecars',{});
 
   const baseCandidates = [
     '',
@@ -227,10 +333,13 @@ async function loadViewerData(){
         const url = `${base}${file}`;
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+        const started=Date.now();
         const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
         window.clearTimeout(timeoutId);
+        recordViewerFetch(file,url,response.status,Date.now()-started,{ok:response.ok,source:'static-sidecar'});
         if(response.ok) return await response.json();
-      } catch {
+      } catch(error) {
+        recordViewerFetch(file,`${base}${file}`,'error',0,{source:'static-sidecar',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Continue trying fallback locations until one responds.
       }
     }
@@ -257,6 +366,7 @@ async function loadViewerData(){
     }
 
     staticSidecarsLoaded=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+    recordViewerDiagnostic(staticSidecarsLoaded?'info':'warn','static-sidecars-loaded',{loaded:staticSidecarsLoaded,counts:payloadCounts()});
 
     if(staticSidecarsLoaded){
       try {
@@ -271,19 +381,23 @@ async function loadViewerData(){
   }
 
   if(!staticSidecarsLoaded){
+    recordViewerDiagnostic('error','viewer-data-unavailable',{reason:'No hosted bootstrap and no static sidecars responded.'});
     throw new Error('No usable viewer sidecar JSON was found, and the hosted live-lazy bootstrap endpoint was unavailable.');
   }
 
   await loadAdvancedStaticFwdSidecars(fetchJsonWithFallback);
   const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
   if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('static-boot');
+  recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-sidecars',counts:payloadCounts(),hasStaticFwd});
 }
 
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the editor viewer server.
 async function loadFwdApiData(){
+  recordViewerDiagnostic('info','fwd-api-load-start',{href:window.location.href});
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
-  const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
-  if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){
+  const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi') || new URLSearchParams(window.location.search).get('api');
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{fwdApiParam});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -294,6 +408,7 @@ async function loadFwdApiData(){
 
   const protocol=(window.location&&window.location.protocol)||'';
   if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('warn','fwd-api-load-skipped',{reason:'non-http-protocol',protocol});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -341,19 +456,23 @@ async function loadFwdApiData(){
   ];
   async function fetchApi(path){
     for(const base of baseCandidates){
+      const slash=base.endsWith('/')?'':'/';
+      const separator=path.includes('?')?'&':'?';
+      const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
+      const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
+      const started=Date.now();
       try{
-        const slash=base.endsWith('/')?'':'/';
-        const separator=path.includes('?')?'&':'?';
-        const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
-        const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
         const controller=new AbortController();
         const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
         const response=await fetch(withMode,{cache:'no-store',signal:controller.signal});
         window.clearTimeout(timeoutId);
+        recordViewerFetch(path,withMode,response.status,Date.now()-started,{ok:response.ok,source:'fwd-api'});
         if(!response.ok) continue;
         const payload=await response.json();
-        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data};
-      }catch{
+        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data,status:response.status};
+        recordViewerDiagnostic('warn','fwd-api-invalid-envelope',{path,base,keys:payload?Object.keys(payload):[]});
+      }catch(error){
+        recordViewerFetch(path,withMode,'error',Date.now()-started,{source:'fwd-api',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Keep probing candidate bases.
       }
     }
@@ -389,15 +508,20 @@ async function loadFwdApiData(){
     };
     fwdApiHydrationState.mode='hydrating';
     fwdApiHydrationState.failedEndpoints=list(failed);
+    recordViewerDiagnostic('info','fwd-api-hydrated-partial',{failedEndpoints:list(failed),counts:payloadCounts()});
     return true;
   };
 
-  for(const stage of endpointStages){
-    const settled=await Promise.all(stage.map(async ([key,path])=>({key,result:await fetchApi(path)})));
+  for(let stageIndex=0;stageIndex<endpointStages.length;stageIndex++){
+    const stage=endpointStages[stageIndex];
+    recordViewerDiagnostic('info','fwd-api-stage-start',{stage:stageIndex+1,endpoints:stage.map(x=>x[0])});
+    const stageStarted=Date.now();
+    const settled=await Promise.all(stage.map(async ([key,path])=>({key,path,result:await fetchApi(path)})));
     settled.forEach(entry=>{
       hydrated[entry.key]=entry.result.data;
       if(!entry.result.ok)failed.push(entry.key);
     });
+    recordViewerDiagnostic('info','fwd-api-stage-complete',{stage:stageIndex+1,elapsedMs:Date.now()-stageStarted,ok:settled.filter(x=>x.result.ok).map(x=>x.key),failed:list(failed)});
     applyHydrated();
   }
 
@@ -406,6 +530,7 @@ async function loadFwdApiData(){
       fwdData=null;
       fwdApiHydrationState.mode='none';
       fwdApiHydrationState.failedEndpoints=failed;
+      recordViewerDiagnostic('error','fwd-api-load-no-overview',{failedEndpoints:list(failed)});
     }
     return;
   }
@@ -413,6 +538,7 @@ async function loadFwdApiData(){
   applyHydrated();
   fwdApiHydrationState.mode=failed.length?(embeddedFwd?'partial+embedded':'partial'):'full';
   fwdApiHydrationState.failedEndpoints=failed;
+  recordViewerDiagnostic(failed.length?'warn':'info','fwd-api-load-complete',{mode:fwdApiHydrationState.mode,failedEndpoints:list(failed),counts:payloadCounts()});
 }
 function $(id){
   const el=document.getElementById(id);
@@ -457,7 +583,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
   if(value===null||value===undefined)return value;
   const type=typeof value;
   if(type==='string'){
-    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}… (${fmt(value.length)} chars)`:value;
+    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}â€¦ (${fmt(value.length)} chars)`:value;
   }
   if(type==='number'||type==='boolean')return value;
   if(type==='function')return '[Function]';
@@ -467,7 +593,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
     refs.weak.add(value);
     if(Array.isArray(value)){
       const out=value.slice(0,opts.maxArray).map(item=>boundedPreviewValue(item,opts,depth+1,refs));
-      if(value.length>opts.maxArray){refs.truncated=true;out.push(`… ${fmt(value.length-opts.maxArray)} more item(s)`);}
+      if(value.length>opts.maxArray){refs.truncated=true;out.push(`â€¦ ${fmt(value.length-opts.maxArray)} more item(s)`);}
       return out;
     }
     const out={};
@@ -479,7 +605,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
         out[key]=boundedPreviewValue(value[key],opts,depth+1,refs);
       }
     });
-    if(keys.length>opts.maxKeys){refs.truncated=true;out['…']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
+    if(keys.length>opts.maxKeys){refs.truncated=true;out['â€¦']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
     return out;
   }
   return text(value);
@@ -489,7 +615,7 @@ function summaryForLargeValue(value){
   if(Array.isArray(value))return `[Array(${fmt(value.length)})]`;
   if(typeof value==='object')return `[Object(${fmt(Object.keys(value).length)} keys)]`;
   const s=text(value);
-  return s.length>180?`${s.slice(0,180)}…`:s;
+  return s.length>180?`${s.slice(0,180)}â€¦`:s;
 }
 function previewJson(value,options={}){
   const tracker={weak:new WeakSet(),nodes:0,truncated:false};
@@ -498,7 +624,7 @@ function previewJson(value,options={}){
   try{json=JSON.stringify(preview,null,2);}
   catch(error){json=`"[Preview unavailable: ${text(error&&error.message||error)}]"`;}
   const maxChars=Number(options.maxChars||18000);
-  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\n… (${fmt(json.length-maxChars)} more chars)`;}
+  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\nâ€¦ (${fmt(json.length-maxChars)} more chars)`;}
   return {json,truncated:tracker.truncated};
 }
 function previewJsonHtml(value,options={}){
@@ -846,6 +972,7 @@ function installPaneResizers(){
 }
 function reportUiError(context,error){
   const message=error&&error.message?error.message:String(error||'Unknown error');
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','ui-error',{context,message,stack:error&&error.stack?String(error.stack).slice(0,4000):''});
   console.error(`FW Editor Viewer ${context} failed:`, error);
   const banner=optionalElement('globalErrorBanner');
   if(banner){
@@ -1097,6 +1224,7 @@ function fwdHydrationSummary(){
 function setBootPhase(phase,detail=''){
   bootState.phase=phase;
   bootState.detail=detail||'';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic(phase==='failed'?'error':'info','boot-phase',{phase,detail:bootState.detail});
   document.body.setAttribute('aria-busy',phase==='loading'?'true':'false');
   optionalElement('content')?.setAttribute('aria-busy',phase==='loading'?'true':'false');
 }
@@ -1630,7 +1758,7 @@ function actionListChip(e){
   return `<span class="action-list-chip ${cls}" title="${esc(title)}"><span class="action-list-prefix">Action List</span> ${esc(e.label)}</span>`;
 }
 function filteredInventory(){return scopedInventory().filter(r=>{if(!hasVisibleQuery(r))return false;if(state.inventoryFilter==='StructuralMatch')return r.classification==='StructuralMatch';if((state.inventoryFilter==='FlatOnly'||state.inventoryFilter==='AdditionalRule'))return (r.classification==='FlatOnly'||r.classification==='AdditionalRule');if(state.inventoryFilter==='direct')return r.disabled==='direct';if(state.inventoryFilter==='inherited')return r.disabled==='inherited';return true;});}
-function renderInventory(){const rows=filteredInventory();$('content').innerHTML=`<div class="notice"><div class="notice-icon">!</div><div><b>Additional Rules are readable/searchable but not placed.</b> Use Additional Rules for completeness; only Placed Rules link to confirmed Rule List hierarchy.</div></div><div class="table-list">${rows.slice(0,5000).map(r=>`<div class="data-row ${state.selectedId===r.id?'selected':''}" data-inventory="${esc(r.id)}"><div><div class="data-title">${esc(r.title)}</div><div class="data-sub">${esc(r.scopeId)} · ${esc(r.RuleGuid||r.RuleId||'no id')}</div></div><div class="mono">${esc(r.fn||'no function')}</div><div>${(r.classification==='FlatOnly'||r.classification==='AdditionalRule')?'<span class="badge amber">Additional Rule</span>':'<span class="badge green">Placed Rule</span>'}</div><div>${r.nodeId?'<span class="badge blue">Linked</span>':''}</div></div>`).join('')||emptyHtml('No inventory rows match','Adjust search or filter.')}</div>${rows.length>5000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 5,000 matching inventory rows for browser performance. Narrow the filter for full review.</div></div>':''}`;}
+function renderInventory(){const rows=filteredInventory();$('content').innerHTML=`<div class="notice"><div class="notice-icon">!</div><div><b>Additional Rules are readable/searchable but not placed.</b> Use Additional Rules for completeness; only Placed Rules link to confirmed Rule List hierarchy.</div></div><div class="table-list">${rows.slice(0,5000).map(r=>`<div class="data-row ${state.selectedId===r.id?'selected':''}" data-inventory="${esc(r.id)}"><div><div class="data-title">${esc(r.title)}</div><div class="data-sub">${esc(r.scopeId)} Â· ${esc(r.RuleGuid||r.RuleId||'no id')}</div></div><div class="mono">${esc(r.fn||'no function')}</div><div>${(r.classification==='FlatOnly'||r.classification==='AdditionalRule')?'<span class="badge amber">Additional Rule</span>':'<span class="badge green">Placed Rule</span>'}</div><div>${r.nodeId?'<span class="badge blue">Linked</span>':''}</div></div>`).join('')||emptyHtml('No inventory rows match','Adjust search or filter.')}</div>${rows.length>5000?'<div class="notice"><div class="notice-icon">i</div><div>Showing first 5,000 matching inventory rows for browser performance. Narrow the filter for full review.</div></div>':''}`;}
 function messageFilterToolbarHtml(){
   const scope=currentScope();
   const stats=messageWindowStats(scope);
@@ -1928,7 +2056,7 @@ function definitionListHtml(kind,rows,selectedKey){
     const referenceLabel=kind==='udfs'?'Reference-only':kind==='functions'?'Observed':'Referenced';
     const exceptionBadge=row.defined?'':`<span class="badge amber">${esc(referenceLabel)}</span>`;
     const metric=fmt(list(row.usage).length||row.metric);
-    return `<button class="table-index-row ${row.key===selectedKey?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span class="table-index-main"><b>${esc(row.name)}</b><span>${esc(row.type)} · ${metric} ${metricLabel}</span></span><span class="table-index-side">${exceptionBadge}</span></button>`;
+    return `<button class="table-index-row ${row.key===selectedKey?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span class="table-index-main"><b>${esc(row.name)}</b><span>${esc(row.type)} Â· ${metric} ${metricLabel}</span></span><span class="table-index-side">${exceptionBadge}</span></button>`;
   }).join('')}</div>`;
 }
 
@@ -2008,7 +2136,7 @@ function resolveDefinitionNav(value,hint=''){
 function definitionButtonHtml(match,label,extraClass=''){
   if(!match)return `<span class="${esc(extraClass)}">${esc(label)}</span>`;
   const kindLabel=match.kind==='udfs'?'UDF':match.kind==='tables'?'table':match.kind==='functions'?'function':match.kind==='resources'?'resource':match.kind==='selection-lists'?'SelectionList':match.kind==='rule-lists'?'Rule List':match.kind==='object-graph'?'object graph node':match.kind==='runtime-impact'?'runtime impact':'definition';
-  return `<button class="definition-link ${esc(extraClass)}" type="button" data-def-kind="${esc(match.kind)}" data-def-key="${esc(match.key)}" title="Open ${esc(kindLabel)} definition: ${esc(match.label)}">${esc(label||match.label)}<span aria-hidden="true">↗</span></button>`;
+  return `<button class="definition-link ${esc(extraClass)}" type="button" data-def-kind="${esc(match.kind)}" data-def-key="${esc(match.key)}" title="Open ${esc(kindLabel)} definition: ${esc(match.label)}">${esc(label||match.label)}<span aria-hidden="true">â†—</span></button>`;
 }
 function linkedDefinitionHtml(value,hint='',extraClass=''){
   const label=text(value).trim();
@@ -2051,7 +2179,7 @@ function usagePreviewHtml(rows){
       ? `<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}" title="Open this rule and show its configuration">Open FW Editor details</button>`
       : '<span class="badge amber">Unlinked</span>';
     const context=linkedDefinitionHtml(row.target,[row.targetType,row.relationshipKind,row.functionName].join(' '),'usage-target-link');
-    return `<div class="global-usage-mini"><div><b>${esc(row.ruleName)}</b><span>${esc(scopeId)} · ${esc(row.functionName||row.relationshipKind||row.targetType||'Reference')}</span>${context?`<small>${context}</small>`:''}</div>${openButton}</div>`;
+    return `<div class="global-usage-mini"><div><b>${esc(row.ruleName)}</b><span>${esc(scopeId)} Â· ${esc(row.functionName||row.relationshipKind||row.targetType||'Reference')}</span>${context?`<small>${context}</small>`:''}</div>${openButton}</div>`;
   }).join('')}</div>${usage.length>8?`<div class="caption mt-8">${fmt(usage.length-8)} more row(s) in Definition details.</div>`:''}`;
 }
 function genericParamSlotIndex(name){
@@ -2182,7 +2310,7 @@ function udfIndexRowHtml(u,selectedKey){
     statuses?`<span class="badge amber">${fmt(statuses)} statuses</span>`:'',
     messages?`<span class="badge amber">${fmt(messages)} msg</span>`:''
   ].filter(Boolean).join('');
-  return `<button class="udf-index-row ${active?'active':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="udf-index-title"><b>${esc(udfShortName(u))}</b>${u.rawName&&u.rawName!==udfShortName(u)?`<small>${esc(u.rawName)}</small>`:''}</span><span class="udf-index-meta">${esc(u.type||'UDF')} · ${esc(u.source||'FWD')}</span><span class="udf-index-badges">${badges}</span></button>`;
+  return `<button class="udf-index-row ${active?'active':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="udf-index-title"><b>${esc(udfShortName(u))}</b>${u.rawName&&u.rawName!==udfShortName(u)?`<small>${esc(u.rawName)}</small>`:''}</span><span class="udf-index-meta">${esc(u.type||'UDF')} Â· ${esc(u.source||'FWD')}</span><span class="udf-index-badges">${badges}</span></button>`;
 }
 function udfIndexHtml(rows,selectedKey){
   const groups=new Map();
@@ -2327,7 +2455,7 @@ function udfInternalRulesHtml(u){
     const nodeId=text(r.nodeId||node?.id||'');
     const paramPreview=callerParameterEntries(r.parameters||{},interfaceNames).slice(0,3).map(entry=>`<span><b>${esc(entry.displayName)}</b>: ${esc(entry.values.slice(0,2).join(', ')||'(blank)')}</span>`).join('');
     const open=nodeId?`<button class="btn ghost" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open</button>`:'<span class="badge blue">definition</span>';
-    return `<div class="udf-internal-row"><div class="udf-internal-step">${fmt(i+1)}</div><div class="udf-internal-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><span>${esc(r.functionName||'no function')}${scopeId?` · ${esc(scopeId)}`:''}</span>${paramPreview?`<small>${paramPreview}</small>`:''}</div><div class="udf-internal-actions">${list(r.statusResults).length?`<span class="badge amber">${fmt(list(r.statusResults).length)} statuses</span>`:''}${open}</div></div>`;
+    return `<div class="udf-internal-row"><div class="udf-internal-step">${fmt(i+1)}</div><div class="udf-internal-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><span>${esc(r.functionName||'no function')}${scopeId?` Â· ${esc(scopeId)}`:''}</span>${paramPreview?`<small>${paramPreview}</small>`:''}</div><div class="udf-internal-actions">${list(r.statusResults).length?`<span class="badge amber">${fmt(list(r.statusResults).length)} statuses</span>`:''}${open}</div></div>`;
   }).join('')}</div>${rules.length>220?`<div class="caption mt-8">Showing first 220 internal rules.</div>`:''}</section>`;
 }
 
@@ -2365,7 +2493,7 @@ function renderGlobalDefinitionModal(){
   const exceptionalOrigin=!row.defined;
   const tiles=[{label:'Usage rows',value:fmt(usage.length)},{label:'Type',value:esc(row.type||'Definition')}];
   if(exceptionalOrigin)tiles.splice(1,0,{label:'Origin',value:esc(row.source||'Inferred from usage')});
-  return `<div class="global-modal-shell"><div class="global-modal-summary">${summaryTilesHtml(tiles)}</div><div class="table-columns-head">Rule usage</div>${usage.length?`<div class="global-usage-list">${usage.slice(0,160).map(u=>`<div class="global-usage-row"><div><b>${esc(u.ruleName)}</b><span>${esc(u.scopeId)} · ${esc(u.functionName||u.relationshipKind||u.targetType||'Reference')}</span></div>${u.node?`<button class="btn ghost" type="button" data-node="${esc(u.node.id)}" data-node-scope="${esc(u.scopeId||u.node.scopeId||'')}">Open FW Editor details</button>`:`<span class="badge amber">Unlinked</span>`}<div class="definition-preview">${esc(u.target||'')}</div></div>`).join('')}</div>`:'<div class="global-empty-state">No rule usage is mapped for this definition.</div>'}</div>`;
+  return `<div class="global-modal-shell"><div class="global-modal-summary">${summaryTilesHtml(tiles)}</div><div class="table-columns-head">Rule usage</div>${usage.length?`<div class="global-usage-list">${usage.slice(0,160).map(u=>`<div class="global-usage-row"><div><b>${esc(u.ruleName)}</b><span>${esc(u.scopeId)} Â· ${esc(u.functionName||u.relationshipKind||u.targetType||'Reference')}</span></div>${u.node?`<button class="btn ghost" type="button" data-node="${esc(u.node.id)}" data-node-scope="${esc(u.scopeId||u.node.scopeId||'')}">Open FW Editor details</button>`:`<span class="badge amber">Unlinked</span>`}<div class="definition-preview">${esc(u.target||'')}</div></div>`).join('')}</div>`:'<div class="global-empty-state">No rule usage is mapped for this definition.</div>'}</div>`;
 }
 function definitionOriginUi(kind,row){
   const defined=row?.defined===true;
@@ -2385,7 +2513,7 @@ function definitionOriginUi(kind,row){
   if(kind==='udfs'){
     return {
       defined:false,
-      eyebrow:`${type} · reference-only`,
+      eyebrow:`${type} Â· reference-only`,
       caption:'This UDF name is observed in rule calls, but the snapshot did not include a canonical UDF definition/signature. Caller inventory is available; definition/body details are marked unavailable.',
       badge:'Reference-only',
       badgeTone:'amber',
@@ -2396,7 +2524,7 @@ function definitionOriginUi(kind,row){
   if(kind==='tables'){
     return {
       defined:false,
-      eyebrow:`${type} · reference-only`,
+      eyebrow:`${type} Â· reference-only`,
       caption:'Rules reference this table or SelectionList name, but the snapshot did not include a parsed table schema/payload. Usage and referenced fields are shown from rule relationships.',
       badge:'Reference-only',
       badgeTone:'amber',
@@ -2407,7 +2535,7 @@ function definitionOriginUi(kind,row){
   if(kind==='functions'){
     return {
       defined:false,
-      eyebrow:`${type} · observed usage`,
+      eyebrow:`${type} Â· observed usage`,
       caption:'This function appears in rule configuration or inventory details. The editor viewer can show observed callers even when no richer function metadata was exported.',
       badge:'Observed',
       badgeTone:'amber',
@@ -2417,7 +2545,7 @@ function definitionOriginUi(kind,row){
   }
   return {
     defined:false,
-    eyebrow:`${type} · observed reference`,
+    eyebrow:`${type} Â· observed reference`,
     caption:'This definition is reconstructed from rule relationships. Usage links are available even when a full source definition was not exported.',
     badge:'Referenced',
     badgeTone:'amber',
@@ -2497,12 +2625,12 @@ function fweditorDefinitionTreeHtmlLegacy(kind,rows,selectedKey){
       const origin=definitionOriginUi(kind,row);
       const usage=list(row.usage).length||row.metric||0;
       const warn=!origin.defined||list(row.messages).length;
-      return `<button class="fweditor-tree-item ${selected?'selected':''}" type="button" data-editor-kind="${esc(kind)}" data-editor-key="${esc(row.key)}" data-def-kind="${esc(kind)}" data-def-key="${esc(row.key)}" title="${esc(row.name)}"><span class="fweditor-tree-glyph">${kind==='functions'?'ƒ':kind==='tables'?'▦':kind==='rule-lists'?'R':kind==='object-graph'?'◇':'◆'}</span><span class="fweditor-tree-label"><b>${esc(row.name)}</b><small>${esc(text(row.source||origin.origin||''))}${usage?` · ${fmt(usage)} usage`:''}</small></span>${warn?'<span class="fweditor-tree-warn">!</span>':''}</button>`;
+      return `<button class="fweditor-tree-item ${selected?'selected':''}" type="button" data-editor-kind="${esc(kind)}" data-editor-key="${esc(row.key)}" data-def-kind="${esc(kind)}" data-def-key="${esc(row.key)}" title="${esc(row.name)}"><span class="fweditor-tree-glyph">${kind==='functions'?'Æ’':kind==='tables'?'â–¦':kind==='rule-lists'?'R':kind==='object-graph'?'â—‡':'â—†'}</span><span class="fweditor-tree-label"><b>${esc(row.name)}</b><small>${esc(text(row.source||origin.origin||''))}${usage?` Â· ${fmt(usage)} usage`:''}</small></span>${warn?'<span class="fweditor-tree-warn">!</span>':''}</button>`;
     }).join('');
     const omitted=items.length>600?`<div class="fweditor-note">${fmt(items.length-600)} additional ${esc(group)} items hidden; narrow the search.</div>`:'';
-    return `<details class="fweditor-tree-folder" ${open?'open':''}><summary><span class="fweditor-folder-icon">▾</span><b>${esc(group)}</b><small>${fmt(items.length)}</small></summary><div class="fweditor-tree-children">${itemHtml}${omitted}</div></details>`;
+    return `<details class="fweditor-tree-folder" ${open?'open':''}><summary><span class="fweditor-folder-icon">â–¾</span><b>${esc(group)}</b><small>${fmt(items.length)}</small></summary><div class="fweditor-tree-children">${itemHtml}${omitted}</div></details>`;
   }).join('');
-  return `<div class="fweditor-fwd-tree-body"><details class="fweditor-tree-folder" open><summary><span class="fweditor-folder-icon">▾</span><b>Resources</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children"><details class="fweditor-tree-folder nested" open><summary><span class="fweditor-folder-icon">▾</span><b>${esc(fweditorKindTitle(kind))}</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div></details></div>`;
+  return `<div class="fweditor-fwd-tree-body"><details class="fweditor-tree-folder" open><summary><span class="fweditor-folder-icon">â–¾</span><b>Resources</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children"><details class="fweditor-tree-folder nested" open><summary><span class="fweditor-folder-icon">â–¾</span><b>${esc(fweditorKindTitle(kind))}</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div></details></div>`;
 }
 function fweditorDefinitionTreeHtml(kind,rows,selectedKey){
   const groups=new Map();
@@ -3072,7 +3200,7 @@ function buildUdfDefinitions(){
       const definedParamNames=list(first(u.fieldListParameters,u.parameterNames,u.parameters,[])).map(text).filter(Boolean);
       const parameterNames=mergeUdfParameterNames(definedParamNames,derivedParamNames);
       const definedRules=list(first(u.ruleNames,u.usedByRules,u.rules,[])).map(text).filter(Boolean);
-      const configuredRules=callerRules.map(r=>`${r.ruleName} · ${r.scopeId}`);
+      const configuredRules=callerRules.map(r=>`${r.ruleName} Â· ${r.scopeId}`);
       const rules=[...new Set([...definedRules,...configuredRules])].sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
       return {
         key:rawName||displayName,
@@ -3127,7 +3255,7 @@ function buildUdfDefinitions(){
     matchLevel:'',
     source:'Observed rule calls',
     scopes:[],
-    rules:matchedRules.map(x=>`${x.ruleName} · ${x.scopeId}`).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),
+    rules:matchedRules.map(x=>`${x.ruleName} Â· ${x.scopeId}`).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'})),
     callerRules:matchedRules,
     parameterNames:mergeUdfParameterNames([],parameterNamesFromRules(matchedRules)),
     parameterBindings:[],
@@ -3159,7 +3287,7 @@ function udfEditorTreeNodeHtml(u,selectedKey){
   const active=u.key===selectedKey;
   const callers=udfCallerCount(u);
   const warningCount=list(u.messages).length+(u.definitionParsed?0:1);
-  return `<button class="fweditor-tree-item ${active?'selected':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="fweditor-tree-glyph">ƒ</span><span class="fweditor-tree-label"><b>${esc(udfShortName(u))}</b><small>${esc(u.type||'Function')}${callers?` · ${fmt(callers)} caller${callers===1?'':'s'}`:''}</small></span>${warningCount?`<span class="fweditor-tree-warn" title="Definition or parse messages">!</span>`:''}</button>`;
+  return `<button class="fweditor-tree-item ${active?'selected':''}" type="button" data-global-kind="udfs" data-global-key="${esc(u.key)}" aria-current="${active?'true':'false'}"><span class="fweditor-tree-glyph">Æ’</span><span class="fweditor-tree-label"><b>${esc(udfShortName(u))}</b><small>${esc(u.type||'Function')}${callers?` Â· ${fmt(callers)} caller${callers===1?'':'s'}`:''}</small></span>${warningCount?`<span class="fweditor-tree-warn" title="Definition or parse messages">!</span>`:''}</button>`;
 }
 function udfEditorTreeHtml(rows,selectedKey){
   const groups=new Map();
@@ -3169,7 +3297,7 @@ function udfEditorTreeHtml(rows,selectedKey){
     groups.get(key).push(u);
   });
   const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
-  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FW Editor Viewer navigation UDF resources"><details open class="fweditor-tree-folder root"><summary><span class="fweditor-folder-icon">▾</span>FWD</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Resources</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Function <b>${fmt(rows.length)}</b></summary>${ordered.map(([group,items],idx)=>`<details class="fweditor-tree-folder nested" ${items.some(x=>x.key===selectedKey)||idx<6?'open':''}><summary><span class="fweditor-folder-icon">▾</span>${esc(group)} <b>${fmt(items.length)}</b></summary><div class="fweditor-tree-children">${items.map(u=>udfEditorTreeNodeHtml(u,selectedKey)).join('')}</div></details>`).join('')}</details></details></details></div>`;
+  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FW Editor Viewer navigation UDF resources"><details open class="fweditor-tree-folder root"><summary><span class="fweditor-folder-icon">â–¾</span>FWD</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">â–¾</span>Resources</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">â–¾</span>Function <b>${fmt(rows.length)}</b></summary>${ordered.map(([group,items],idx)=>`<details class="fweditor-tree-folder nested" ${items.some(x=>x.key===selectedKey)||idx<6?'open':''}><summary><span class="fweditor-folder-icon">â–¾</span>${esc(group)} <b>${fmt(items.length)}</b></summary><div class="fweditor-tree-children">${items.map(u=>udfEditorTreeNodeHtml(u,selectedKey)).join('')}</div></details>`).join('')}</details></details></details></div>`;
 }
 function udfEditorDefinitionStateHtml(u){
   const pieces=[
@@ -3246,7 +3374,7 @@ function udfEditorInternalRuleTreeHtml(u){
     const nodeId=text(r.nodeId||node?.id||'');
     const paramPreview=callerParameterEntries(r.parameters||{},interfaceNames).slice(0,3).map(entry=>`${entry.displayName}: ${entry.values.slice(0,2).join(', ')||'(blank)'}`).join('; ');
     const open=nodeId?`<button class="fweditor-command-button small" type="button" data-node="${esc(nodeId)}" data-node-scope="${esc(scopeId)}">Open</button>`:'<span class="fweditor-state-chip">definition</span>';
-    return `<div class="fweditor-rule-row" role="treeitem"><span class="fweditor-rule-index">${fmt(i+1)}</span><span class="fweditor-rule-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><small>${esc(r.functionName||'no function')}${scopeId?` · ${esc(scopeId)}`:''}${paramPreview?` · ${esc(paramPreview)}`:''}</small></span><span class="fweditor-rule-actions">${list(r.statusResults).length?`<span class="fweditor-state-chip">${fmt(list(r.statusResults).length)} status</span>`:''}${open}</span></div>`;
+    return `<div class="fweditor-rule-row" role="treeitem"><span class="fweditor-rule-index">${fmt(i+1)}</span><span class="fweditor-rule-main"><b>${esc(r.ruleName||`Rule ${i+1}`)}</b><small>${esc(r.functionName||'no function')}${scopeId?` Â· ${esc(scopeId)}`:''}${paramPreview?` Â· ${esc(paramPreview)}`:''}</small></span><span class="fweditor-rule-actions">${list(r.statusResults).length?`<span class="fweditor-state-chip">${fmt(list(r.statusResults).length)} status</span>`:''}${open}</span></div>`;
   }).join('')}</div>${rules.length>260?`<div class="fweditor-note">Showing first 260 internal rules.</div>`:''}</fieldset>`;
 }
 function udfEditorLoadStatusHtml(u){
@@ -3384,10 +3512,11 @@ function treeRow(n,level){
   const fnMeta=levelNo>=2?`<span class="tree-meta">${esc(n.fn||'No function mapped')}</span>`:'';
   const stateMeta=levelNo>=3?`${disabledBadge}${messages?'<span class="badge amber">message</span>':''}${hasKids?`<span class="badge blue">${fmt(childIds(id).length)} child</span>`:''}`:'';
   const actionListMeta=levelNo>=4?`<span class="tree-action-list-mini">${incoming?actionListChip(incoming):'<span class="action-list-chip root">root rule list</span>'}</span>`:'';
-  return `<div class="tree-row ${treeDepthClass(level)} ${selected?'selected':''} ${inPath?'active-path':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${level+1}" aria-expanded="${hasKids?(expanded?'true':'false'):'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-node="${esc(id)}"><span class="tree-left">${hasKids?`<span class="twisty" data-toggle-node="${esc(id)}" aria-hidden="true" title="${expanded?'Collapse':'Expand'}">${expanded?'−':'+'}</span>`:'<span class="twisty ghost" aria-hidden="true">·</span>'}<span class="tree-main"><b class="tree-name">${esc(n.title)}</b>${fnMeta}<span class="tree-row-badges">${stateMeta}${actionListMeta}</span></span></span>${hasKids?`<span class="mini-row-btn" data-toggle-node="${esc(id)}" aria-hidden="true" title="${expanded?'Collapse':'Expand'}">${expanded?'−':'+'}</span>`:''}</div>`;
+  return `<div class="tree-row ${treeDepthClass(level)} ${selected?'selected':''} ${inPath?'active-path':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${level+1}" aria-expanded="${hasKids?(expanded?'true':'false'):'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-node="${esc(id)}"><span class="tree-left">${hasKids?`<span class="twisty" data-toggle-node="${esc(id)}" aria-hidden="true" title="${expanded?'Collapse':'Expand'}">${expanded?'âˆ’':'+'}</span>`:'<span class="twisty ghost" aria-hidden="true">Â·</span>'}<span class="tree-main"><b class="tree-name">${esc(n.title)}</b>${fnMeta}<span class="tree-row-badges">${stateMeta}${actionListMeta}</span></span></span>${hasKids?`<span class="mini-row-btn" data-toggle-node="${esc(id)}" aria-hidden="true" title="${expanded?'Collapse':'Expand'}">${expanded?'âˆ’':'+'}</span>`:''}</div>`;
 }
 function renderNoData(){
   const detail=bootState.detail||'No FWD snapshot files could be loaded.';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','render-no-data',{detail,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null});
   document.body.classList.add('no-scope-selector');
   $('sourceSubtitle').textContent='No snapshot data available';
   $('statusPill').innerHTML='<span class="dot warn"></span><span>FWD load failed</span>';
@@ -3415,7 +3544,7 @@ function renderHelp(){
   const fwdModel=`<div class="panel"><h3>Load Status</h3><div class="kv">${kv('Loaded','Configuration section loaded normally.')}${kv('Partial','Useful configuration loaded, but some placement or detail could not be fully confirmed.')}${kv('Additional Rules','Searchable/readable rules whose exact Rule List placement is not confirmed.')}${kv('Raw','Final confirmation when formatted views are incomplete or inconsistent.')}</div></div>`;
   const docsModel=`<div class="panel"><h3>Project Docs</h3><div class="kv">${kv('Docs index','docs/README.md')}${kv('Operator guide','docs/operator-guide.md')}${kv('Admin guide','docs/admin-guide.md')}${kv('Developer guide','docs/developer-guide.md')}${kv('FormWorks model','docs/formworks-editor-ac-reference-guide.md')}${kv('FAQ','docs/fw-editor-viewer-faq.md')}</div></div>`;
   const operators=`<div class="panel"><h3>Search Operators</h3><div class="mini-list"><div class="mini-row"><span><b>action:"Run Rules"</b></span><span class="caption">Match action-list labels</span></div><div class="mini-row"><span><b>function:_IGetDocAttr</b></span><span class="caption">Match mapped function</span></div><div class="mini-row"><span><b>has:disabled</b></span><span class="caption">Rules with disable usage</span></div><div class="mini-row"><span><b>children&gt;20</b></span><span class="caption">Large structural nodes</span></div><div class="mini-row"><span><b>scope:DentalADA</b></span><span class="caption">Scope-limited matches</span></div></div></div>`;
-  const shortcuts=`<div class="panel"><h3>Keyboard Shortcuts</h3><div class="kv">${kv('/ or Ctrl/⌘ + K','Focus command search')}${kv('Alt + I','Toggle inspector')}${kv('Alt + C','Copy selected config')}${kv('Alt + S','Focus selected subtree')}${kv('Alt + R','Reset pane widths')}${kv('Alt + A','Expand all visible rules')}${kv('Alt + D','Expand selected rule one level')}${kv('Alt + P','Collapse selected rule peers')}${kv('Alt + F','Clear focus/subtree mode')}</div><div class="caption mt-8">Tip: Use arrow keys and Enter to review dense trees without leaving the keyboard.</div></div>`;
+  const shortcuts=`<div class="panel"><h3>Keyboard Shortcuts</h3><div class="kv">${kv('/ or Ctrl/âŒ˜ + K','Focus command search')}${kv('Alt + I','Toggle inspector')}${kv('Alt + C','Copy selected config')}${kv('Alt + S','Focus selected subtree')}${kv('Alt + R','Reset pane widths')}${kv('Alt + A','Expand all visible rules')}${kv('Alt + D','Expand selected rule one level')}${kv('Alt + P','Collapse selected rule peers')}${kv('Alt + F','Clear focus/subtree mode')}</div><div class="caption mt-8">Tip: Use arrow keys and Enter to review dense trees without leaving the keyboard.</div></div>`;
   $('helpBody').innerHTML=`${quickStart}${productModel}${ruleModel}${inspectorModel}${fwdModel}${docsModel}${operators}${shortcuts}`;
 }
 function renderScopeInspector(s){
@@ -3762,7 +3891,7 @@ function resolveNodeFieldReferences(n){
 function renderFieldResolutionBlock(fieldResolution){
   if(!fieldResolution.summary.referenced)return '<div class="muted">No field-like parameters were found on this rule.</div>';
   const summary=`<div class="metric-row"><span class="metric-chip"><span class="chip-label">Referenced</span><span class="chip-value">${fmt(fieldResolution.summary.referenced)}</span></span><span class="metric-chip"><span class="chip-label">Resolved</span><span class="chip-value ok">${fmt(fieldResolution.summary.resolved)}</span></span><span class="metric-chip"><span class="chip-label">Unresolved</span><span class="chip-value ${fieldResolution.summary.unresolved?'err':''}">${fmt(fieldResolution.summary.unresolved)}</span></span></div><div class="caption">${esc(fieldResolution.summary.caveat)}</div>`;
-  const rows=fieldResolution.items.slice(0,120).map(item=>{const matches=item.matches.slice(0,3).map(m=>`<div class="mini-row"><span class="mono">${esc(m.name)}</span><span>${esc(m.scopeType)}:${esc(m.scopeName)}${m.geometry?` · ${esc(m.geometry)}`:''}</span></div>`).join('');return `<div class="panel my-8 p-10"><div class="split-row"><span><b>${esc(item.referencedField)}</b><div class="caption">${esc(item.parameterName)} = ${esc(item.parameterValue)}</div></span><span class="badge ${item.fieldExists?'green':'amber'}">${item.fieldExists?'resolved':'unresolved'}</span></div>${matches?`<div class="mini-list mt-8">${matches}</div>`:'<div class="caption mt-8">No matching field was found in the current FWD field catalog scope.</div>'}</div>`;}).join('');
+  const rows=fieldResolution.items.slice(0,120).map(item=>{const matches=item.matches.slice(0,3).map(m=>`<div class="mini-row"><span class="mono">${esc(m.name)}</span><span>${esc(m.scopeType)}:${esc(m.scopeName)}${m.geometry?` Â· ${esc(m.geometry)}`:''}</span></div>`).join('');return `<div class="panel my-8 p-10"><div class="split-row"><span><b>${esc(item.referencedField)}</b><div class="caption">${esc(item.parameterName)} = ${esc(item.parameterValue)}</div></span><span class="badge ${item.fieldExists?'green':'amber'}">${item.fieldExists?'resolved':'unresolved'}</span></div>${matches?`<div class="mini-list mt-8">${matches}</div>`:'<div class="caption mt-8">No matching field was found in the current FWD field catalog scope.</div>'}</div>`;}).join('');
   return `${summary}<div class="mt-8">${rows}</div>${fieldResolution.items.length>120?'<div class="caption mt-8">Showing first 120 resolved/unresolved references for readability.</div>':''}`;
 }
 function getScopeFieldResolutionIndex(scopeId){
@@ -3800,7 +3929,7 @@ function renderFieldResolutionCatalog(){
   const summary=index.summary;
   const pageDesign=pageDesignForScope(state.scopeId);
   const buttons=`<div class="scope-kind-filter" role="toolbar" aria-label="Field resolution filters"><button class="chip-btn ${state.fieldResolutionFilter==='unresolved'?'active':''}" type="button" data-field-filter="unresolved">Unresolved</button><button class="chip-btn ${state.fieldResolutionFilter==='resolved'?'active':''}" type="button" data-field-filter="resolved">Resolved</button><button class="chip-btn ${state.fieldResolutionFilter==='all'?'active':''}" type="button" data-field-filter="all">All</button></div>`;
-  const listHtml=rows.slice(0,4000).map(r=>`<button class="data-row compact" type="button" data-node="${esc(r.nodeId)}"><div><div class="data-title">${esc(r.referencedField)} <span class="badge ${r.fieldExists?'green':'amber'}">${r.fieldExists?'resolved':'unresolved'}</span></div><div class="data-sub">${esc(r.ruleName)} · ${esc(r.functionName||'no function')} · ${esc(r.parameterName)} = ${esc(r.parameterValue)}</div></div><div>${r.matchCount?`<span class="badge blue">${fmt(r.matchCount)} matches</span>`:''}</div><div class="mono">${esc(r.nodeId)}</div></button>`).join('');
+  const listHtml=rows.slice(0,4000).map(r=>`<button class="data-row compact" type="button" data-node="${esc(r.nodeId)}"><div><div class="data-title">${esc(r.referencedField)} <span class="badge ${r.fieldExists?'green':'amber'}">${r.fieldExists?'resolved':'unresolved'}</span></div><div class="data-sub">${esc(r.ruleName)} Â· ${esc(r.functionName||'no function')} Â· ${esc(r.parameterName)} = ${esc(r.parameterValue)}</div></div><div>${r.matchCount?`<span class="badge blue">${fmt(r.matchCount)} matches</span>`:''}</div><div class="mono">${esc(r.nodeId)}</div></button>`).join('');
   const notice=`<div class="notice compact"><div class="notice-icon">i</div><div><b>Field catalog match.</b> This view shows field-like rule parameters across the current scope and whether each one matches the extracted FWD field catalog.</div></div>`;
   const body=`<fieldset class="fweditor-fieldset"><legend>Field References</legend><div class="fweditor-scope-summary"><span>Structural rules <b>${fmt(summary.rules)}</b></span><span>Rules with refs <b>${fmt(summary.rulesWithRefs)}</b></span><span>Resolved <b>${fmt(summary.resolved)}</b></span><span>Unresolved <b>${fmt(summary.unresolved)}</b></span></div><div class="fweditor-toolbar-inline">${buttons}</div><div class="table-list mt-8">${listHtml||emptyHtml('No field-resolution rows match','Adjust filter or search.')}</div>${rows.length>4000?'<div class="notice compact"><div class="notice-icon">i</div><div>Showing first 4,000 rows for browser performance. Use search to narrow down.</div></div>':''}</fieldset><div class="fweditor-scope-detail-grid"><fieldset class="fweditor-fieldset"><legend>Page Design</legend>${pageDesignContextHtml(pageDesign)}</fieldset><fieldset class="fweditor-fieldset"><legend>How to Read This</legend>${notice}</fieldset></div>`;
   $('content').innerHTML=fweditorScopeRootHtml('field-resolution','Field Resolution',body,{chips:['Static catalog',`${fmt(summary.resolved)} resolved`,`${fmt(summary.unresolved)} unresolved`]});
@@ -3938,7 +4067,7 @@ function selectNode(id){selectNodeInScope(id);}
 function actionListRow(r){
   const g=r.group;const key=r.key;const cls=g.resolved?'resolved':'unresolved';const open=r.open!==false;const selected=state.selectedType==='action-list'&&state.selectedId===key;const hot=g.childIds.length>=10||g.childIds.some(id=>{const n=model.nodesById.get(String(id));return n&&(n.disabled!=='none'||hasDiag(n));});
   const actionLabel=g.resolved?'Status result / action':'Action index';
-  return `<div class="action-list-row ${treeDepthClass(r.level)} ${cls} ${open?'':'collapsed'} ${selected?'selected':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${r.level+1}" aria-expanded="${open?'true':'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-action-list="${esc(key)}"><span class="twisty action-list-twisty" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span><div class="action-list-main"><span class="action-list-label"><span class="action-list-prefix">${esc(actionLabel)}</span> ${esc(g.label)}</span><span class="action-list-meta">${fmt(g.childIds.length)} child ${g.childIds.length===1?'rule':'rules'}</span></div><span class="mini-row-btn" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'−':'+'}</span></div>`;
+  return `<div class="action-list-row ${treeDepthClass(r.level)} ${cls} ${open?'':'collapsed'} ${selected?'selected':''} ${hot?'hotspot':''}" role="treeitem" aria-level="${r.level+1}" aria-expanded="${open?'true':'false'}" aria-selected="${selected?'true':'false'}" tabindex="0" data-action-list="${esc(key)}"><span class="twisty action-list-twisty" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'âˆ’':'+'}</span><div class="action-list-main"><span class="action-list-label"><span class="action-list-prefix">${esc(actionLabel)}</span> ${esc(g.label)}</span><span class="action-list-meta">${fmt(g.childIds.length)} child ${g.childIds.length===1?'rule':'rules'}</span></div><span class="mini-row-btn" data-toggle-action-list="${esc(key)}" aria-hidden="true" title="${open?'Collapse':'Expand'}">${open?'âˆ’':'+'}</span></div>`;
 }
 function renderContextActionMenu(contextLabel){
   return '';
@@ -3964,14 +4093,14 @@ function renderInspector(){
   const diagRow=selectedDiag();
   if(n){
     $('inspectorTitle').textContent=n.title;
-    $('inspectorCaption').textContent=`${n.fn||'no function'} · ${n.scopeId}`;
+    $('inspectorCaption').textContent=`${n.fn||'no function'} Â· ${n.scopeId}`;
     $('inspectorTabs').innerHTML=`<span class="app-mode-note">Configuration inspector</span>${renderContextActionMenu('Configuration')}`;
     syncActionAvailability();
     return renderNodeInspector(n);
   }
   if(b){
     $('inspectorTitle').textContent=b.label;
-    $('inspectorCaption').textContent=`Action List · Parent: ${b.parent.title}`;
+    $('inspectorCaption').textContent=`Action List Â· Parent: ${b.parent.title}`;
     $('inspectorTabs').innerHTML=`<span class="app-mode-note">Configuration inspector</span>${renderContextActionMenu('Configuration')}`;
     syncActionAvailability();
     return renderActionListInspector(b);
@@ -4014,7 +4143,7 @@ function renderActionListInspector(b){
   const diags=actionListMessages(b);
   const summary=`<div class="kv">${kv('Action List',`<span class="action-list-chip ${b.resolved?'resolved':'unresolved'}">${esc(b.label)}</span>`)}${kv('Parent Rule',`<button class="btn ghost" type="button" data-node="${esc(b.parent.id)}">${esc(b.parent.title)}</button>`)}${kv('Parent function',`<span class="mono">${esc(b.parent.fn||'')}</span>`)}${kv('Status/action index',esc(b.actionListIndex??''))}${kv('Sub-list children',fmt(b.childCount))}</div><div class="action-list-actions"><button class="btn" type="button" data-action="copy-action-list-path">Copy Action List path</button></div>`;
   const path=`<div class="action-list-breadcrumb">${actionListPathObjects(b).map((seg,i)=>`${i?'<span class="action-list-arrow">-&gt;</span>':''}${seg.kind==='ActionList'?`<span class="action-list-step"><span class="action-list-chip ${seg.resolved?'resolved':'unresolved'}">Action List: ${esc(seg.label)}</span></span>`:`<button class="action-list-step" type="button" data-node="${esc(seg.nodeId)}"><b>${esc(seg.name)}</b></button>`}`).join('')}</div><div class="caption mt-8">Configured parent rule and sub-list path from the FWD configuration.</div>`;
-  const children=b.childNodes.length?`<div class="mini-list">${b.childNodes.map(n=>`<button class="quick-card" type="button" data-node="${esc(n.id)}"><b>${esc(n.title)}</b><span>${esc(n.fn||'no function')} · ${n.disabled==='none'?'enabled':n.disabled}</span></button>`).join('')}</div>`:'<div class="muted">No child rules under this sub-list.</div>';
+  const children=b.childNodes.length?`<div class="mini-list">${b.childNodes.map(n=>`<button class="quick-card" type="button" data-node="${esc(n.id)}"><b>${esc(n.title)}</b><span>${esc(n.fn||'no function')} Â· ${n.disabled==='none'?'enabled':n.disabled}</span></button>`).join('')}</div>`:'<div class="muted">No child rules under this sub-list.</div>';
   const tabs=['summary','actions',...(isAdvancedMode()?['messages','raw']:[])];
   renderInspectorTabBar(tabs,{
     summary:'action list',
@@ -4061,7 +4190,7 @@ function addGlobalDefinitionSearchRows(rows,q,kind,view,defs){
   list(defs).forEach(row=>{
     const blob=definitionSearchText(row);
     if(matchesSearchQuery({searchBlob:blob,title:row.name,scopeId:view},q)){
-      rows.push({kind,view,key:row.key,title:row.name,subtitle:`${row.type||view} · ${fmt(list(row.usage).length||row.metric||0)} usage`,badges:[kind]});
+      rows.push({kind,view,key:row.key,title:row.name,subtitle:`${row.type||view} Â· ${fmt(list(row.usage).length||row.metric||0)} usage`,badges:[kind]});
     }
   });
 }
@@ -4070,16 +4199,16 @@ function searchResults(){
   if(!q)return [];
   const rows=[];
   for(const s of model.scopes){
-    if(matchesSearchQuery({searchBlob:`${s.name} ${s.scopeId} ${s.kind}`},q))rows.push({kind:'Scope',scopeId:s.scopeId,title:s.name,subtitle:`${s.kind} · ${fmt(s.structural)} rules`,badges:[s.kind]});
+    if(matchesSearchQuery({searchBlob:`${s.name} ${s.scopeId} ${s.kind}`},q))rows.push({kind:'Scope',scopeId:s.scopeId,title:s.name,subtitle:`${s.kind} Â· ${fmt(s.structural)} rules`,badges:[s.kind]});
   }
   for(const n of model.nodes){
-    if(matchesSearchQuery(n,q))rows.push({kind:'StructuralRule',scopeId:n.scopeId,nodeId:n.id,title:n.title,subtitle:`${n.fn||'no function'} · ${n.scopeId}`,badges:[n.disabled!=='none'?n.disabled:'Rule'].filter(Boolean),actionPreview:model.incomingByChild.get(n.id)?.label||'root'});
+    if(matchesSearchQuery(n,q))rows.push({kind:'StructuralRule',scopeId:n.scopeId,nodeId:n.id,title:n.title,subtitle:`${n.fn||'no function'} Â· ${n.scopeId}`,badges:[n.disabled!=='none'?n.disabled:'Rule'].filter(Boolean),actionPreview:model.incomingByChild.get(n.id)?.label||'root'});
   }
   for(const n of model.nodes){
     for(const g of childActionListGroups(n.id)){
       const key=actionListKey(n.id,g);
       const childCount=list(g.childIds).length;
-      if(matchesSearchQuery({searchBlob:`${g.label} ${n.title} ${n.fn} ${n.scopeId}`},q))rows.push({kind:'ActionList',scopeId:n.scopeId,actionListKey:key,title:`Action List: ${g.label||'Unnamed action list'}`,subtitle:`Parent: ${n.title} · ${fmt(childCount)} child rules`,badges:['Action List']});
+      if(matchesSearchQuery({searchBlob:`${g.label} ${n.title} ${n.fn} ${n.scopeId}`},q))rows.push({kind:'ActionList',scopeId:n.scopeId,actionListKey:key,title:`Action List: ${g.label||'Unnamed action list'}`,subtitle:`Parent: ${n.title} Â· ${fmt(childCount)} child rules`,badges:['Action List']});
     }
   }
   try{
@@ -4131,7 +4260,7 @@ function renderSearchPopover(){
     group.items.push({row,index});
   });
   const groupHtml=groups.map(group=>`<section class="search-group" aria-label="${esc(group.label)}"><div class="search-group-title"><span>${esc(group.label)}</span><b>${fmt(group.items.length)}</b></div>${group.items.map(({row:r,index:i})=>`<button id="searchResult-${i}" class="search-result ${i===state.searchActiveIndex?'active':''}" type="button" data-search-index="${i}" role="option" aria-selected="${i===state.searchActiveIndex?'true':'false'}"><span class="search-result-main"><span class="search-result-title">${esc(r.title)}</span><span class="search-result-sub">${esc(r.subtitle||'')}</span>${r.actionPreview?`<span class="search-result-action-list">${esc(r.actionPreview)}</span>`:''}</span><span class="search-result-badges">${(r.badges||[]).slice(0,2).map(b=>`<span class="badge blue">${esc(b)}</span>`).join('')}</span></button>`).join('')}</section>`).join('');
-  pop.innerHTML=`<div class="command-palette-head"><div><b>Command search</b><span>${fmt(results.length)} result${results.length===1?'':'s'} for “${esc(q)}”</span></div><div class="command-palette-keys"><kbd>↑↓</kbd><kbd>Enter</kbd><kbd>Esc</kbd></div></div><div class="search-help">Operators: action:"Run Rules", function:_IGetDocAttr, has:disabled, children&gt;20, scope:DentalADA. Use <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd> from anywhere.</div>${results.length?groupHtml:'<div class="empty"><div>No matching objects.</div></div>'}`;
+  pop.innerHTML=`<div class="command-palette-head"><div><b>Command search</b><span>${fmt(results.length)} result${results.length===1?'':'s'} for â€œ${esc(q)}â€</span></div><div class="command-palette-keys"><kbd>â†‘â†“</kbd><kbd>Enter</kbd><kbd>Esc</kbd></div></div><div class="search-help">Operators: action:"Run Rules", function:_IGetDocAttr, has:disabled, children&gt;20, scope:DentalADA. Use <kbd>Ctrl</kbd>/<kbd>âŒ˜</kbd> + <kbd>K</kbd> from anywhere.</div>${results.length?groupHtml:'<div class="empty"><div>No matching objects.</div></div>'}`;
   pop._results=results;
   announceContentStatus(results.length?`${results.length} search result${results.length===1?'':'s'} for ${q}`:`No search results for ${q}`);
   const activeId=state.searchActiveIndex>=0?`searchResult-${state.searchActiveIndex}`:'';
@@ -4192,7 +4321,7 @@ function compactGlobalDefinitionSectionHtml(kind,title,rows,options={}){
   const visible=all.slice(0,limit);
   const more=all.length-visible.length;
   const rowHtml=visible.map(row=>compactGlobalDefinitionRowHtml(kind,row,options)).join('');
-  const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-${esc(kind)}" title="Open full ${esc(title)} catalog"><span class="global-view-name">Show ${fmt(more)} more...</span><span class="global-view-count">↗</span></button>`:'';
+  const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-${esc(kind)}" title="Open full ${esc(title)} catalog"><span class="global-view-name">Show ${fmt(more)} more...</span><span class="global-view-count">â†—</span></button>`:'';
   return `<details class="scope-section global-inventory-section" ${active?'open':''}><summary><span>${esc(title)}</span><span class="section-count">${fmt(all.length)}</span></summary><div class="scope-section-body">${rowHtml}${moreHtml}</div></details>`;
 }
 function compactResourceBucketTreeHtml(){
@@ -4213,11 +4342,11 @@ function compactResourceBucketTreeHtml(){
       const more=sorted.length-visible.length;
       const active=state.workspaceView==='resources'&&sorted.some(r=>r.key===state.selectedResourceKey);
       const rowHtml=visible.map(row=>compactGlobalDefinitionRowHtml('resources',row,{meta:type})).join('');
-      const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(more)} more ${esc(type)}...</span><span class="global-view-count">↗</span></button>`:'';
+      const moreHtml=more>0?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(more)} more ${esc(type)}...</span><span class="global-view-count">â†—</span></button>`:'';
       return `<details class="scope-section global-inventory-section" ${(active||index<2)?'open':''}><summary><span>${esc(type)}</span><span class="section-count">${fmt(sorted.length)}</span></summary><div class="scope-section-body">${rowHtml}${moreHtml}</div></details>`;
     });
   const remaining=Math.max(0,byType.size-8);
-  const remainingHtml=remaining?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(remaining)} more resource type buckets...</span><span class="global-view-count">↗</span></button>`:'';
+  const remainingHtml=remaining?`<button class="global-view-row child muted-row" type="button" data-action="view-resources" title="Open full resource catalog"><span class="global-view-name">Show ${fmt(remaining)} more resource type buckets...</span><span class="global-view-count">â†—</span></button>`:'';
   return `<details class="scope-section global-inventory-root" ${state.workspaceView==='resources'?'open':''}><summary><span>Resource Types</span><span class="section-count">${fmt(resources.length)}</span></summary><div class="scope-section-body">${sections.join('')}${remainingHtml}</div></details>`;
 }
 function renderGlobalInventoryTreeBlock(){
@@ -4359,7 +4488,7 @@ function productHealthLabel(hydration,warnings){
   if(Number(warnings||0)>0)return ['warn','Configuration warnings',`${fmt(warnings)} warnings are available in Load Status.`];
   return ['ok','Ready for review','Snapshot loaded cleanly with no reader warnings.'];
 }
-function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();ensureUsefulWorkspaceSelection('render');setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();ensureRenderedContentFallback('empty workspace render');renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
+function renderAll(){return withUiGuard('render',()=>{if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('info','render-all-start',{workspaceView:state.workspaceView,scopeId:state.scopeId,modelCounts:typeof modelCounts==='function'?modelCounts():null});normalizeWorkspaceViewForScope();ensureUsefulWorkspaceSelection('render');setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();ensureRenderedContentFallback('empty workspace render');renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('info','render-all-complete',{workspaceView:state.workspaceView,scopeId:state.scopeId,contentChars:(optionalElement('content')?.textContent||'').length});});}
 function renderTop(){
   document.body.classList.toggle('no-scope-selector',!state.scopeId||!currentScope());
   const banner=optionalElement('globalErrorBanner');
@@ -4385,11 +4514,11 @@ function renderTop(){
   const total=fmt(totalRules);
   const activeView=(state.workspaceView||'structure').toUpperCase();
   const hydration=fwdHydrationSummary();
-  $('sourceSubtitle').textContent=`${snapshotId()} · read-only · ${total} rules`;
+  $('sourceSubtitle').textContent=`${snapshotId()} Â· read-only Â· ${total} rules`;
   const warnDot=hydration.level==='warn'||totalWarnings>0;
   const statusText=hydration.level==='warn'
-    ? `Snapshot partial · ${fmt(totalWarnings)} warnings`
-    : `${total} rules${totalWarnings?` · ${fmt(totalWarnings)} warnings`:' · parse clean'}`;
+    ? `Snapshot partial Â· ${fmt(totalWarnings)} warnings`
+    : `${total} rules${totalWarnings?` Â· ${fmt(totalWarnings)} warnings`:' Â· parse clean'}`;
   $('statusPill').innerHTML=`<span class="dot ${warnDot?'warn':''}"></span><span>${esc(statusText)}</span>`;
   const summaryConfig=optionalElement('sourceSummaryConfig');
   const summaryRules=optionalElement('sourceSummaryRules');
@@ -5020,7 +5149,7 @@ function renderGlobalNavigation(){
 function modernRowMeta(row,kind){
   const metric=list(row.usage).length||row.metric||row.count||0;
   const stateText=kind==='selection-lists'?(row.selectionList?.schemaParsed?'Parsed schema':'Rule reference'):(row.defined===false?'Observed':'Loaded');
-  return `${stateText}${metric?` · ${fmt(metric)} refs`:''}`;
+  return `${stateText}${metric?` Â· ${fmt(metric)} refs`:''}`;
 }
 
 function pagedRows(rows,pageSize=300){
@@ -5050,7 +5179,7 @@ function renderModernCatalog(kind,rows,selectedKey,stateKey,copy){
   const selected=filtered.find(r=>r.key===selectedKey)||filtered[0];
   state[stateKey]=selected.key;
   const page=pagedRows(filtered,300);
-  const rowsHtml=page.rows.map(row=>`<button class="product-index-row ${row.key===selected.key?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span><b>${esc(row.name||row.key)}</b><small>${esc(row.type||'Item')} · ${esc(modernRowMeta(row,kind))}</small></span><em>${esc(row.source||'FWD')}</em></button>`).join('');
+  const rowsHtml=page.rows.map(row=>`<button class="product-index-row ${row.key===selected.key?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span><b>${esc(row.name||row.key)}</b><small>${esc(row.type||'Item')} Â· ${esc(modernRowMeta(row,kind))}</small></span><em>${esc(row.source||'FWD')}</em></button>`).join('');
   $('content').innerHTML=`<section class="product-workspace product-catalog product-catalog-${esc(kind)}"><div class="product-catalog-head"><div><h3>${esc(copy.title)}</h3><p>${esc(copy.body)}</p></div><span class="badge blue">${fmt(filtered.length)} shown</span></div><div class="product-catalog-grid"><aside class="product-index" aria-label="${esc(copy.title)} list">${rowsHtml}${page.truncated?`<div class="caption mt-8">Showing first ${fmt(page.limit)} of ${fmt(page.total)}. Narrow search for more.</div>`:''}</aside><article class="product-detail" aria-label="${esc(copy.title)} detail"><div class="product-detail-head"><div><div class="eyebrow">${esc(copy.title)}</div><h3>${esc(selected.name||selected.key)}</h3><p>${esc(selected.type||selected.source||'Read-only configuration')}</p></div><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Open FW Editor details</button></div>${modernCatalogDetail(kind,selected)}</article></div></section>`;
 }
 function renderGlobalResourceDefinitions(){
@@ -5098,7 +5227,7 @@ function renderRuleListPacketDefinitions(){
 function renderMessages(){
   const stats=messageWindowStats();
   const rows=filteredDiags().slice(0,500);
-  const rowsHtml=rows.map(d=>`<button class="product-index-row" type="button" data-diag="${esc(d.id)}"><span><b>${esc(d.title||d.severity||'Status message')}</b><small>${esc(d.scopeId||'Snapshot')} · ${esc(d.detail||d.Message||'')}</small></span><em>${esc(d.severity||'Info')}</em></button>`).join('');
+  const rowsHtml=rows.map(d=>`<button class="product-index-row" type="button" data-diag="${esc(d.id)}"><span><b>${esc(d.title||d.severity||'Status message')}</b><small>${esc(d.scopeId||'Snapshot')} Â· ${esc(d.detail||d.Message||'')}</small></span><em>${esc(d.severity||'Info')}</em></button>`).join('');
   $('content').innerHTML=`<section class="product-workspace product-catalog"><div class="product-catalog-head"><div><h3>Load Status</h3><p>Configuration load status and warnings. This area is hidden unless advanced mode is enabled.</p></div><div class="product-status-inline"><span>Items <b>${fmt(stats.diags.length)}</b></span><span>Warnings <b>${fmt(stats.warningCount)}</b></span><span>Linked <b>${fmt(stats.linkedCount)}</b></span></div></div><div class="product-catalog-grid single"><aside class="product-index">${rowsHtml||'<div class="product-empty-state compact"><h3>No diagnostics</h3><p>No diagnostics match the current filter.</p></div>'}</aside></div></section>`;
 }
 function normalizeWorkspaceViewForScope(){
@@ -5303,6 +5432,7 @@ function ensureRenderedContentFallback(reason='render'){
   const hasHtml=host.innerHTML&&host.innerHTML.trim().length>0;
   const hasText=host.textContent&&host.textContent.trim().length>0;
   if(hasHtml||hasText)return;
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('warn','empty-content-fallback',{reason,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null,workspaceView:state.workspaceView,scopeId:state.scopeId});
   host.innerHTML=viewerWorkspaceFallbackHtml(reason);
   const title=optionalElement('scopeTitle');
   if(title)title.textContent='FWD configuration ready';
@@ -5334,10 +5464,13 @@ function noAcRuleListWorkspaceHtml(scope){
 }
 
 async function init(){
+  recordViewerDiagnostic('info','boot-start',{href:window.location.href,userAgent:navigator.userAgent});
   renderBootLoading();
   try {
     await loadViewerData();
+    recordViewerDiagnostic('info','viewer-data-loaded-before-model',{payloadCounts:payloadCounts()});
     model=buildModel();
+    recordViewerDiagnostic('info','model-built',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});
     globalDefinitionLookupCache=null;
     globalTableDefinitionsCache=null;
     globalUdfDefinitionsCache=null;
@@ -5350,8 +5483,9 @@ async function init(){
     return;
   }
 
-  return withUiGuard('boot',()=>{if(!model.scopes.length){renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();});
+  return withUiGuard('boot',()=>{if(!model.scopes.length){recordViewerDiagnostic('error','boot-no-scopes',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();recordViewerDiagnostic('info','boot-complete',{modelCounts:modelCounts(),state:{workspaceView:state.workspaceView,scopeId:state.scopeId,selectedType:state.selectedType,selectedId:state.selectedId}});});
 }
 
 init();
 })();
+

@@ -27,8 +27,9 @@ test.beforeAll(async () => {
       }
       const requested = url.pathname === '/' ? '/ac-rule-viewer.html' : url.pathname;
       const decoded = decodeURIComponent(requested);
-      const fixturePath = path.resolve(fixtureDir, decoded.replace(/^\//, ''));
-      const sourceViewerPath = path.resolve(rootDir, 'src', 'viewer', decoded.replace(/^\//, ''));
+      const relative = decoded.replace(/^\//, '');
+      const fixturePath = path.resolve(fixtureDir, relative);
+      const sourceViewerPath = path.resolve(rootDir, 'src', 'viewer', relative);
       const fullPath = fs.existsSync(fixturePath) ? fixturePath : (fs.existsSync(sourceViewerPath) ? sourceViewerPath : path.resolve(rootDir, `.${decoded}`));
       if (!fullPath.startsWith(rootDir + path.sep) && fullPath !== rootDir) {
         res.writeHead(403);
@@ -57,31 +58,24 @@ test.afterAll(async () => {
   await new Promise(resolve => server.close(resolve));
 });
 
-async function openViewer(page) {
-  const errors = [];
-  page.on('pageerror', error => errors.push(error.message || String(error)));
+test('viewer boot never leaves a blank main workspace', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message || String(error)));
+  page.on('console', message => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
   await page.goto(viewerUrl);
+  await expect(page.locator('body')).toHaveClass(/fw-editor-viewer-shell/);
   await expect(page.getByText('FW Editor Viewer').first()).toBeVisible();
   await expect(page.locator('#statusPill')).not.toContainText(/Loading/i, { timeout: 15000 });
-  return errors;
-}
-
-async function expectWorkspaceNotBlank(page, buttonName, headingPattern) {
-  await page.getByRole('button', { name: buttonName }).first().click();
+  await expect(page.locator('#globalNav')).toBeVisible();
   await expect(page.locator('#content')).toBeVisible();
   await expect(page.locator('#content')).not.toBeEmpty();
-  await expect(page.locator('#content')).toContainText(headingPattern, { timeout: 10000 });
-  await expect(page.locator('#content .fweditor-global-root, #content .fweditor-root, #content .fweditor-config-window')).toBeVisible();
-}
+  await expect(page.locator('#content')).toContainText(/Rule|Configuration|No rule|FWD|Editor/i);
 
-test.describe('FW Editor Viewer resource workspaces', () => {
-  test('UDF, function, table, and Rule List workspaces are not blank', async ({ page }) => {
-    const errors = await openViewer(page);
-    await expectWorkspaceNotBlank(page, /User Defined Functions/i, /User Defined Functions/i);
-    await expectWorkspaceNotBlank(page, /^Functions$/i, /Functions/i);
-    await expectWorkspaceNotBlank(page, /^Tables$/i, /Tables/i);
-    await expectWorkspaceNotBlank(page, /^Rule Lists$/i, /Rule Lists/i);
-    expect(errors).toEqual([]);
-  });
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
 });
 

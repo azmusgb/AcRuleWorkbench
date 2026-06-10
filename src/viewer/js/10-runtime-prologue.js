@@ -17,6 +17,75 @@ let treeData = null;
 let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
+const viewerDiagnostics = {
+  build: 'v103-fw-editor-viewer',
+  bootStartedAtUtc: new Date().toISOString(),
+  events: [],
+  fetches: [],
+  errors: [],
+  latestCounts: {}
+};
+
+function diagnosticCount(value){
+  if(Array.isArray(value))return value.length;
+  if(value&&Array.isArray(value.items))return value.items.length;
+  if(value&&Array.isArray(value.Items))return value.Items.length;
+  if(value&&typeof value.count==='number')return value.count;
+  if(value&&typeof value.Count==='number')return value.Count;
+  return 0;
+}
+function payloadCounts(){
+  const counts={
+    rules: diagnosticCount(rulesData?.Rules||rulesData?.rules),
+    scopes: diagnosticCount(treeData?.Scopes||treeData?.scopes),
+    nodes: diagnosticCount(treeData?.Nodes||treeData?.nodes),
+    edges: diagnosticCount(treeData?.Edges||treeData?.edges),
+    relationships: diagnosticCount(relData?.Relationships||relData?.relationships||relData?.Edges||relData?.edges),
+    fwdResources: diagnosticCount(fwdData?.resources||fwdSidecarData?.resources),
+    fwdRuleLists: diagnosticCount(fwdData?.ruleLists||fwdSidecarData?.ruleLists),
+    fwdUdfs: diagnosticCount(fwdData?.udfs||fwdSidecarData?.udfs),
+    fwdTables: diagnosticCount(fwdData?.tables||fwdSidecarData?.tables),
+    fwdFunctions: diagnosticCount(fwdData?.functions||fwdSidecarData?.functions)
+  };
+  viewerDiagnostics.latestCounts=counts;
+  return counts;
+}
+function recordViewerDiagnostic(level,event,details={}){
+  const entry={utc:new Date().toISOString(),level,event,details};
+  viewerDiagnostics.events.push(entry);
+  if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
+  if(level==='error')viewerDiagnostics.errors.push(entry);
+  const method=level==='error'?'error':level==='warn'?'warn':'info';
+  try{ console[method](`[FW Viewer] ${event}`,details); }catch{}
+}
+function recordViewerFetch(key,url,status,elapsedMs,extra={}){
+  const entry={utc:new Date().toISOString(),key,url,status,elapsedMs,...extra};
+  viewerDiagnostics.fetches.push(entry);
+  if(viewerDiagnostics.fetches.length>300)viewerDiagnostics.fetches.shift();
+  try{ console.info('[FW Viewer] fetch',entry); }catch{}
+}
+function modelCounts(){
+  if(!model)return {model:false};
+  return {
+    model:true,
+    scopes:diagnosticCount(model.scopes),
+    nodes:diagnosticCount(model.nodes),
+    rules:diagnosticCount(model.nodes?.filter?.(n=>n&&n.isRule)),
+    inventory:diagnosticCount(model.inventory),
+    relationships:diagnosticCount(model.rels),
+    diagnostics:diagnosticCount(model.diags)
+  };
+}
+window.fwViewerDiagnostics=function(){
+  return {
+    href: window.location.href,
+    bootState: typeof bootState==='undefined'?null:{phase:bootState.phase,detail:bootState.detail},
+    payloadCounts: payloadCounts(),
+    modelCounts: modelCounts(),
+    fwdApiHydrationState: typeof fwdApiHydrationState==='undefined'?null:{mode:fwdApiHydrationState.mode,failedEndpoints:[...list(fwdApiHydrationState.failedEndpoints||[])]},
+    diagnostics: viewerDiagnostics
+  };
+};
 
 const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
@@ -44,9 +113,11 @@ function applyEmbeddedPayloadIfPresent(){
     rulesData = parsed.rulesData;
     relData = parsed.relData;
     treeData = parsed.treeData;
+    recordViewerDiagnostic('info','embedded-payload-loaded',{counts:payloadCounts()});
     return true;
   }
 
+  recordViewerDiagnostic('info','embedded-payload-not-present',{});
   return false;
 }
 
@@ -63,6 +134,7 @@ function applyEmbeddedFwdDataIfPresent(failedEndpoints=[]){
   applyAdvancedSidecarsToFwdData();
   fwdApiHydrationState.mode='embedded';
   fwdApiHydrationState.failedEndpoints=list(failedEndpoints);
+  recordViewerDiagnostic('info','embedded-fwd-data-applied',{failedEndpoints:list(failedEndpoints),counts:payloadCounts()});
   return true;
 }
 
@@ -80,7 +152,11 @@ function shouldHydrateFwdApiOnBoot(missingStaticFwd=false){
   return !!missingStaticFwd;
 }
 function scheduleFwdApiHydration(reason='idle'){
-  if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  if(fwdApiHydrationPromise){
+    recordViewerDiagnostic('info','fwd-api-hydration-already-scheduled',{reason});
+    return fwdApiHydrationPromise;
+  }
+  recordViewerDiagnostic('info','fwd-api-hydration-scheduled',{reason});
   const run=()=>beginFwdApiHydration(reason);
   if(typeof window.requestIdleCallback==='function'){
     window.requestIdleCallback(run,{timeout:2500});
@@ -91,9 +167,13 @@ function scheduleFwdApiHydration(reason='idle'){
 }
 function beginFwdApiHydration(reason='manual'){
   if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  const started=Date.now();
+  recordViewerDiagnostic('info','fwd-api-hydration-start',{reason});
   fwdApiHydrationPromise=loadFwdApiData().then(()=>{
+    recordViewerDiagnostic('info','fwd-api-hydration-data-loaded',{reason,elapsedMs:Date.now()-started,mode:fwdApiHydrationState.mode,failedEndpoints:list(fwdApiHydrationState.failedEndpoints||[]),counts:payloadCounts()});
     if(typeof model!=='undefined'&&model){
       model=buildModel();
+      recordViewerDiagnostic('info','model-rebuilt-after-api-hydration',{counts:modelCounts()});
       globalDefinitionLookupCache=null;
       globalTableDefinitionsCache=null;
       globalUdfDefinitionsCache=null;
@@ -107,6 +187,7 @@ function beginFwdApiHydration(reason='manual'){
       renderAll();
     }
   }).catch(error=>{
+    recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
     console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
@@ -143,19 +224,29 @@ function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayloa
 
 async function loadHostedApiViewerBootstrap(){
   const protocol=(window.location&&window.location.protocol)||'';
-  if(!/^https?:$/i.test(protocol))return false;
+  if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'non-http-protocol',protocol});
+    return false;
+  }
   const bases=['/api/v1','./api/v1','../api/v1','../../api/v1'];
+  recordViewerDiagnostic('info','hosted-bootstrap-start',{bases,href:window.location.href});
   for(const base of bases){
+    const slash=base.endsWith('/')?'':'/';
+    const url=`${base}${slash}viewer/bootstrap?snapshotMode=live`;
+    const started=Date.now();
     try{
-      const slash=base.endsWith('/')?'':'/';
       const controller=new AbortController();
       const timeoutId=window.setTimeout(()=>controller.abort(),15000);
-      const response=await fetch(`${base}${slash}viewer/bootstrap?snapshotMode=live`,{cache:'no-store',signal:controller.signal});
+      const response=await fetch(url,{cache:'no-store',signal:controller.signal});
       window.clearTimeout(timeoutId);
+      recordViewerFetch('viewer/bootstrap',url,response.status,Date.now()-started,{ok:response.ok});
       if(!response.ok)continue;
       const payload=await response.json();
       const data=payload&&payload.ok===true?payload.data:payload;
-      if(!data||!data.rulesData||!data.treeData)continue;
+      if(!data||!data.rulesData||!data.treeData){
+        recordViewerDiagnostic('warn','hosted-bootstrap-invalid-payload',{base,hasData:!!data,keys:data?Object.keys(data):[]});
+        continue;
+      }
       rulesData=data.rulesData||{Rules:[]};
       relData=data.relData||{Relationships:[]};
       treeData=data.treeData||{Scopes:[],Nodes:[],Edges:[]};
@@ -165,16 +256,20 @@ async function loadHostedApiViewerBootstrap(){
         fwdApiHydrationState.mode='live-bootstrap';
         fwdApiHydrationState.failedEndpoints=[];
       }
+      const hasContent=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+      recordViewerDiagnostic(hasContent?'info':'warn','hosted-bootstrap-loaded',{base,hasContent,mode:data.mode||'unknown',counts:payloadCounts(),bootstrap:data.counts||null});
       scheduleFwdApiHydration('live-bootstrap');
-      return snapshotSidecarsHaveContent(rulesData,treeData,relData);
-    }catch{
-      // Try the next base candidate.
+      return hasContent;
+    }catch(error){
+      recordViewerFetch('viewer/bootstrap',url,'error',Date.now()-started,{message:error&&error.message?error.message:String(error||'Unknown error')});
     }
   }
+  recordViewerDiagnostic('warn','hosted-bootstrap-unavailable',{});
   return false;
 }
 
 async function loadViewerData(){
+  recordViewerDiagnostic('info','load-viewer-data-start',{href:window.location.href});
   if(applyEmbeddedPayloadIfPresent()){
     const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
     if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('embedded-boot');
@@ -185,7 +280,11 @@ async function loadViewerData(){
   // sidecar probing so /viewer does not spam optional ac-rule-viewer.*.json 404s.
   // Standalone static exports still work because we fall back to sidecars below.
   const hostedBootstrap=await loadHostedApiViewerBootstrap();
-  if(hostedBootstrap)return;
+  if(hostedBootstrap){
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'hosted-bootstrap',counts:payloadCounts()});
+    return;
+  }
+  recordViewerDiagnostic('warn','load-viewer-data-falling-back-to-sidecars',{});
 
   const baseCandidates = [
     '',
@@ -204,10 +303,13 @@ async function loadViewerData(){
         const url = `${base}${file}`;
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+        const started=Date.now();
         const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
         window.clearTimeout(timeoutId);
+        recordViewerFetch(file,url,response.status,Date.now()-started,{ok:response.ok,source:'static-sidecar'});
         if(response.ok) return await response.json();
-      } catch {
+      } catch(error) {
+        recordViewerFetch(file,`${base}${file}`,'error',0,{source:'static-sidecar',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Continue trying fallback locations until one responds.
       }
     }
@@ -234,6 +336,7 @@ async function loadViewerData(){
     }
 
     staticSidecarsLoaded=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+    recordViewerDiagnostic(staticSidecarsLoaded?'info':'warn','static-sidecars-loaded',{loaded:staticSidecarsLoaded,counts:payloadCounts()});
 
     if(staticSidecarsLoaded){
       try {
@@ -248,19 +351,23 @@ async function loadViewerData(){
   }
 
   if(!staticSidecarsLoaded){
+    recordViewerDiagnostic('error','viewer-data-unavailable',{reason:'No hosted bootstrap and no static sidecars responded.'});
     throw new Error('No usable viewer sidecar JSON was found, and the hosted live-lazy bootstrap endpoint was unavailable.');
   }
 
   await loadAdvancedStaticFwdSidecars(fetchJsonWithFallback);
   const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
   if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('static-boot');
+  recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-sidecars',counts:payloadCounts(),hasStaticFwd});
 }
 
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the editor viewer server.
 async function loadFwdApiData(){
+  recordViewerDiagnostic('info','fwd-api-load-start',{href:window.location.href});
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
   const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
   if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{fwdApiParam});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -271,6 +378,7 @@ async function loadFwdApiData(){
 
   const protocol=(window.location&&window.location.protocol)||'';
   if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('warn','fwd-api-load-skipped',{reason:'non-http-protocol',protocol});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -318,19 +426,23 @@ async function loadFwdApiData(){
   ];
   async function fetchApi(path){
     for(const base of baseCandidates){
+      const slash=base.endsWith('/')?'':'/';
+      const separator=path.includes('?')?'&':'?';
+      const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
+      const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
+      const started=Date.now();
       try{
-        const slash=base.endsWith('/')?'':'/';
-        const separator=path.includes('?')?'&':'?';
-        const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
-        const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
         const controller=new AbortController();
         const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
         const response=await fetch(withMode,{cache:'no-store',signal:controller.signal});
         window.clearTimeout(timeoutId);
+        recordViewerFetch(path,withMode,response.status,Date.now()-started,{ok:response.ok,source:'fwd-api'});
         if(!response.ok) continue;
         const payload=await response.json();
-        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data};
-      }catch{
+        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data,status:response.status};
+        recordViewerDiagnostic('warn','fwd-api-invalid-envelope',{path,base,keys:payload?Object.keys(payload):[]});
+      }catch(error){
+        recordViewerFetch(path,withMode,'error',Date.now()-started,{source:'fwd-api',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Keep probing candidate bases.
       }
     }
@@ -366,15 +478,20 @@ async function loadFwdApiData(){
     };
     fwdApiHydrationState.mode='hydrating';
     fwdApiHydrationState.failedEndpoints=list(failed);
+    recordViewerDiagnostic('info','fwd-api-hydrated-partial',{failedEndpoints:list(failed),counts:payloadCounts()});
     return true;
   };
 
-  for(const stage of endpointStages){
-    const settled=await Promise.all(stage.map(async ([key,path])=>({key,result:await fetchApi(path)})));
+  for(let stageIndex=0;stageIndex<endpointStages.length;stageIndex++){
+    const stage=endpointStages[stageIndex];
+    recordViewerDiagnostic('info','fwd-api-stage-start',{stage:stageIndex+1,endpoints:stage.map(x=>x[0])});
+    const stageStarted=Date.now();
+    const settled=await Promise.all(stage.map(async ([key,path])=>({key,path,result:await fetchApi(path)})));
     settled.forEach(entry=>{
       hydrated[entry.key]=entry.result.data;
       if(!entry.result.ok)failed.push(entry.key);
     });
+    recordViewerDiagnostic('info','fwd-api-stage-complete',{stage:stageIndex+1,elapsedMs:Date.now()-stageStarted,ok:settled.filter(x=>x.result.ok).map(x=>x.key),failed:list(failed)});
     applyHydrated();
   }
 
@@ -383,6 +500,7 @@ async function loadFwdApiData(){
       fwdData=null;
       fwdApiHydrationState.mode='none';
       fwdApiHydrationState.failedEndpoints=failed;
+      recordViewerDiagnostic('error','fwd-api-load-no-overview',{failedEndpoints:list(failed)});
     }
     return;
   }
@@ -390,6 +508,7 @@ async function loadFwdApiData(){
   applyHydrated();
   fwdApiHydrationState.mode=failed.length?(embeddedFwd?'partial+embedded':'partial'):'full';
   fwdApiHydrationState.failedEndpoints=failed;
+  recordViewerDiagnostic(failed.length?'warn':'info','fwd-api-load-complete',{mode:fwdApiHydrationState.mode,failedEndpoints:list(failed),counts:payloadCounts()});
 }
 function $(id){
   const el=document.getElementById(id);
