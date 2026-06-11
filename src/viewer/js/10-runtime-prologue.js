@@ -137,7 +137,7 @@ function fwBootPlaceholderDiagnosticBridge(eventName, detail){
 })();
 
 function recordViewerDiagnostic(level,event,details={}){
-  try { fwBootPlaceholderDiagnosticBridge(event, details={}); } catch (_) { }
+  try { fwBootPlaceholderDiagnosticBridge(event, details); } catch (_) { }
   const entry={utc:new Date().toISOString(),level,event,details};
   viewerDiagnostics.events.push(entry);
   if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();

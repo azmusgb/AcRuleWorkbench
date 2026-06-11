@@ -63,7 +63,20 @@
 
   <div class="shell">
     <aside class="pane left" aria-label="FWD tree navigation">
-      <div id="globalNav" class="global-nav" role="navigation" aria-label="FWD tree"><div class="left-nav-shell product-left-nav"><div class="fwd-tree-root"><b>FWD</b><span>Read-only FW Editor-style configuration</span></div><div class="scope-group global-nav-heading"><span>Processing</span></div><button class="global-view-row active" type="button" data-action="view-structure"><span class="global-view-name">AC Rule List</span></button><button class="global-view-row" type="button" data-action="view-rule-lists"><span class="global-view-name">Rule Lists</span></button><div class="scope-group global-nav-heading"><span>Resources</span></div><button class="global-view-row" type="button" data-action="view-udfs"><span class="global-view-name">User Defined Functions</span></button><button class="global-view-row" type="button" data-action="view-functions"><span class="global-view-name">Functions</span></button><button class="global-view-row" type="button" data-action="view-tables"><span class="global-view-name">Tables</span></button><button class="global-view-row" type="button" data-action="view-selection-lists"><span class="global-view-name">SelectionLists</span></button><button class="global-view-row" type="button" data-action="view-resources"><span class="global-view-name">Resources</span></button></div></div>
+      <div id="globalNav" class="global-nav" role="navigation" aria-label="FWD tree">
+        <div class="left-nav-shell product-left-nav">
+          <div class="fwd-tree-root"><b>FWD</b><span>Read-only FW Editor-style configuration</span></div>
+          <div class="scope-group global-nav-heading"><span>Processing</span></div>
+          <button class="global-view-row active" type="button" data-action="view-structure" aria-current="page"><span class="global-view-name">AC Rule List</span></button>
+          <button class="global-view-row" type="button" data-action="view-rule-lists"><span class="global-view-name">Rule Lists</span></button>
+          <div class="scope-group global-nav-heading"><span>Resources</span></div>
+          <button class="global-view-row" type="button" data-action="view-udfs"><span class="global-view-name">User Defined Functions</span></button>
+          <button class="global-view-row" type="button" data-action="view-functions"><span class="global-view-name">Functions</span></button>
+          <button class="global-view-row" type="button" data-action="view-tables"><span class="global-view-name">Tables</span></button>
+          <button class="global-view-row" type="button" data-action="view-selection-lists"><span class="global-view-name">SelectionLists</span></button>
+          <button class="global-view-row" type="button" data-action="view-resources"><span class="global-view-name">Resources</span></button>
+        </div>
+      </div>
       <div id="recentScopes" class="recent-scopes" role="region" aria-label="Recently viewed scopes"></div>
       <div id="scopeList" class="scope-list scroll" role="navigation" tabindex="0" aria-label="Document and page scopes"></div>
     </aside>
@@ -102,7 +115,7 @@
             <button class="btn icon-btn" type="button" data-action="close-inspector" aria-label="Close inspector">&times;</button>
           </div>
         </div>
-        <div id="inspectorTabs" class="inspector-tabs"></div>
+        <div id="inspectorTabs" class="inspector-tabs" role="tablist" aria-label="Inspector sections"></div>
       </div>
       <div id="inspectorBody" class="inspector-body scroll" tabindex="0"></div>
     </aside>

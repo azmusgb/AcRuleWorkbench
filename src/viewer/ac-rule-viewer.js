@@ -22,8 +22,6 @@
   });
 })();
 
-
-
 (function(){
 'use strict';
 // v62.12 resource-hydration fix: unwraps API data, loads canonical UDF/table endpoints, and displays tables/UDFs without hiding confirmed FWD resources.
@@ -162,7 +160,7 @@ function fwBootPlaceholderDiagnosticBridge(eventName, detail){
 })();
 
 function recordViewerDiagnostic(level,event,details={}){
-  try { fwBootPlaceholderDiagnosticBridge(event, details={}); } catch (_) { }
+  try { fwBootPlaceholderDiagnosticBridge(event, details); } catch (_) { }
   const entry={utc:new Date().toISOString(),level,event,details};
   viewerDiagnostics.events.push(entry);
   if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
@@ -1187,9 +1185,7 @@ function wheelFallbackTarget(target){
   if(el?.closest?.('.pane.left'))return optionalElement('scopeList');
   if(el?.closest?.('.pane.right'))return optionalElement('inspectorBody');
   return optionalElement('content')||optionalElement('scopeList')||optionalElement('inspectorBody');
-}
-
-/*
+}/*
   Phase 7: lazy FWD detail hydration.
 
   Purpose:
@@ -1457,8 +1453,6 @@ window.fwViewerLazyHydrationState = function(){
     hydratedWorkspaces: [...lazyDetailHydrationState.hydratedWorkspaces]
   };
 };
-
-
 /*
   Phase 8: granular sidecar loading.
 
@@ -1936,8 +1930,6 @@ window.fwViewerGranularState=function(){
   };
 };
 
-
-
 function wireDesktopScrollPanFallback(){
   if(wireDesktopScrollPanFallback.installed)return;
   wireDesktopScrollPanFallback.installed=true;
@@ -2145,8 +2137,6 @@ function addUniqueIndex(map,key,id){if(!key)return;if(!map.has(key))map.set(key,
 function uniqueLookup(map,key){const hits=key&&map.get(key);return hits&&hits.length===1?hits[0]:'';}
 function correlationNodeId(x,exact,guid,nameFn){return exact.get(ruleKeyParts(x))||uniqueLookup(guid,scopedGuidKey(x))||uniqueLookup(nameFn,scopedNameFunctionKey(x))||'';}
 /** Build the normalized client-side indexes used by the tree, inspector, and search. */
-
-
 function buildModel(){
   const scopes=new Map();
   const upsertScope=x=>{
@@ -3795,8 +3785,6 @@ function fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usage
   const noun=fweditorObjectNoun(kind);
   return `<section class="fweditor-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div>${fweditorGlobalPropertyTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${fweditorGlobalActivePageHtml(kind,selected,originUi,usageCount,detailHtml)}</div></div></section>`;
 }
-
-
 function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,detailHtml){
   const q=lower(state.query).trim();
   if(q){
@@ -4626,8 +4614,6 @@ function renderHelp(){
   const shortcuts=`<div class="panel"><h3>Keyboard Shortcuts</h3><div class="kv">${kv('/ or Ctrl/⌘ + K','Focus command search')}${kv('Alt + I','Toggle inspector')}${kv('Alt + C','Copy selected config')}${kv('Alt + S','Focus selected subtree')}${kv('Alt + R','Reset pane widths')}${kv('Alt + A','Expand all visible rules')}${kv('Alt + D','Expand selected rule one level')}${kv('Alt + P','Collapse selected rule peers')}${kv('Alt + F','Clear focus/subtree mode')}</div><div class="caption mt-8">Tip: Use arrow keys and Enter to review dense trees without leaving the keyboard.</div></div>`;
   $('helpBody').innerHTML=`${quickStart}${productModel}${ruleModel}${inspectorModel}${fwdModel}${docsModel}${operators}${shortcuts}`;
 }
-
-
 function renderScopeInspector(s){
   const hotspots=scopedRuleNodes().filter(isHotspotNode).length;
   renderInspectorTabBar(['summary','raw'],{summary:fmt(s?.structural||0),raw:'JSON'});
@@ -4705,8 +4691,6 @@ function selectedRuleConfigPacket(n){
 function displayParameterEntriesForCopy(n){
   return callerParameterEntries(n.Parameters||{},ruleParameterInterfaceNames(n)).map(entry=>({name:entry.displayName,rawName:entry.rawName,values:entry.values}));
 }
-
-
 
 function pathObjects(n){const path=[];let cur=n,guard=0;while(cur&&guard++<128){const incoming=model.incomingByChild.get(cur.id);path.push({nodeId:cur.id,name:cur.title,functionName:cur.fn||null,incomingAction:incoming?{label:incoming.label,actionListIndex:first(incoming.ActionListIndex,incoming.actionListIndex,null),resolved:!!incoming.resolved}:null});const parent=model.parentByChild.get(cur.id);cur=parent?model.nodesById.get(String(parent)):null;}return path.reverse();}
 function renderGenericInspector(obj,label){
@@ -5760,8 +5744,6 @@ function selectMessageFilter(mode){
 }
 
 function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'FW Editor Viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FW Editor Viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
-
-
 function commandRegistry(){return Object.freeze({});}
 function executeCommand(action){return handleAction(action);}
 function handleAction(a){if(text(a).startsWith('message-filter-')){selectMessageFilter(text(a).replace(/^message-filter-/,''));return;}if(a==='open-global-detail'){state.globalDetailKind=state.workspaceView;state.modal='global-detail';renderModal();return;}if(a==='go-structure'){state.workspaceView='structure';state.treeFilter='all';state.query='';state.treeQuery='';state.focusNodeId='';renderAll();toast('Rule List ready');return;}if(a==='clear-tree-search'){state.query='';state.treeQuery='';syncQueryInputs();renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();closeSearchPopover();window.setTimeout(()=>focusActiveSearch(),0);return;}if(a==='show-messages'){const d=firstDiagnosticForFilter(state.messageFilter)||scopedDiags()[0];if(d){state.selectedType='diag';state.selectedId=d.id;document.body.classList.add('inspector-open');renderAll();}else toast('No diagnostics in this scope');return;}if(a==='open-help'){state.modal='help';renderModal();return;}if(a==='help-action-list'||a==='help-model'||a==='help-disabled'){state.modal=a.replace(/^help-/,'help-');renderModal();return;}if(a==='close-modal'){closeModalRender();return;}if(a==='toggle-theme'){state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;syncThemeControl();saveState();toast(`${state.theme==='dark'?'Dark':'Light'} mode`);return;}if(a==='toggle-mobile-nav'){const open=document.body.classList.toggle('mobile-nav-open');const btn=optionalElement('mobileNavToggle')||document.querySelector('[data-action="toggle-mobile-nav"]');if(btn)btn.setAttribute('aria-expanded',open?'true':'false');return;}if(a==='close-inspector'){document.body.classList.remove('inspector-open');applyPaneLayout();syncInspectorVisibility();saveState();return;}if(a==='show-inspector'){document.body.classList.add('inspector-open');applyPaneLayout();syncInspectorVisibility();saveState();return;}if(a==='reset-pane-layout'){resetPaneLayout();return;}if(a==='expand-all'){const count=scopedRuleNodes().length;if(count>2500&&!confirm(`Expand ${fmt(count)} structural rules and all action lists? This can be slow.`))return;scopedNodes().forEach(n=>state.expanded.add(n.id));state.collapsedActionLists.clear();renderAll();return;}if(a==='collapse-all'){state.expanded.clear();(model.rootsByScope.get(state.scopeId)||[]).forEach(id=>state.expanded.add(String(id)));state.collapsedActionLists=new Set(allActionListKeysForScope(state.scopeId));renderAll();return;}if(a==='expand-selected-depth'){const n=selectedNode();if(!n){toast('Select a rule first');return;}state.expanded.add(n.id);collapseActionListsForNode(n.id);renderAll();return;}if(a==='expand-selected-subtree'){const n=selectedNode();if(!n){toast('Select a rule first');return;}subtreeNodes(n.id).forEach(x=>state.expanded.add(x.id));childActionListGroups(n.id).forEach(g=>state.collapsedActionLists.delete(actionListKey(n.id,g)));renderAll();return;}if(a==='collapse-siblings'){const n=selectedNode();if(!n){toast('Select a rule first');return;}const parent=model.parentByChild.get(n.id);if(parent){childIds(parent).filter(id=>id!==n.id).forEach(id=>state.expanded.delete(id));}renderAll();return;}if(a==='expand-action-groups'){allActionListKeysForScope(state.scopeId).forEach(k=>state.collapsedActionLists.delete(k));renderAll();return;}if(a==='collapse-action-groups'){allActionListKeysForScope(state.scopeId).forEach(k=>state.collapsedActionLists.add(k));renderAll();return;}if(a==='clear-focus'){state.focusNodeId='';renderAll();return;}if(a==='focus-selected'){const n=selectedNode();if(n){state.focusNodeId=n.id;state.expanded.add(n.id);collapseActionListsForNode(n.id);renderAll();}return;}if(a==='open-linked-node'){const obj=selectedInventory()||selectedRel();if(obj&&obj.nodeId){selectNode(obj.nodeId);}else toast('No linked Rule List node');return;}if(a==='copy-action-list-path'){const b=selectedActionList();if(b){copyText(JSON.stringify({schema:'FwEditorViewer.ActionListPath',scopeId:b.scopeId,path:actionListPathObjects(b)},null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or Action List first');return;}copyText(JSON.stringify(selectedPathPacket(n),null,2));return;}if(a==='copy-rule-config'){const b=selectedActionList();if(b){copyText(JSON.stringify(actionListPacket(b),null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or Action List first');return;}copyText(JSON.stringify(selectedRuleConfigPacket(n),null,2));return;}if(a==='copy-rule-explanation'){const n=selectedNode();if(!n){toast('Select a rule first');return;}copyText(rulePlainLanguageNarrative(n));return;}if(a==='first-warning-scope'){const s=model.scopes.find(x=>x.warnings>0);if(s)selectScope(s.scopeId);return;}if(a==='largest-scope'){const s=[...model.scopes].sort((a,b)=>b.structural-a.structural)[0];if(s)selectScope(s.scopeId);return;}}
@@ -6188,8 +6170,6 @@ function renderOverview(){
   const ruleSummary=`<div class="product-summary-grid"><div><span>Total rules</span><b>${fmt(c.rules)}</b></div><div><span>Placed rules</span><b>${fmt(c.placed)}</b></div><div><span>Additional Rules</span><b>${fmt(c.additional)}</b></div><div><span>Status</span><b>${hydration.level==='warn'?'Partial':'Loaded'}</b></div></div>`;
   $('content').innerHTML=`<section class="product-overview"><div class="product-hero"><div><div class="eyebrow">Read-only FW Editor-style configuration viewer</div><h2>Browse this FWD configuration in a read-only FW Editor-style view.</h2><p>Use the navigation to inspect Rule Lists, UDFs, Functions, Tables, SelectionLists, Resources, Documents, and Pages. This viewer does not edit or execute FormWorks configuration.</p></div><div class="product-status-card"><span>Snapshot</span><b>${esc(snapshotId())}</b><small>${esc(hydration.label||'Loaded')}</small></div></div>${ruleSummary}<div class="product-card-grid">${cards}</div><section class="product-callout ${c.additional?'warn':'ok'}"><b>${c.additional?'Additional Rules present':'Rule placement complete'}</b><span>${c.additional?`${fmt(c.additional)} rules are readable/searchable but do not have confirmed Rule List placement in this snapshot.`:'All exported rules are represented in placed Rule Lists.'}</span></section></section>`;
 }
-
-
 function renderContent(){
   if(state.workspaceView==='overview')state.workspaceView='structure';
   if(state.workspaceView==='field-resolution')return renderFieldResolutionCatalog();

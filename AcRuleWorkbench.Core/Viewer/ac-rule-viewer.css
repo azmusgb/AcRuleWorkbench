@@ -6,30 +6,20 @@ body{min-height:100vh;}
 button,input,select,textarea{font:inherit;}
 :focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto;transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1;}}
-
-
 /* FW Editor Viewer shell layer.
    New shell selectors should land here instead of the legacy runtime bundle. */
 .fw-editor-viewer-shell .app{isolation:isolate;}
 .fw-editor-viewer-shell .pane{min-width:0;}
 .fw-editor-viewer-shell #content:empty::before{content:'Loading FW Editor configuration…';display:block;color:var(--muted,#64748b);padding:16px;}
-
-
 /* FW Editor Viewer left navigation layer. */
 .fw-editor-viewer-shell .global-view-row:focus-visible,
 .fw-editor-viewer-shell .tree-row:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
-
-
 /* FW Editor Viewer Rule List / Action List layer. */
 .fw-editor-viewer-shell .action-list-row,
 .fw-editor-viewer-shell .rule-row{scroll-margin-block:12px;}
-
-
 /* FW Editor Viewer inspector layer. */
 .fw-editor-viewer-shell .inspector-body{min-height:0;}
 .fw-editor-viewer-shell .fweditor-rule-properties-fieldset{min-width:0;}
-
-
 /* Legacy runtime CSS bundle quarantine.
    This keeps current behavior stable while new work migrates selectors into 00-40 layers above.
    Do not add new selectors below this comment. */
@@ -11394,8 +11384,6 @@ body.fw-editor-viewer-shell .product-empty-state-actionable{
 }
 
 
-
-
 /* PATCH: ensure inspector/workspace tabs are real hit-test targets above shell chrome. */
 .workspace-tabs,
 .rule-property-tabs,
@@ -11418,8 +11406,6 @@ button[role="tab"],
 .shell button[role="tab"] {
   isolation: isolate;
 }
-
-
 
 
 /* PATCH: shell hit-test correction.
@@ -11463,63 +11449,6 @@ button[role="tab"],
   z-index: 101;
   pointer-events: auto;
 }
-
-
-
-
-/* PATCH: app/shell hit-test correction.
-   Prevent chrome wrapper layers from intercepting clicks intended for visible controls. */
-.app,
-.shell {
-  pointer-events: none !important;
-}
-
-.app button,
-.app a,
-.app input,
-.app select,
-.app textarea,
-.app label,
-.app summary,
-.app [role="button"],
-.app [role="tab"],
-.app [data-action],
-.app [data-scope],
-.app .workspace-tab,
-.app .rule-property-tab,
-.app .global-view-row,
-.app .scope-shortcut,
-.app .tree-node,
-.app .btn,
-.app .icon-btn,
-.app .chip,
-.app .pill,
-.app .search-input,
-.app .modal,
-.app .modal *,
-.app #modalBackdrop {
-  pointer-events: auto !important;
-}
-
-.workspace-tabs,
-.rule-property-tabs,
-[role="tablist"] {
-  position: relative !important;
-  z-index: 1000 !important;
-  pointer-events: auto !important;
-}
-
-.workspace-tab,
-.rule-property-tab,
-button[role="tab"],
-[role="tab"] {
-  position: relative !important;
-  z-index: 1001 !important;
-  pointer-events: auto !important;
-  transform: translateZ(0);
-}
-
-
 
 /* PATCH: immediate boot placeholder so the viewer body never appears blank during startup. */
 .fw-boot-placeholder {
@@ -11636,8 +11565,6 @@ button[role="tab"],
     background: #1e293b;
   }
 }
-
-
 /* Phase 7: lazy detail hydration loading state. */
 .lazy-hydration-workspace {
   min-height: min(560px, calc(100vh - 260px));
@@ -11672,8 +11599,6 @@ button[role="tab"],
   0% { transform: translateX(-120%); }
   100% { transform: translateX(260%); }
 }
-
-
 /* Phase 8: granular sidecar status affordances. */
 .lazy-hydration-workspace .badge,
 .product-empty-state .badge {

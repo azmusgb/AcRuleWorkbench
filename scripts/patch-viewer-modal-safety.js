@@ -28,13 +28,13 @@ function fwViewerModalSafetyPatch(){
     if(backdrop){
       backdrop.classList.remove('open');
       backdrop.setAttribute('aria-hidden', 'true');
-      backdrop.style.display = 'none';
+      backdrop.hidden = true;
     }
 
     if(modal){
       modal.classList.remove('open');
       modal.setAttribute('aria-hidden', 'true');
-      modal.style.display = 'none';
+      modal.hidden = true;
     }
 
     document.body?.classList?.remove('modal-open');

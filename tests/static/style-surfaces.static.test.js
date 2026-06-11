@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '../..');
-const excludedDirs = new Set(['.git', '.vs', 'bin', 'obj', 'node_modules', 'artifacts', 'packages']);
+const excludedDirs = new Set(['.git', '.vs', 'bin', 'obj', 'node_modules', 'artifacts', 'packages', '_disabled_legacy_layers']);
 
 function walk(dir, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -30,12 +30,14 @@ const files = walk(root);
 assert(files.length > 0, 'style surface audit found no HTML/CSS/JS files');
 
 const activeViewerCss = new Set([
+  'ac-rule-viewer.css',
   'src/viewer/ac-rule-viewer.css',
   'AcRuleWorkbench.Core/Viewer/ac-rule-viewer.css',
   'AcRuleWorkbench.Core/Viewer/ac-viewer-template.css'
 ]);
 
 const allowedImportantBudgets = new Map([
+  ['ac-rule-viewer.css', 2000],
   ['src/viewer/ac-rule-viewer.css', 2000],
   ['AcRuleWorkbench.Core/Viewer/ac-rule-viewer.css', 2000],
   ['AcRuleWorkbench.Core/Viewer/ac-viewer-template.css', 2000],

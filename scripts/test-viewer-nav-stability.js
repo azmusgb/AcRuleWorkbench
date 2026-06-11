@@ -54,14 +54,14 @@ async function main() {
       if (openBackdrop) {
         openBackdrop.classList.remove("open");
         openBackdrop.setAttribute("aria-hidden", "true");
-        openBackdrop.style.display = "none";
+        openBackdrop.hidden = true;
       }
 
       document.querySelectorAll(".modal.open, [role='dialog'].open, .help-modal.open")
         .forEach(el => {
           el.classList.remove("open");
           el.setAttribute("aria-hidden", "true");
-          el.style.display = "none";
+          el.hidden = true;
         });
 
       document.body?.classList?.remove("modal-open");

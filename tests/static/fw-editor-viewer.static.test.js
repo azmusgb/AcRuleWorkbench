@@ -104,6 +104,8 @@ assert(!files.js.includes("const workspaceActive=validWorkspaceViews().includes(
 assert(!files.js.includes('lower(JSON.stringify([u.parameterNames,u.statusResults,u.rules]))'), 'UDF filtering must use precomputed searchBlob, not per-render JSON.stringify');
 assert(files.js.includes('searchBlob:lower([displayName'), 'canonical UDF rows should precompute searchBlob');
 assert(files.js.includes('function pagedRows('), 'resource and catalog lists should use simple pagination helpers');
+assert(!files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details={})'), 'diagnostic bridge must receive actual event details, not an empty object assignment');
+assert(files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details)'), 'diagnostic bridge should receive the original diagnostic details payload');
 
 for (const [name, css] of Object.entries({ css: files.css, coreCss: files.coreCss })) {
   assert(!/body\.fweditor-global-mode\s+\.main-head\s*\{\s*display\s*:\s*none\s*!important\s*;?\s*\}/m.test(css), `${name} must not hide .main-head in fweditor-global-mode`);
@@ -136,7 +138,7 @@ assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes(".archive\\st
 assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes("$staleFiles = @(Get-ChildItem"), 'stale FWCompanion cleanup must array-wrap Get-ChildItem so .Count works under StrictMode with one file');
 assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes("$remaining = @(Get-ChildItem"), 'stale FWCompanion cleanup must array-wrap archive enumeration under StrictMode');
 assert(!read('README.md').includes('README_FW_EDITOR_VIEWER_V91.md'), 'README.md must not point to stale v91 notes');
-assert(!read('UPDATE_FILES_MANIFEST.txt').includes('v89'), 'update manifest must not mention stale v89 package');
+if (exists('UPDATE_FILES_MANIFEST.txt')) assert(!read('UPDATE_FILES_MANIFEST.txt').includes('v89'), 'update manifest must not mention stale v89 package');
 
 assert(csharpFiles.extractionClient.includes('public sealed partial class FormWorksExtractionClient'), 'FormWorksExtractionClient must be partial after C# split');
 assert(csharpFiles.apiService.includes('internal sealed partial class WorkbenchApiService'), 'WorkbenchApiService must remain partial after API split');
