@@ -50,7 +50,94 @@ function payloadCounts(){
   viewerDiagnostics.latestCounts=counts;
   return counts;
 }
+
+function fwSetBootPlaceholderDetail(detail, state){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  if(state) root.dataset.state = state;
+
+  const detailEl = root.querySelector('[data-fw-boot-detail]');
+  if(detailEl && detail){
+    detailEl.textContent = detail;
+  }
+}
+
+function fwClearBootPlaceholder(){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  root.classList.add('fw-boot-placeholder-done');
+  root.setAttribute('aria-hidden', 'true');
+
+  window.setTimeout(() => {
+    if(root && root.parentNode){
+      root.parentNode.removeChild(root);
+    }
+  }, 220);
+}
+
+function fwBootPlaceholderDiagnosticBridge(eventName, detail){
+  if(!eventName) return;
+
+  if(eventName === 'boot-start'){
+    fwSetBootPlaceholderDetail('Starting viewer...', 'loading');
+    return;
+  }
+
+  if(eventName === 'load-viewer-data-start'){
+    fwSetBootPlaceholderDetail('Loading FWD snapshot...', 'loading');
+    return;
+  }
+
+  if(eventName === 'fetch'){
+    const key = detail && detail.key ? detail.key : 'viewer data';
+    fwSetBootPlaceholderDetail('Fetching ' + key + '...', 'loading');
+    return;
+  }
+
+  if(eventName === 'static-boot-sidecar-loaded'){
+    fwSetBootPlaceholderDetail('Building rule model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'viewer-data-loaded-before-model'){
+    fwSetBootPlaceholderDetail('Preparing workspace model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'model-built'){
+    fwSetBootPlaceholderDetail('Rendering workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'render-all-start'){
+    fwSetBootPlaceholderDetail('Rendering selected rule workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'boot-complete'){
+    fwClearBootPlaceholder();
+    return;
+  }
+
+  if(eventName === 'boot-failed' || eventName === 'load-viewer-data-failed'){
+    fwSetBootPlaceholderDetail('Viewer failed to load. See browser console diagnostics.', 'error');
+    return;
+  }
+}
+
+(function fwBootPlaceholderSlowTimer(){
+  window.setTimeout(() => {
+    const root = document.getElementById('fwBootPlaceholder');
+    if(root && !root.classList.contains('fw-boot-placeholder-done')){
+      fwSetBootPlaceholderDetail('Still loading viewer data...', 'loading');
+    }
+  }, 5000);
+})();
+
 function recordViewerDiagnostic(level,event,details={}){
+  try { fwBootPlaceholderDiagnosticBridge(event, details={}); } catch (_) { }
   const entry={utc:new Date().toISOString(),level,event,details};
   viewerDiagnostics.events.push(entry);
   if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
@@ -83,6 +170,7 @@ window.fwViewerDiagnostics=function(){
     payloadCounts: payloadCounts(),
     modelCounts: modelCounts(),
     fwdApiHydrationState: typeof fwdApiHydrationState==='undefined'?null:{mode:fwdApiHydrationState.mode,failedEndpoints:[...list(fwdApiHydrationState.failedEndpoints||[])]},
+    granularSidecarState: typeof window.fwViewerGranularState==='function'?window.fwViewerGranularState():null,
     diagnostics: viewerDiagnostics
   };
 };
@@ -144,8 +232,9 @@ function queryFlag(name){
 }
 function truthyQueryFlag(name){return /^(1|true|yes|on)$/i.test(text(queryFlag(name)||''));}
 function falseyQueryFlag(name){return /^(0|false|no|off)$/i.test(text(queryFlag(name)||''));}
+function isFwdApiDisabledByQuery(){return falseyQueryFlag('fwdApi')||falseyQueryFlag('api');}
 function shouldHydrateFwdApiOnBoot(missingStaticFwd=false){
-  if(falseyQueryFlag('fwdApi')||falseyQueryFlag('apiHydrate'))return false;
+  if(isFwdApiDisabledByQuery()||falseyQueryFlag('apiHydrate'))return false;
   if(truthyQueryFlag('apiHydrate')||truthyQueryFlag('hydrate'))return true;
   // Default fast path: use the generated static sidecar/model and avoid endpoint fan-out on every launch.
   // If no static FWD sidecar exists, hydrate after boot so resource views still become available when hosted.
@@ -224,6 +313,10 @@ function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayloa
 
 async function loadHostedApiViewerBootstrap(){
   const protocol=(window.location&&window.location.protocol)||'';
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'api-disabled-by-query'});
+    return false;
+  }
   if(!/^https?:$/i.test(protocol)){
     recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'non-http-protocol',protocol});
     return false;
@@ -268,11 +361,239 @@ async function loadHostedApiViewerBootstrap(){
   return false;
 }
 
+
+
+let staticFullSidecarHydrationPromise = null;
+
+function staticViewerSidecarBaseCandidates(){
+  return ['', './', '../', '../../', '../../../', '../../../../', '../../../../../', '/'];
+}
+
+async function fetchStaticViewerJsonWithFallback(file, options = {}){
+  const timeoutMs = Number(options.timeoutMs || 12000);
+  const optional = !!options.optional;
+
+  for(const base of staticViewerSidecarBaseCandidates()){
+    const url = `${base}${file}`;
+    const started = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      window.clearTimeout(timeoutId);
+
+      recordViewerFetch(file, url, response.status, Date.now() - started, { ok: response.ok, source: 'static-sidecar' });
+
+      if(!response.ok) continue;
+
+      const raw = await response.text();
+      return JSON.parse(raw.replace(/^\uFEFF/, ''));
+    }
+    catch(error) {
+      recordViewerFetch(file, url, 'error', Date.now() - started, {
+        source: 'static-sidecar',
+        optional,
+        message: error && error.message ? error.message : String(error || 'Unknown error')
+      });
+    }
+  }
+
+  if(optional) return null;
+  throw new Error(`Failed to load ${file}: file was not reachable from known paths.`);
+}
+
+function rulesDataFromBootSidecar(boot){
+  const nodes = list(first(boot?.nodes, boot?.Nodes, []));
+  const rules = nodes
+    .filter(n => !!first(n.IsRuleNode, n.isRuleNode, n.isRule))
+    .map((n, i) => ({
+      RuleGuid: n.RuleGuid,
+      RuleId: n.RuleId,
+      RuleName: n.RuleName,
+      FunctionName: n.FunctionName,
+      ScopePath: n.ScopePath,
+      ScopeName: n.ScopeName,
+      ScopeType: n.ScopeType,
+      RuleIndex: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      RuleIndexWithinScope: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      ActionListIndex: n.ActionListIndex,
+      ActionNames: n.ActionNames || [],
+      DisabledState: n.DisabledState,
+      DisabledAncestorNodeId: n.DisabledAncestorNodeId,
+      Parameters: {},
+      Sources: ['BootSidecar'],
+      BootOnly: true
+    }));
+
+  return {
+    ProcessName: first(boot?.snapshot?.ProcessName, boot?.ProcessName, ''),
+    RuleCount: first(boot?.counts?.rules, rules.length),
+    Rules: rules,
+    RulesByFunction: boot?.summaries?.rulesByFunction || [],
+    RulesByActionName: boot?.summaries?.rulesByActionName || [],
+    RulesByDisabledState: boot?.summaries?.rulesByDisabledState || [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+}
+
+function fwdSummaryFromBootSidecar(boot){
+  const counts = boot?.counts || {};
+  return {
+    overview: {
+      source: {
+        process: first(boot?.snapshot?.ProcessName, ''),
+        readMode: 'read-only',
+        snapshotStrategy: 'static-boot-sidecar'
+      },
+      counts: {
+        scopes: counts.scopes || 0,
+        structuralRules: counts.ruleNodes || counts.rules || 0,
+        flatInventoryRows: counts.rules || 0,
+        relationships: 0,
+        diagnostics: counts.diagnostics || 0,
+        resources: counts.fwdResources || 0,
+        udfs: counts.fwdUdfs || 0,
+        tables: counts.fwdTables || 0,
+        functions: counts.fwdFunctions || 0
+      }
+    },
+    ruleLists: { count: 0, items: [], lazy: true },
+    functions: { count: counts.fwdFunctions || 0, items: [], lazy: true },
+    tables: { count: counts.fwdTables || 0, items: [], lazy: true },
+    selectionLists: { count: 0, items: [], lazy: true },
+    udfs: { count: counts.fwdUdfs || 0, items: [], lazy: true },
+    resources: { count: counts.fwdResources || 0, items: [], lazy: true }
+  };
+}
+
+async function tryLoadStaticBootSidecar(){
+  if(falseyQueryFlag('bootSidecar')) return false;
+
+  const boot = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.boot.json', { timeoutMs: 5000, optional: true });
+  if(!boot || typeof boot !== 'object') return false;
+
+  const nodes = list(first(boot.nodes, boot.Nodes, []));
+  const scopes = list(first(boot.scopes, boot.Scopes, []));
+  const edges = list(first(boot.edges, boot.Edges, []));
+
+  if(!nodes.length && !scopes.length) return false;
+
+  treeData = {
+    SnapshotId: boot.snapshot?.SnapshotId,
+    GeneratedAtUtc: boot.snapshot?.GeneratedAtUtc,
+    RequireNativeOk: boot.snapshot?.RequireNativeOk,
+    ProcessName: boot.snapshot?.ProcessName,
+    ScopeCount: boot.counts?.scopes || scopes.length,
+    NodeCount: boot.counts?.nodes || nodes.length,
+    RuleNodeCount: boot.counts?.ruleNodes || nodes.filter(n => n.IsRuleNode).length,
+    EdgeCount: boot.counts?.edges || edges.length,
+    DiagnosticCount: boot.counts?.diagnostics || 0,
+    Scopes: scopes,
+    Nodes: nodes,
+    Edges: edges,
+    Diagnostics: [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+
+  rulesData = rulesDataFromBootSidecar(boot);
+  relData = { Relationships: [], Diagnostics: [], Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true } };
+  fwdSidecarData = fwdSummaryFromBootSidecar(boot);
+  fwdData = fwdSidecarData;
+
+  fwdApiHydrationState.mode = 'boot-sidecar';
+  fwdApiHydrationState.failedEndpoints = [];
+
+  recordViewerDiagnostic('info', 'static-boot-sidecar-loaded', { counts: payloadCounts(), bootCounts: boot.counts || null });
+  return true;
+}
+
+function scheduleStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-skipped', {
+    reason,
+    detail: 'Disabled because background full hydration causes full-body rerender flicker.'
+  });
+  return null;
+}
+
+function beginStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  if(staticFullSidecarHydrationPromise) return staticFullSidecarHydrationPromise;
+
+  const started = Date.now();
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-start', { reason });
+
+  staticFullSidecarHydrationPromise = (async () => {
+    const loadedRules = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rules.json', { timeoutMs: 30000 });
+    const loadedRel = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rel.json', { timeoutMs: 30000 });
+    const loadedTree = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.tree.json', { timeoutMs: 30000 });
+    const loadedFwd = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.fwd.json', { timeoutMs: 30000, optional: true });
+
+    rulesData = loadedRules || rulesData;
+    relData = loadedRel || relData;
+    treeData = loadedTree || treeData;
+
+    if(loadedFwd && typeof loadedFwd === 'object'){
+      fwdSidecarData = loadedFwd;
+      fwdData = loadedFwd;
+      applyAdvancedSidecarsToFwdData();
+    }
+
+    fwdApiHydrationState.mode = loadedFwd ? 'static-full-sidecars' : 'static-full-sidecars-no-fwd';
+    fwdApiHydrationState.failedEndpoints = [];
+
+    recordViewerDiagnostic('info', 'static-full-sidecars-loaded', {
+      reason,
+      elapsedMs: Date.now() - started,
+      counts: payloadCounts()
+    });
+
+    if(typeof model !== 'undefined' && model){
+      model = buildModel();
+      recordViewerDiagnostic('info', 'model-rebuilt-after-static-full-sidecars', { counts: modelCounts() });
+
+      globalDefinitionLookupCache = null;
+      globalTableDefinitionsCache = null;
+      globalUdfDefinitionsCache = null;
+      globalFunctionDefinitionsCache = null;
+      globalNavigationCountsCache = null;
+      productCountsCache = null;
+      ruleListPacketDefinitionsCache = null;
+
+      if(typeof ensureUsefulWorkspaceSelection === 'function'){
+        ensureUsefulWorkspaceSelection('static-full-sidecars');
+      }
+
+      renderAll();
+    }
+  })().catch(error => {
+    recordViewerDiagnostic('error', 'static-full-sidecar-hydration-failed', {
+      reason,
+      message: error && error.message ? error.message : String(error || 'Unknown error')
+    });
+  });
+
+  return staticFullSidecarHydrationPromise;
+}
+
 async function loadViewerData(){
   recordViewerDiagnostic('info','load-viewer-data-start',{href:window.location.href});
+  if(typeof tryLoadGranularIndexMode==='function'){
+    const granularLoaded = await tryLoadGranularIndexMode();
+    if(granularLoaded){
+      recordViewerDiagnostic('info','load-viewer-data-complete',{source:'granular-index',counts:payloadCounts()});
+      return;
+    }
+  }
   if(applyEmbeddedPayloadIfPresent()){
     const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
     if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('embedded-boot');
+    return;
+  }
+
+  const bootSidecarLoaded=await tryLoadStaticBootSidecar();
+  if(bootSidecarLoaded){
+    recordViewerDiagnostic('info','static-full-sidecar-hydration-skipped',{reason:'disabled-to-prevent-full-body-rerender'});
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-boot-sidecar',counts:payloadCounts()});
     return;
   }
 
@@ -364,6 +685,15 @@ async function loadViewerData(){
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the editor viewer server.
 async function loadFwdApiData(){
   recordViewerDiagnostic('info','fwd-api-load-start',{href:window.location.href});
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{reason:'api-disabled-by-query'});
+    if(!applyEmbeddedFwdDataIfPresent()){
+      fwdData = null;
+      fwdApiHydrationState.mode = 'none';
+      fwdApiHydrationState.failedEndpoints = [];
+    }
+    return;
+  }
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
   const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
   if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){

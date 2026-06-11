@@ -1,0 +1,53 @@
+
+
+/* PATCH: app/shell hit-test correction.
+   Prevent chrome wrapper layers from intercepting clicks intended for visible controls. */
+.app,
+.shell {
+  pointer-events: none !important;
+}
+
+.app button,
+.app a,
+.app input,
+.app select,
+.app textarea,
+.app label,
+.app summary,
+.app [role="button"],
+.app [role="tab"],
+.app [data-action],
+.app [data-scope],
+.app .workspace-tab,
+.app .rule-property-tab,
+.app .global-view-row,
+.app .scope-shortcut,
+.app .tree-node,
+.app .btn,
+.app .icon-btn,
+.app .chip,
+.app .pill,
+.app .search-input,
+.app .modal,
+.app .modal *,
+.app #modalBackdrop {
+  pointer-events: auto !important;
+}
+
+.workspace-tabs,
+.rule-property-tabs,
+[role="tablist"] {
+  position: relative !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+.workspace-tab,
+.rule-property-tab,
+button[role="tab"],
+[role="tab"] {
+  position: relative !important;
+  z-index: 1001 !important;
+  pointer-events: auto !important;
+  transform: translateZ(0);
+}

@@ -1,0 +1,67 @@
+{
+  "schema": "AcRuleViewer.RuleScopeIndex",
+  "schemaVersion": "1.0.0",
+  "kind": "document",
+  "scopes": [
+    {
+      "scopeId": "AC/Documents/Dental_Doc",
+      "scopeKey": "AC_Documents_Dental_Doc",
+      "name": "Dental_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_Dental_Doc.tree.json",
+      "counts": {
+        "rules": 496,
+        "nodes": 501,
+        "edges": 497,
+        "diagnostics": 39,
+        "relationships": 2101
+      },
+      "estimatedBytes": 3345801
+    },
+    {
+      "scopeId": "AC/Documents/General_Doc",
+      "scopeKey": "AC_Documents_General_Doc",
+      "name": "General_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_General_Doc.tree.json",
+      "counts": {
+        "rules": 2,
+        "nodes": 3,
+        "edges": 2,
+        "diagnostics": 0,
+        "relationships": 1
+      },
+      "estimatedBytes": 39654
+    },
+    {
+      "scopeId": "AC/Documents/TEST",
+      "scopeKey": "AC_Documents_TEST",
+      "name": "TEST",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_TEST.tree.json",
+      "counts": {
+        "rules": 2,
+        "nodes": 3,
+        "edges": 2,
+        "diagnostics": 0,
+        "relationships": 4
+      },
+      "estimatedBytes": 41497
+    },
+    {
+      "scopeId": "AC/Documents/DeltaCare_Doc",
+      "scopeKey": "AC_Documents_DeltaCare_Doc",
+      "name": "DeltaCare_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_DeltaCare_Doc.tree.json",
+      "counts": {
+        "rules": 1,
+        "nodes": 2,
+        "edges": 1,
+        "diagnostics": 0,
+        "relationships": 0
+      },
+      "estimatedBytes": 36750
+    }
+  ]
+}

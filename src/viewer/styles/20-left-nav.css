@@ -1,0 +1,3 @@
+/* FW Editor Viewer left navigation layer. */
+.fw-editor-viewer-shell .global-view-row:focus-visible,
+.fw-editor-viewer-shell .tree-row:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}

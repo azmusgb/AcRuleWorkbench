@@ -7,7 +7,7 @@ Use the public `/api/v1` routes for FW Companion behavior and integration tests.
 ## Enable debug routes
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath .\fwd.cfd `
   -Port 8787 `
   -KillExisting `

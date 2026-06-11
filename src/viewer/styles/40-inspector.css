@@ -1,0 +1,3 @@
+/* FW Editor Viewer inspector layer. */
+.fw-editor-viewer-shell .inspector-body{min-height:0;}
+.fw-editor-viewer-shell .fweditor-rule-properties-fieldset{min-width:0;}

@@ -32,7 +32,7 @@ param(
     [string]$TaskName = 'AcRuleWorkbench API Runner',
 
     [ValidateNotNullOrEmpty()]
-    [string]$RunnerScript = $(Join-Path $PSScriptRoot 'run-workbench-api-loop.ps1'),
+    [string]$RunnerScript = $(Join-Path $PSScriptRoot 'start-api.ps1'),
 
     [ValidateNotNullOrEmpty()]
     [string]$TaskUser = 'SYSTEM',

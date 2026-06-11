@@ -153,6 +153,7 @@ function fwdHydrationSummary(){
 function setBootPhase(phase,detail=''){
   bootState.phase=phase;
   bootState.detail=detail||'';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic(phase==='failed'?'error':'info','boot-phase',{phase,detail:bootState.detail});
   document.body.setAttribute('aria-busy',phase==='loading'?'true':'false');
   optionalElement('content')?.setAttribute('aria-busy',phase==='loading'?'true':'false');
 }

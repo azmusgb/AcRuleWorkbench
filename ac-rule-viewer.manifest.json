@@ -1,0 +1,212 @@
+{
+  "schema": "AcRuleViewer.SidecarManifest",
+  "schemaVersion": "1.0.0",
+  "generatedAtUtc": "2026-06-11T02:39:57.334Z",
+  "source": "full-sidecars",
+  "mode": "granular-sidecars",
+  "files": {
+    "index": "ac-rule-viewer.index.json",
+    "pagesIndex": "rules.pages.index.json",
+    "documentsIndex": "rules.documents.index.json",
+    "udfRulesIndex": "rules.udfs.index.json",
+    "otherRulesIndex": "rules.other.index.json"
+  },
+  "fwdWorkspaceIndexes": {
+    "rule-lists": "fwd.rule-lists.index.json",
+    "udfs": "fwd.udfs.index.json",
+    "functions": "fwd.functions.index.json",
+    "tables": "fwd.tables.index.json",
+    "selection-lists": "fwd.selection-lists.index.json",
+    "resources": "fwd.resources.index.json",
+    "drivers": "fwd.drivers.index.json"
+  },
+  "scopes": [
+    {
+      "scopeId": "AC/Documents/DeltaCare_Doc",
+      "scopeKey": "AC_Documents_DeltaCare_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_DeltaCare_Doc.tree.json",
+      "counts": {
+        "rules": 1,
+        "nodes": 2,
+        "edges": 1,
+        "diagnostics": 0,
+        "relationships": 0
+      }
+    },
+    {
+      "scopeId": "AC/Documents/Dental_Doc",
+      "scopeKey": "AC_Documents_Dental_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_Dental_Doc.tree.json",
+      "counts": {
+        "rules": 496,
+        "nodes": 501,
+        "edges": 497,
+        "diagnostics": 39,
+        "relationships": 2101
+      }
+    },
+    {
+      "scopeId": "AC/Documents/General_Doc",
+      "scopeKey": "AC_Documents_General_Doc",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_General_Doc.tree.json",
+      "counts": {
+        "rules": 2,
+        "nodes": 3,
+        "edges": 2,
+        "diagnostics": 0,
+        "relationships": 1
+      }
+    },
+    {
+      "scopeId": "AC/Documents/TEST",
+      "scopeKey": "AC_Documents_TEST",
+      "kind": "document",
+      "file": "rules.scope.AC_Documents_TEST.tree.json",
+      "counts": {
+        "rules": 2,
+        "nodes": 3,
+        "edges": 2,
+        "diagnostics": 0,
+        "relationships": 4
+      }
+    },
+    {
+      "scopeId": "AC/Pages/Attachment",
+      "scopeKey": "AC_Pages_Attachment",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Attachment.tree.json",
+      "counts": {
+        "rules": 3,
+        "nodes": 4,
+        "edges": 3,
+        "diagnostics": 0,
+        "relationships": 8
+      }
+    },
+    {
+      "scopeId": "AC/Pages/DeltaCare",
+      "scopeKey": "AC_Pages_DeltaCare",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_DeltaCare.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      }
+    },
+    {
+      "scopeId": "AC/Pages/DentalADA",
+      "scopeKey": "AC_Pages_DentalADA",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_DentalADA.tree.json",
+      "counts": {
+        "rules": 4892,
+        "nodes": 4918,
+        "edges": 4884,
+        "diagnostics": 1640,
+        "relationships": 24390
+      }
+    },
+    {
+      "scopeId": "AC/Pages/General",
+      "scopeKey": "AC_Pages_General",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_General.tree.json",
+      "counts": {
+        "rules": 521,
+        "nodes": 550,
+        "edges": 525,
+        "diagnostics": 914,
+        "relationships": 2184
+      }
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Data",
+      "scopeKey": "AC_Pages_Letter_Data",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Data.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      }
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Mem",
+      "scopeKey": "AC_Pages_Letter_Mem",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Mem.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      }
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Service",
+      "scopeKey": "AC_Pages_Letter_Service",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Service.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      }
+    },
+    {
+      "scopeId": "AC/Pages/Xray",
+      "scopeKey": "AC_Pages_Xray",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Xray.tree.json",
+      "counts": {
+        "rules": 7,
+        "nodes": 8,
+        "edges": 7,
+        "diagnostics": 0,
+        "relationships": 20
+      }
+    },
+    {
+      "scopeId": "AC/System",
+      "scopeKey": "AC_System",
+      "kind": "other",
+      "file": "rules.scope.AC_System.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 0,
+        "edges": 0,
+        "diagnostics": 25,
+        "relationships": 0
+      }
+    }
+  ],
+  "counts": {
+    "scopes": 13,
+    "rules": 5924,
+    "nodes": 5993,
+    "edges": 5921,
+    "diagnostics": 2618,
+    "relationships": 28708,
+    "fwd": {
+      "resources": 0,
+      "ruleLists": 13,
+      "udfs": 675,
+      "canonicalUdfs": 675,
+      "tables": 238,
+      "functions": 760,
+      "selectionLists": 122,
+      "drivers": 0
+    }
+  }
+}

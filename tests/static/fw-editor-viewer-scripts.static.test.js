@@ -7,9 +7,7 @@ const read = rel => fs.readFileSync(path.join(root, rel), 'utf8');
 const exists = rel => fs.existsSync(path.join(root, rel));
 
 const start = read('scripts/start-fw-editor-viewer.ps1');
-const compat = read('scripts/start-workbench.ps1');
 const rootLauncher = read('start-fw-editor-viewer.cmd');
-const runWorkbench = exists('run-workbench.cmd') ? read('run-workbench.cmd') : '';
 
 for (const token of [
   '[switch]$ForceViewerRefresh',
@@ -29,15 +27,13 @@ assert(start.includes('Dry run completed'), 'canonical startup script must suppo
 assert(start.includes('--live-lazy'), 'canonical startup script must pass --live-lazy by default');
 assert(start.includes('--snapshot-warmup'), 'canonical startup script must support explicit snapshot warm-up');
 assert(start.includes('ac-rule-viewer.fwd.json'), 'canonical startup script must require complete static JSON sidecars for ForceViewerRefresh');
-assert(compat.toLowerCase().includes('deprecated'), 'start-workbench.ps1 should be a deprecated wrapper only');
-assert(compat.includes('start-fw-editor-viewer.ps1'), 'start-workbench.ps1 should forward to start-fw-editor-viewer.ps1');
-assert(compat.length < 7000, 'deprecated start-workbench.ps1 should stay small');
 assert(rootLauncher.includes('scripts\\start-fw-editor-viewer.ps1') || rootLauncher.includes('scripts\start-fw-editor-viewer.ps1'), 'root launcher must call scripts\\start-fw-editor-viewer.ps1');
 assert(!exists('scripts/dev-workbench.ps1'), 'scripts/dev-workbench.ps1 must be moved out of the active script surface');
 assert(!exists('scripts/dev-workbench.cmd'), 'scripts/dev-workbench.cmd must be moved out of the active script surface');
-if (runWorkbench) {
-  assert(runWorkbench.toLowerCase().includes('deprecated'), 'run-workbench.cmd must be a deprecation wrapper');
-  assert(runWorkbench.includes('start-fw-editor-viewer.cmd'), 'run-workbench.cmd must delegate to start-fw-editor-viewer.cmd');
-}
+assert(!exists('run-workbench.cmd'), 'run-workbench.cmd must not be active in source-clean package');
+assert(!exists('start-workbench.cmd'), 'start-workbench.cmd must not be active in source-clean package');
+assert(!exists('scripts/start-workbench.ps1'), 'scripts/start-workbench.ps1 must not be active in source-clean package');
+assert(!exists('scripts/start-workbench.cmd'), 'scripts/start-workbench.cmd must not be active in source-clean package');
+assert(!exists('scripts/verify-workbench-live.ps1'), 'scripts/verify-workbench-live.ps1 must not be active in source-clean package');
 
 console.log('FW Editor Viewer script contract checks passed.');

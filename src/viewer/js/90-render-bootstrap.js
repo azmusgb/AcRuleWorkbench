@@ -241,6 +241,14 @@ function workspaceContentScore(view){
   if(!model)return 0;
   const normalized=normalizeWorkspaceViewName(view);
   if(normalized==='structure')return list(model.nodes).length+list(model.inventory).length+list(model.scopes).reduce((sum,scope)=>sum+scopeRuleContentScore(scope),0);
+  if(normalized==='field-resolution'){
+    // Field Resolution is a scope-local workspace. It must be considered valid
+    // even when the current filter produces zero rows, otherwise
+    // ensureUsefulWorkspaceSelection() immediately falls back to structure.
+    const scopedRules = typeof scopedRuleNodes === 'function' ? scopedRuleNodes().length : 0;
+    const scopedNodeCount = typeof scopedNodes === 'function' ? scopedNodes().length : 0;
+    return Math.max(scopedRules, scopedNodeCount, 1);
+  }
   if(normalized==='rule-lists')return buildRuleListPacketDefinitions().length;
   if(normalized==='udfs')return buildUdfDefinitions().length;
   if(normalized==='functions')return buildGlobalFunctionDefinitions().length;
@@ -328,6 +336,7 @@ function ensureRenderedContentFallback(reason='render'){
   const hasHtml=host.innerHTML&&host.innerHTML.trim().length>0;
   const hasText=host.textContent&&host.textContent.trim().length>0;
   if(hasHtml||hasText)return;
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('warn','empty-content-fallback',{reason,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null,workspaceView:state.workspaceView,scopeId:state.scopeId});
   host.innerHTML=viewerWorkspaceFallbackHtml(reason);
   const title=optionalElement('scopeTitle');
   if(title)title.textContent='FWD configuration ready';
@@ -359,10 +368,13 @@ function noAcRuleListWorkspaceHtml(scope){
 }
 
 async function init(){
+  recordViewerDiagnostic('info','boot-start',{href:window.location.href,userAgent:navigator.userAgent});
   renderBootLoading();
   try {
     await loadViewerData();
+    recordViewerDiagnostic('info','viewer-data-loaded-before-model',{payloadCounts:payloadCounts()});
     model=buildModel();
+    recordViewerDiagnostic('info','model-built',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});
     globalDefinitionLookupCache=null;
     globalTableDefinitionsCache=null;
     globalUdfDefinitionsCache=null;
@@ -375,7 +387,7 @@ async function init(){
     return;
   }
 
-  return withUiGuard('boot',()=>{if(!model.scopes.length){renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();});
+  return withUiGuard('boot',()=>{if(!model.scopes.length){recordViewerDiagnostic('error','boot-no-scopes',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();recordViewerDiagnostic('info','boot-complete',{modelCounts:modelCounts(),state:{workspaceView:state.workspaceView,scopeId:state.scopeId,selectedType:state.selectedType,selectedId:state.selectedId}});});
 }
 
 init();

@@ -31,16 +31,15 @@ $backupRoot = Join-Path $targetRootFull ".update-backups\startup-v4-update-$time
 New-Item -ItemType Directory -Force -Path $backupRoot | Out-Null
 
 $files = @(
-    "scripts\start-workbench.ps1",
+    "scripts\start-fw-editor-viewer.ps1",
     "scripts\start-api.ps1",
-    "scripts\verify-workbench-live.ps1",
-    "scripts\README-start-workbench.md",
+    "scripts\verify-fw-editor-viewer-live.ps1",
     "scripts\package-split-deliverables.ps1",
     "scripts\common\workbench-logging.ps1",
     "scripts\common\workbench-paths.ps1",
     "scripts\common\workbench-runtime.ps1",
     "scripts\common\workbench-health.ps1",
-    "AcRuleWorkbench\scripts\start-workbench.ps1",
+    "AcRuleWorkbench\scripts\start-fw-editor-viewer.ps1",
     "AcRuleWorkbench\scripts\start-api.ps1",
     "AcRuleWorkbench\WorkbenchApiServer.cs"
 )
@@ -84,5 +83,5 @@ Write-Host "Recommended validation:" -ForegroundColor Cyan
 Write-Host "  cd $targetRootFull"
 Write-Host "  dotnet build .\AcRuleWorkbench.sln -c Debug -p:Platform=x86"
 Write-Host "  dotnet test .\AcRuleWorkbench.Tests\AcRuleWorkbench.Tests.csproj -c Debug -p:Platform=x86"
-Write-Host "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -NoBuild -Detached"
-Write-Host "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-workbench-live.ps1 -BaseUrl http://127.0.0.1:8787"
+Write-Host "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -NoBuild -Detached"
+Write-Host "  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify-fw-editor-viewer-live.ps1 -BaseUrl http://127.0.0.1:8787"

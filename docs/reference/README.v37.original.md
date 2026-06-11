@@ -147,7 +147,7 @@ For stricter local validation:
 Start the local Workbench server:
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd" `
   -Port 8787 `
   -KillExisting
@@ -168,7 +168,7 @@ http://127.0.0.1:8787/harness
 Debug API is enabled by default in the current local engineering line. Disable it for a product-only/server-style run:
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd" `
   -Port 8787 `
   -KillExisting `
@@ -776,7 +776,7 @@ Debug routes are not product contracts. Do not use raw STC, parser-debug, flow-d
 Disable debug API:
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd" `
   -Port 8787 `
   -KillExisting `
@@ -793,7 +793,7 @@ Common local workflow:
 .\scripts\setup-dcm-deps.ps1
 .\scripts\test-code-quality.ps1
 .\scripts\build-and-doctor.ps1 -RunQualityChecks
-.\scripts\start-workbench.ps1 -FwdPath "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd" -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath "C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd" -Port 8787 -KillExisting
 .\scripts\test-api-v1.ps1 -BaseUrl http://127.0.0.1:8787
 ```
 
@@ -964,7 +964,7 @@ If unavailable:
 ```text
 confirm debug API was not disabled
 confirm you are running the current renamed AcRuleWorkbench.exe
-confirm start-workbench.ps1 points to AcRuleWorkbench.exe, not old DllInteropHarness.exe
+confirm start-fw-editor-viewer.ps1 points to AcRuleWorkbench.exe, not old DllInteropHarness.exe
 ```
 
 ### Evidence package JSON invalid

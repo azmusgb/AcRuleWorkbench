@@ -1,25 +1,33 @@
 using System;
+using System.Globalization;
 using System.Net;
 
 namespace AcRuleWorkbench.Api.V1;
 
 internal static class Phase6RuleKeys
 {
-    // NOTE: Phase 6 task requires GET /api/v1/rules/{key}.
-    // The repository already uses structural node ids (node-000000) and rule correlation keys.
-    // For Phase 6 minimal identity hydration, we start with a canonical key that is stable
-    // and unambiguous for structural nodes.
-    //
-    // Canonical: rule:<scopeType>:<scopeName>:AC:node:<nodeId>
-    // Where scopeType is "page" or "document".
+    // Canonical: rule:<scopeType>:<encodedScopeName>:AC:node:<nodeId>
+    // Where scopeType is "page" or "document" and nodeId may be either
+    // the canonical structural id (node-000005) or its integer value (5).
 
     public static string MakeForStructuralNode(string scopeType, string scopeName, int nodeId)
     {
+        if (nodeId < 0) throw new ArgumentOutOfRangeException(nameof(nodeId));
+        return MakeForStructuralNode(scopeType, scopeName, FormatNodeId(nodeId));
+    }
+
+    public static string MakeForStructuralNode(string scopeType, string scopeName, string nodeId)
+    {
         if (string.IsNullOrWhiteSpace(scopeType)) throw new ArgumentNullException(nameof(scopeType));
         if (string.IsNullOrWhiteSpace(scopeName)) throw new ArgumentNullException(nameof(scopeName));
+        if (!TryParseNodeId(nodeId, out int rawNodeId)) throw new ArgumentException("Node id must be a non-negative integer or node-000000 value.", nameof(nodeId));
 
-        string encodedScopeName = WebUtility.UrlEncode(scopeName) ?? "";
-        return $"rule:{scopeType}:{encodedScopeName}:AC:node:{nodeId}";
+        string safeScopeType = scopeType.Equals("page", StringComparison.OrdinalIgnoreCase) ? "page" :
+            scopeType.Equals("document", StringComparison.OrdinalIgnoreCase) ? "document" :
+            throw new ArgumentException("Scope type must be page or document.", nameof(scopeType));
+
+        string encodedScopeName = WebUtility.UrlEncode(scopeName) ?? string.Empty;
+        return $"rule:{safeScopeType}:{encodedScopeName}:AC:node:{FormatNodeId(rawNodeId)}";
     }
 
     public static bool TryParse(string? key, out Phase6RuleKey parsed, out string? error)
@@ -34,8 +42,9 @@ internal static class Phase6RuleKeys
         }
 
         // Expected: rule:<scopeType>:<encodedScopeName>:AC:node:<nodeId>
-        string[] parts = key.Trim().Split(':');
-        if (parts.Length < 7)
+        string trimmedKey = key!.Trim();
+        string[] parts = trimmedKey.Split(':');
+        if (parts.Length < 6)
         {
             error = "rule_key_invalid: key did not match expected format.";
             return false;
@@ -54,16 +63,14 @@ internal static class Phase6RuleKeys
             return false;
         }
 
-        // encoded scope name can contain ':' so we rebuild from parts[2..n-4]
-        // structure is: rule | scopeType | encodedScopeName... | AC | node | nodeId
-        // so we locate last 3 tokens: AC, node, nodeId
+        // Encoded scope names should normally be one segment, but this keeps
+        // manually-created keys with unencoded ':' recoverable by using the last
+        // AC:node:<nodeId> tail as the structural delimiter.
         int acIndex = -1;
         for (int i = 2; i < parts.Length; i++)
         {
             if (parts[i].Equals("AC", StringComparison.OrdinalIgnoreCase))
-            {
                 acIndex = i;
-            }
         }
 
         if (acIndex < 0 || acIndex + 2 >= parts.Length)
@@ -72,16 +79,24 @@ internal static class Phase6RuleKeys
             return false;
         }
 
-        // We expect tail: AC:node:<nodeId>
         if (!parts[acIndex + 1].Equals("node", StringComparison.OrdinalIgnoreCase))
         {
             error = "rule_key_invalid: missing node token.";
             return false;
         }
 
+        if (acIndex + 3 != parts.Length)
+        {
+            error = "rule_key_invalid: unexpected tokens after node id.";
+            return false;
+        }
+
         string encodedScopeName = string.Join(":", parts, 2, acIndex - 2);
         string decoded;
-        try { decoded = WebUtility.UrlDecode(encodedScopeName) ?? string.Empty; }
+        try
+        {
+            decoded = WebUtility.UrlDecode(encodedScopeName) ?? string.Empty;
+        }
         catch
         {
             error = "rule_key_invalid: encoded scope name is not URL-decodable.";
@@ -94,16 +109,52 @@ internal static class Phase6RuleKeys
             return false;
         }
 
-        if (!int.TryParse(parts[acIndex + 2], out int nodeId) || nodeId < 0)
+        if (!TryParseNodeId(parts[acIndex + 2], out int nodeId))
         {
             error = "rule_key_invalid: nodeId is invalid.";
             return false;
         }
 
-        parsed = new Phase6RuleKey(scopeType.Equals("page", StringComparison.OrdinalIgnoreCase) ? "page" : "document", decoded, nodeId);
+        parsed = new Phase6RuleKey(
+            scopeType.Equals("page", StringComparison.OrdinalIgnoreCase) ? "page" : "document",
+            decoded,
+            nodeId,
+            FormatNodeId(nodeId));
         return true;
+    }
+
+    public static bool TryParseNodeId(string? nodeId, out int rawNodeId)
+    {
+        rawNodeId = 0;
+        if (string.IsNullOrWhiteSpace(nodeId))
+            return false;
+
+        string text = nodeId!.Trim();
+        if (text.StartsWith("node-", StringComparison.OrdinalIgnoreCase))
+            text = text.Substring("node-".Length);
+
+        return int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out rawNodeId) && rawNodeId >= 0;
+    }
+
+    public static string FormatNodeId(int rawNodeId)
+    {
+        if (rawNodeId < 0) throw new ArgumentOutOfRangeException(nameof(rawNodeId));
+        return "node-" + rawNodeId.ToString("000000", CultureInfo.InvariantCulture);
     }
 }
 
-internal readonly record struct Phase6RuleKey(string ScopeType, string ScopeDisplayName, int NodeId);
+internal readonly struct Phase6RuleKey
+{
+    public Phase6RuleKey(string scopeType, string scopeDisplayName, int rawNodeId, string nodeId)
+    {
+        ScopeType = scopeType;
+        ScopeDisplayName = scopeDisplayName;
+        RawNodeId = rawNodeId;
+        NodeId = nodeId;
+    }
 
+    public string ScopeType { get; }
+    public string ScopeDisplayName { get; }
+    public int RawNodeId { get; }
+    public string NodeId { get; }
+}

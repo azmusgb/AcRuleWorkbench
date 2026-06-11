@@ -84,6 +84,9 @@ internal sealed class FwdObjectEdgeModel
     [JsonProperty("kind")]
     public string Kind { get; set; } = string.Empty;
 
+    [JsonProperty("ruleListPath")]
+    public string RuleListPath { get; set; } = string.Empty;
+
     [JsonProperty("source")]
     public string Source { get; set; } = string.Empty;
 
@@ -101,6 +104,9 @@ internal sealed class EditorRuleListModel
 
     [JsonProperty("kind")]
     public string Kind { get; set; } = string.Empty;
+
+    [JsonProperty("ruleListPath")]
+    public string RuleListPath { get; set; } = string.Empty;
 
     [JsonProperty("source")]
     public string Source { get; set; } = "AcTreeReport.Scope";
@@ -798,6 +804,16 @@ internal static class FormWorksEditorModelBuilder
         return model;
     }
 
+    private static string NormalizeFieldOwnerKind(string? scopeType)
+    {
+        string scope = scopeType?.Trim() ?? string.Empty;
+        if (scope.Length == 0) return "Scope";
+        if (scope.Equals("Page", StringComparison.OrdinalIgnoreCase)) return "PageType";
+        if (scope.Equals("Document", StringComparison.OrdinalIgnoreCase)) return "DocumentType";
+        if (scope.Equals("Batch", StringComparison.OrdinalIgnoreCase)) return "BatchType";
+        return scope;
+    }
+
     private static FwdObjectGraphModel BuildObjectGraph(WorkbenchSnapshot snapshot)
     {
         var graph = new FwdObjectGraphModel();
@@ -841,7 +857,7 @@ internal static class FormWorksEditorModelBuilder
 
         foreach (FieldBucket bucket in snapshot.Fwd.Fields)
         {
-            string ownerKind = string.IsNullOrWhiteSpace(bucket.ScopeType) ? "Scope" : bucket.ScopeType;
+            string ownerKind = NormalizeFieldOwnerKind(bucket.ScopeType);
             string ownerId = ObjectId(ownerKind, bucket.ScopeName);
             EnsureObject(graph, ownerKind, bucket.ScopeName, "Fwd.Fields", "Medium");
             foreach (FieldSummary field in bucket.Fields)
@@ -904,6 +920,7 @@ internal static class FormWorksEditorModelBuilder
                 RuleListId = scope.ScopeId,
                 Name = scope.Name,
                 Kind = scope.Kind,
+                RuleListPath = scope.ScopeId,
                 StructuralRuleCount = scope.StructuralRuleCount,
                 FlatInventoryCount = scope.FlatInventoryCount
             };

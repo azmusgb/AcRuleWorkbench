@@ -1,0 +1,24 @@
+
+
+/* PATCH: ensure inspector/workspace tabs are real hit-test targets above shell chrome. */
+.workspace-tabs,
+.rule-property-tabs,
+[role="tablist"] {
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.workspace-tab,
+.rule-property-tab,
+button[role="tab"],
+[role="tab"] {
+  position: relative;
+  z-index: 21;
+  pointer-events: auto;
+}
+
+.shell .workspace-tab,
+.shell button[role="tab"] {
+  isolation: isolate;
+}

@@ -27,7 +27,8 @@ internal static class Phase6RuleListKeys
             return false;
         }
 
-        Match m = KeyRegex.Match(key.Trim());
+        string trimmedKey = key!.Trim();
+        Match m = KeyRegex.Match(trimmedKey);
         if (!m.Success)
         {
             error = "rule_list_key_invalid: key did not match ruleList:(page|document):<name>:AC.";
@@ -72,6 +73,11 @@ internal static class Phase6RuleListKeys
         return Build("document", documentName);
     }
 
+    public static string BuildForOwner(string ownerType, string ownerDisplayName)
+    {
+        return Build(ownerType, ownerDisplayName);
+    }
+
     private static string Build(string ownerType, string ownerDisplayName)
     {
         string safeType = ownerType.Equals("page", StringComparison.OrdinalIgnoreCase) ? "page" : "document";
@@ -83,5 +89,15 @@ internal static class Phase6RuleListKeys
     }
 }
 
-internal readonly record struct Phase6RuleListOwner(string OwnerType, string OwnerDisplayName);
+internal readonly struct Phase6RuleListOwner
+{
+    public Phase6RuleListOwner(string ownerType, string ownerDisplayName)
+    {
+        OwnerType = ownerType;
+        OwnerDisplayName = ownerDisplayName;
+    }
+
+    public string OwnerType { get; }
+    public string OwnerDisplayName { get; }
+}
 

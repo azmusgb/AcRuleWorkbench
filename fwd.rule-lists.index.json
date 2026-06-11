@@ -1,0 +1,81 @@
+{
+  "schema": "AcRuleViewer.FwdWorkspaceIndex",
+  "schemaVersion": "1.0.0",
+  "workspace": "rule-lists",
+  "generatedAtUtc": "2026-06-11T02:39:57.231Z",
+  "ruleLists": {
+    "count": 13,
+    "items": [
+      {
+        "scopeId": "AC/Documents/DeltaCare_Doc",
+        "name": "DeltaCare_Doc",
+        "kind": "Document"
+      },
+      {
+        "scopeId": "AC/Documents/Dental_Doc",
+        "name": "Dental_Doc",
+        "kind": "Document"
+      },
+      {
+        "scopeId": "AC/Documents/General_Doc",
+        "name": "General_Doc",
+        "kind": "Document"
+      },
+      {
+        "scopeId": "AC/Documents/TEST",
+        "name": "TEST",
+        "kind": "Document"
+      },
+      {
+        "scopeId": "AC/Pages/Attachment",
+        "name": "Attachment",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/DeltaCare",
+        "name": "DeltaCare",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/DentalADA",
+        "name": "DentalADA",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/General",
+        "name": "General",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/Letter_Data",
+        "name": "Letter_Data",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/Letter_Mem",
+        "name": "Letter_Mem",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/Letter_Service",
+        "name": "Letter_Service",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/Pages/Xray",
+        "name": "Xray",
+        "kind": "Page"
+      },
+      {
+        "scopeId": "AC/System",
+        "name": "System",
+        "kind": "System"
+      }
+    ]
+  },
+  "counts": {
+    "ruleLists": 13,
+    "actionLists": 0,
+    "statusResults": 0
+  }
+}

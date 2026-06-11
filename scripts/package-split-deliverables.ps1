@@ -137,7 +137,7 @@ try {
         if ($n -match '(^|/)rri_bin(/|$)') { return $true }
         if ($n -match '(^|/)scripts/common/.*\.ps1$') { return $true }
         if ($n -match '(^|/)scripts/start-.*\.ps1$') { return $true }
-        if ($n -match '(^|/)scripts/verify-workbench-live\.ps1$') { return $true }
+        if ($n -match '(^|/)scripts/verify-fw-editor-viewer-live\.ps1$') { return $true }
         if ($n -match '(^|/)scripts/verify-fw-editor-viewer-live\.ps1$') { return $true }
         if ($n -match '(^|/)appsettings\.sample\.json$') { return $true }
         return $false
@@ -158,7 +158,7 @@ try {
         $n = $relative -replace '\\', '/'
         if ($n -match '(^|/)scripts/collect-diagnostics\.ps1$') { return $true }
         if ($n -match '(^|/)scripts/run-diagnostic\.ps1$') { return $true }
-        if ($n -match '(^|/)scripts/verify-workbench-live\.ps1$') { return $true }
+        if ($n -match '(^|/)scripts/verify-fw-editor-viewer-live\.ps1$') { return $true }
         if ($n -match '(^|/)scripts/verify-fw-editor-viewer-live\.ps1$') { return $true }
         if ($n -match '(^|/)docs/runbooks/.*\.md$') { return $true }
         if ($n -match '(^|/)docs/troubleshooting\.md$') { return $true }

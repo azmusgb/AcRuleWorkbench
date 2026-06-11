@@ -1,0 +1,112 @@
+const fs = require('fs');
+const path = require('path');
+
+async function main(){
+  const { chromium } = require('playwright');
+  const root = process.cwd();
+  const outDir = path.join(root, 'artifacts', 'viewer-stability');
+  fs.mkdirSync(outDir, { recursive:true });
+
+  const url = process.argv[2] || 'http://127.0.0.1:8787/viewer?nocache=phase7-lazy-detail';
+  const browser = await chromium.launch({ headless:false });
+  const page = await browser.newPage({ viewport:{ width:1600, height:1000 } });
+  const events = [];
+  const snapshots = [];
+
+  function log(type, data={}){
+    const row = { t:new Date().toISOString(), type, ...data };
+    events.push(row);
+    console.log(`[${type}]`, data);
+  }
+
+  page.on('console', msg => log('console', { level:msg.type(), text:msg.text().slice(0,500) }));
+  page.on('pageerror', err => log('pageerror', { message:err.message, stack:err.stack }));
+  page.on('requestfailed', req => log('requestfailed', { url:req.url(), method:req.method(), failure:req.failure()?.errorText }));
+  page.on('response', res => { if(res.status() >= 400) log('http-error', { status:res.status(), url:res.url() }); });
+
+  async function snapshot(label){
+    const data = await page.evaluate(() => ({
+      href: location.href,
+      readyState: document.readyState,
+      bodyTextLength: document.body?.innerText?.length || 0,
+      bodyChildren: document.body?.children?.length || 0,
+      workspaceView: document.body?.dataset?.workspaceView || '',
+      diagnostics: window.fwViewerDiagnostics?.() || null,
+      lazy: window.fwViewerLazyHydrationState?.() || null
+    }));
+    snapshots.push({ label, t:new Date().toISOString(), ...data });
+    console.log(`\n[SNAPSHOT:${label}]`, {
+      workspaceView:data.workspaceView,
+      bodyTextLength:data.bodyTextLength,
+      lazy:data.lazy,
+      payloadCounts:data.diagnostics?.payloadCounts,
+      hydration:data.diagnostics?.fwdApiHydrationState
+    });
+    if(data.bodyTextLength < 100 || data.bodyChildren === 0){
+      log('body-blank-detected', { label, bodyTextLength:data.bodyTextLength, bodyChildren:data.bodyChildren });
+    }
+    return data;
+  }
+
+  async function clickCenter(selector, label){
+    const loc = page.locator(selector).first();
+    const count = await loc.count();
+    if(!count){
+      log('target-missing', { label, selector });
+      return false;
+    }
+    await loc.evaluate(el => el.scrollIntoView({ block:'center', inline:'center' }));
+    await page.waitForTimeout(100);
+    const box = await loc.boundingBox();
+    if(!box) throw new Error(`No bounding box for ${label}`);
+    log('click', { label, selector });
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    return true;
+  }
+
+  async function waitForLazyResult(label){
+    await page.waitForFunction(() => {
+      const lazy = window.fwViewerLazyHydrationState?.();
+      const diag = window.fwViewerDiagnostics?.();
+      return lazy?.fwdStatus === 'loaded'
+        || lazy?.fwdStatus === 'failed'
+        || /lazy-fwd/.test(diag?.fwdApiHydrationState?.mode || '');
+    }, { timeout:30000 }).catch(() => log('lazy-wait-timeout', { label }));
+    return snapshot(`after-${label}`);
+  }
+
+  await page.goto(url, { waitUntil:'domcontentloaded', timeout:60000 });
+  await page.waitForTimeout(1200);
+  await snapshot('after-load');
+
+  await clickCenter('button[data-action="view-udfs"]', 'UDFs');
+  await waitForLazyResult('UDFs');
+
+  const targets = [
+    ['Rule Lists', 'button[data-action="view-rule-lists"]'],
+    ['Tables', 'button[data-action="view-tables"]'],
+    ['Selection Lists', 'button[data-action="view-selection-lists"]'],
+    ['Resources', 'button[data-action="view-resources"]'],
+    ['Drivers', 'button[data-action="view-drivers"]']
+  ];
+
+  for(const [label, selector] of targets){
+    await clickCenter(selector, label);
+    await page.waitForTimeout(900);
+    await snapshot(`after-${label}`);
+  }
+
+  const final = await snapshot('final');
+  const failures = events.filter(e => e.type === 'body-blank-detected' || e.type === 'pageerror' || (e.type === 'http-error' && !/favicon/i.test(e.url || '')));
+  if(final.!((lazy?.fwdStatus) === "loaded" || (lazy?.fwdStatus) === "granular")) failures.push({ type:'lazy-not-loaded', status:final.lazy?.fwdStatus, error:final.lazy?.fwdError });
+
+  const reportPath = path.join(outDir, `phase7-lazy-detail-${Date.now()}.json`);
+  fs.writeFileSync(reportPath, JSON.stringify({ url, events, snapshots, failures }, null, 2), 'utf8');
+  console.log(`\n[COMPLETE] Phase 7 lazy detail report written: ${reportPath}`);
+  console.log(`\n[SUMMARY] failures: ${failures.length}`);
+  for(const failure of failures) console.log('[FAIL]', failure);
+  await browser.close();
+  if(failures.length) process.exitCode = 1;
+}
+
+main().catch(error => { console.error(error); process.exit(1); });

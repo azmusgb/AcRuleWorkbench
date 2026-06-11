@@ -458,6 +458,28 @@ internal sealed partial class WorkbenchApiServer
             return;
         }
 
+        if (routeKey == "ac-rule-viewer.boot.json" || routeKey == "viewer/ac-rule-viewer.boot.json")
+        {
+            WriteViewerTextAsset(context, "ac-rule-viewer.boot.json", "application/json; charset=utf-8", "{}");
+            return;
+        }
+
+        if (routeKey == "ac-rule-viewer.fwd.json" || routeKey == "viewer/ac-rule-viewer.fwd.json")
+        {
+            WriteViewerTextAsset(context, "ac-rule-viewer.fwd.json", "application/json; charset=utf-8", "{}");
+            return;
+        }
+
+
+        if (IsViewerGranularSidecarRoute(routeKey))
+        {
+            string assetName = routeKey.StartsWith("viewer/", StringComparison.OrdinalIgnoreCase)
+                ? routeKey.Substring("viewer/".Length)
+                : routeKey;
+            WriteViewerTextAsset(context, assetName, "application/json; charset=utf-8", "{}");
+            return;
+        }
+
         if (routeKey == "api/workbench/status")
         {
             AddDeprecationHeaders(response, "/api/v1/status");
@@ -492,7 +514,7 @@ internal sealed partial class WorkbenchApiServer
 
         if (routeKey == "api/v1" || routeKey.StartsWith("api/v1/", StringComparison.Ordinal))
         {
-            ApiHttpResult v1Result = _v1Api.Dispatch(route, request);
+            ApiHttpResult v1Result = _v1Api.Dispatch(route, request); Console.WriteLine("[API] " + request.HttpMethod + " /" + route + (request.Url?.Query ?? string.Empty) + " -> " + v1Result.StatusCode);
             _responseWriter.WriteApiResult(response, v1Result, _options.EnableCors);
             return;
         }
@@ -1726,7 +1748,7 @@ internal sealed partial class WorkbenchApiServer
                 ok = false,
                 refreshEnabled = false,
                 error = "Workbench refresh is disabled for this server process.",
-                fix = "Use .\\scripts\\start-workbench.ps1 to generate the live viewer and start the API with refresh support, or restart this process with --allow-refresh and --viewer .\\ac-rule-viewer-live.html.",
+                fix = "Use .\\scripts\\start-fw-editor-viewer.ps1 to generate the live viewer and start the API with refresh support, or restart this process with --allow-refresh and --viewer .\\ac-rule-viewer-live.html.",
                 links = new { status = "/api/v1/status" }
             };
         }
@@ -2135,6 +2157,34 @@ internal sealed partial class WorkbenchApiServer
     }
 
 
+
+
+    private static bool IsViewerGranularSidecarRoute(string routeKey)
+    {
+        if (string.IsNullOrWhiteSpace(routeKey))
+            return false;
+
+        string key = routeKey.StartsWith("viewer/", StringComparison.OrdinalIgnoreCase)
+            ? routeKey.Substring("viewer/".Length)
+            : routeKey;
+
+        if (!key.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        foreach (char ch in key)
+        {
+            bool safe = char.IsLetterOrDigit(ch) || ch == '.' || ch == '-' || ch == '_';
+            if (!safe)
+                return false;
+        }
+
+        return key.Equals("ac-rule-viewer.manifest.json", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("ac-rule-viewer.index.json", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("rules.", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("fwd.", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("ac-rule-viewer.boot", StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("ac-rule-viewer.fwd", StringComparison.OrdinalIgnoreCase);
+    }
 
 
     private sealed class WorkbenchRefreshState

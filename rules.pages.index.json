@@ -1,0 +1,127 @@
+{
+  "schema": "AcRuleViewer.RuleScopeIndex",
+  "schemaVersion": "1.0.0",
+  "kind": "page",
+  "scopes": [
+    {
+      "scopeId": "AC/Pages/DentalADA",
+      "scopeKey": "AC_Pages_DentalADA",
+      "name": "DentalADA",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_DentalADA.tree.json",
+      "counts": {
+        "rules": 4892,
+        "nodes": 4918,
+        "edges": 4884,
+        "diagnostics": 1640,
+        "relationships": 24390
+      },
+      "estimatedBytes": 38524427
+    },
+    {
+      "scopeId": "AC/Pages/General",
+      "scopeKey": "AC_Pages_General",
+      "name": "General",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_General.tree.json",
+      "counts": {
+        "rules": 521,
+        "nodes": 550,
+        "edges": 525,
+        "diagnostics": 914,
+        "relationships": 2184
+      },
+      "estimatedBytes": 2592455
+    },
+    {
+      "scopeId": "AC/Pages/Xray",
+      "scopeKey": "AC_Pages_Xray",
+      "name": "Xray",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Xray.tree.json",
+      "counts": {
+        "rules": 7,
+        "nodes": 8,
+        "edges": 7,
+        "diagnostics": 0,
+        "relationships": 20
+      },
+      "estimatedBytes": 61137
+    },
+    {
+      "scopeId": "AC/Pages/Attachment",
+      "scopeKey": "AC_Pages_Attachment",
+      "name": "Attachment",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Attachment.tree.json",
+      "counts": {
+        "rules": 3,
+        "nodes": 4,
+        "edges": 3,
+        "diagnostics": 0,
+        "relationships": 8
+      },
+      "estimatedBytes": 46188
+    },
+    {
+      "scopeId": "AC/Pages/DeltaCare",
+      "scopeKey": "AC_Pages_DeltaCare",
+      "name": "DeltaCare",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_DeltaCare.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      },
+      "estimatedBytes": 34574
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Data",
+      "scopeKey": "AC_Pages_Letter_Data",
+      "name": "Letter_Data",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Data.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      },
+      "estimatedBytes": 34588
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Mem",
+      "scopeKey": "AC_Pages_Letter_Mem",
+      "name": "Letter_Mem",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Mem.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      },
+      "estimatedBytes": 34582
+    },
+    {
+      "scopeId": "AC/Pages/Letter_Service",
+      "scopeKey": "AC_Pages_Letter_Service",
+      "name": "Letter_Service",
+      "kind": "page",
+      "file": "rules.scope.AC_Pages_Letter_Service.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 1,
+        "edges": 0,
+        "diagnostics": 0,
+        "relationships": 0
+      },
+      "estimatedBytes": 34606
+    }
+  ]
+}

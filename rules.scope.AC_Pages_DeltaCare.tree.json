@@ -1,0 +1,3528 @@
+{
+  "schema": "AcRuleViewer.ScopeTreeSidecar",
+  "schemaVersion": "1.0.0",
+  "scopeId": "AC/Pages/DeltaCare",
+  "scopeKey": "AC_Pages_DeltaCare",
+  "kind": "page",
+  "generatedAtUtc": "2026-06-11T02:39:53.224Z",
+  "counts": {
+    "rules": 0,
+    "nodes": 1,
+    "edges": 0,
+    "diagnostics": 0,
+    "relationships": 0
+  },
+  "rulesData": {
+    "SnapshotId": "fwd-20260611-022606-2751227-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T02:26:06.2751227Z",
+    "RequireNativeOk": false,
+    "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
+    "ProcessName": "AC",
+    "ScopeCount": 13,
+    "RuleCount": 5924,
+    "Scopes": [
+      {
+        "Path": "AC/Documents/DeltaCare_Doc",
+        "ScopeType": "Document",
+        "ScopeName": "DeltaCare_Doc",
+        "RuleCount": 1,
+        "TokenCount": 8,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Documents/Dental_Doc",
+        "ScopeType": "Document",
+        "ScopeName": "Dental_Doc",
+        "RuleCount": 496,
+        "TokenCount": 10070,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Documents/General_Doc",
+        "ScopeType": "Document",
+        "ScopeName": "General_Doc",
+        "RuleCount": 2,
+        "TokenCount": 20,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Documents/TEST",
+        "ScopeType": "Document",
+        "ScopeName": "TEST",
+        "RuleCount": 2,
+        "TokenCount": 25,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/Attachment",
+        "ScopeType": "Page",
+        "ScopeName": "Attachment",
+        "RuleCount": 3,
+        "TokenCount": 50,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/DeltaCare",
+        "ScopeType": "Page",
+        "ScopeName": "DeltaCare",
+        "RuleCount": 0,
+        "TokenCount": 0,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/DentalADA",
+        "ScopeType": "Page",
+        "ScopeName": "DentalADA",
+        "RuleCount": 4892,
+        "TokenCount": 114180,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/General",
+        "ScopeType": "Page",
+        "ScopeName": "General",
+        "RuleCount": 521,
+        "TokenCount": 11776,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/Letter_Data",
+        "ScopeType": "Page",
+        "ScopeName": "Letter_Data",
+        "RuleCount": 0,
+        "TokenCount": 0,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/Letter_Mem",
+        "ScopeType": "Page",
+        "ScopeName": "Letter_Mem",
+        "RuleCount": 0,
+        "TokenCount": 0,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/Letter_Service",
+        "ScopeType": "Page",
+        "ScopeName": "Letter_Service",
+        "RuleCount": 0,
+        "TokenCount": 0,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/Pages/Xray",
+        "ScopeType": "Page",
+        "ScopeName": "Xray",
+        "RuleCount": 7,
+        "TokenCount": 114,
+        "RawTokens": [],
+        "Warnings": []
+      },
+      {
+        "Path": "AC/System",
+        "ScopeType": "System",
+        "ScopeName": "System",
+        "RuleCount": 0,
+        "TokenCount": 96,
+        "RawTokens": [],
+        "Warnings": []
+      }
+    ],
+    "Rules": [],
+    "RulesByScopeType": [
+      {
+        "Name": "Page",
+        "Count": 5423
+      },
+      {
+        "Name": "Document",
+        "Count": 501
+      }
+    ],
+    "RulesByFunction": [
+      {
+        "Name": "Formatf",
+        "Count": 921
+      },
+      {
+        "Name": "HasRegExpr",
+        "Count": 786
+      },
+      {
+        "Name": "IsEmpty",
+        "Count": 505
+      },
+      {
+        "Name": "_IRejectFields",
+        "Count": 455
+      },
+      {
+        "Name": "DeleteLines",
+        "Count": 283
+      },
+      {
+        "Name": "_ISetDocAttrConst",
+        "Count": 237
+      },
+      {
+        "Name": "CheckSLState4",
+        "Count": 236
+      },
+      {
+        "Name": "Copy",
+        "Count": 198
+      },
+      {
+        "Name": "_IIterateAllUDF",
+        "Count": 132
+      },
+      {
+        "Name": "_IGetDocAttr",
+        "Count": 114
+      },
+      {
+        "Name": "_ISetDocAttr",
+        "Count": 101
+      },
+      {
+        "Name": "SelectSelectedListTableApproxMatch",
+        "Count": 96
+      },
+      {
+        "Name": "_ITestDocAttr",
+        "Count": 93
+      },
+      {
+        "Name": "_ISetPageAttrConst",
+        "Count": 87
+      },
+      {
+        "Name": "_IGetRecordAttr",
+        "Count": 80
+      },
+      {
+        "Name": "_IBatchType",
+        "Count": 77
+      },
+      {
+        "Name": "_IWorkerType",
+        "Count": 74
+      },
+      {
+        "Name": "LogSL",
+        "Count": 72
+      },
+      {
+        "Name": "_IClearDocAttr",
+        "Count": 62
+      },
+      {
+        "Name": "ClearSL",
+        "Count": 55
+      },
+      {
+        "Name": "helper_CheckBusinessUnit",
+        "Count": 55
+      },
+      {
+        "Name": "MergeFields",
+        "Count": 55
+      },
+      {
+        "Name": "CheckCheckBox",
+        "Count": 52
+      },
+      {
+        "Name": "_ISetRecordAttr",
+        "Count": 51
+      },
+      {
+        "Name": "_IIterateOnlyFieldsUDF",
+        "Count": 49
+      },
+      {
+        "Name": "_IIterateOnlyLinesUDF",
+        "Count": 47
+      },
+      {
+        "Name": "SetFieldAttr",
+        "Count": 46
+      },
+      {
+        "Name": "FormatRegExpr",
+        "Count": 38
+      },
+      {
+        "Name": "_IIterateDynamicTableUDF",
+        "Count": 35
+      },
+      {
+        "Name": "CheckPageNum",
+        "Count": 34
+      },
+      {
+        "Name": "CheckRejects",
+        "Count": 32
+      },
+      {
+        "Name": "CheckAmount",
+        "Count": 26
+      },
+      {
+        "Name": "_IGetPageAttr",
+        "Count": 23
+      },
+      {
+        "Name": "CheckLineLength",
+        "Count": 22
+      },
+      {
+        "Name": "RectifyRangeToConstant",
+        "Count": 22
+      },
+      {
+        "Name": "_IIterateOnlyInstancesUDF",
+        "Count": 20
+      },
+      {
+        "Name": "_ISetPageAttr",
+        "Count": 20
+      },
+      {
+        "Name": "CheckColumnSum",
+        "Count": 20
+      },
+      {
+        "Name": "lookup_BillingProvider_Medicaid",
+        "Count": 20
+      },
+      {
+        "Name": "TestFieldAttr",
+        "Count": 20
+      },
+      {
+        "Name": "IsInTable",
+        "Count": 19
+      },
+      {
+        "Name": "FormatDate",
+        "Count": 18
+      },
+      {
+        "Name": "LimitLineCount",
+        "Count": 17
+      },
+      {
+        "Name": "validate_BillingProvFields",
+        "Count": 17
+      },
+      {
+        "Name": "AlignInRows4",
+        "Count": 16
+      },
+      {
+        "Name": "helper_CheckLetterAttrs",
+        "Count": 16
+      },
+      {
+        "Name": "SortFields",
+        "Count": 16
+      },
+      {
+        "Name": "validate_RenderingProvFields",
+        "Count": 16
+      },
+      {
+        "Name": "_IClearPageAttr",
+        "Count": 15
+      },
+      {
+        "Name": "CompareFields",
+        "Count": 14
+      },
+      {
+        "Name": "CheckCharPopulation",
+        "Count": 13
+      },
+      {
+        "Name": "CompareAmountFields",
+        "Count": 12
+      },
+      {
+        "Name": "FilterChars",
+        "Count": 12
+      },
+      {
+        "Name": "_IClearRecordAttr",
+        "Count": 10
+      },
+      {
+        "Name": "_IForceFERepair",
+        "Count": 10
+      },
+      {
+        "Name": "CheckCharSet",
+        "Count": 10
+      },
+      {
+        "Name": "helper_ClearCaptureError",
+        "Count": 10
+      },
+      {
+        "Name": "ParseField33",
+        "Count": 10
+      },
+      {
+        "Name": "(missing)",
+        "Count": 9
+      },
+      {
+        "Name": "validate_XCN",
+        "Count": 9
+      },
+      {
+        "Name": "ClearFieldAttr",
+        "Count": 8
+      },
+      {
+        "Name": "helper_FindSAME_driver",
+        "Count": 8
+      },
+      {
+        "Name": "helper_GetFirstFiveNumbers",
+        "Count": 8
+      },
+      {
+        "Name": "helper_MapStrToChckbox_RelCode",
+        "Count": 8
+      },
+      {
+        "Name": "LimitLineLength",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_DCFacility_Bill_Trim",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_DCFacility_BPID_Trim",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_DCFacility_Provider",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_RendProv2",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_SubFindMemberID",
+        "Count": 8
+      },
+      {
+        "Name": "PlugFuzzyMatch",
+        "Count": 8
+      },
+      {
+        "Name": "HowManyAreEmpty",
+        "Count": 7
+      },
+      {
+        "Name": "lookup_BillingProvider",
+        "Count": 7
+      },
+      {
+        "Name": "validate_Gen_DOB",
+        "Count": 7
+      },
+      {
+        "Name": "CopyLines",
+        "Count": 6
+      },
+      {
+        "Name": "DoMathAndFormat",
+        "Count": 6
+      },
+      {
+        "Name": "format_ProviderLicense",
+        "Count": 6
+      },
+      {
+        "Name": "GetFieldAttr",
+        "Count": 6
+      },
+      {
+        "Name": "lookup_BillingProvProvider_KFI",
+        "Count": 6
+      },
+      {
+        "Name": "lookup_DCFacility",
+        "Count": 6
+      },
+      {
+        "Name": "lookup_RenderingProvKFI",
+        "Count": 6
+      },
+      {
+        "Name": "validate_BillProvCSZ",
+        "Count": 6
+      },
+      {
+        "Name": "validate_RendProvCSZ",
+        "Count": 6
+      },
+      {
+        "Name": "_ITestRecordAttr",
+        "Count": 5
+      },
+      {
+        "Name": "format_DOB_NoPresentation",
+        "Count": 5
+      },
+      {
+        "Name": "lookup_BillingProvider_DC",
+        "Count": 5
+      },
+      {
+        "Name": "lookup_PatCentric_Start",
+        "Count": 5
+      },
+      {
+        "Name": "lookup_PracticeLocation",
+        "Count": 5
+      },
+      {
+        "Name": "routing_USAvsMX",
+        "Count": 5
+      },
+      {
+        "Name": "validate_OtherDOB",
+        "Count": 5
+      },
+      {
+        "Name": "_IEvalPages",
+        "Count": 4
+      },
+      {
+        "Name": "DeleteSparseRows2",
+        "Count": 4
+      },
+      {
+        "Name": "helper_AddRemarktoNTE",
+        "Count": 4
+      },
+      {
+        "Name": "routing_CheckBusinessUnit",
+        "Count": 4
+      },
+      {
+        "Name": "validate_PatInfo",
+        "Count": 4
+      },
+      {
+        "Name": "validate_ProvCSZ",
+        "Count": 4
+      },
+      {
+        "Name": "_ITestPageAttr",
+        "Count": 3
+      },
+      {
+        "Name": "CheckLineCount",
+        "Count": 3
+      },
+      {
+        "Name": "CopyFromFirstInstance",
+        "Count": 3
+      },
+      {
+        "Name": "lookup_DCFacility_EncRep_Prov",
+        "Count": 3
+      },
+      {
+        "Name": "lookup_DocType",
+        "Count": 3
+      },
+      {
+        "Name": "lookup_PatCentric_KFI",
+        "Count": 3
+      },
+      {
+        "Name": "lookup_PR_WithMCID",
+        "Count": 3
+      },
+      {
+        "Name": "parse_Name",
+        "Count": 3
+      },
+      {
+        "Name": "SubstChars",
+        "Count": 3
+      },
+      {
+        "Name": "validate_SubscriberID",
+        "Count": 3
+      },
+      {
+        "Name": "ClearCaptureError",
+        "Count": 2
+      },
+      {
+        "Name": "DeleteRegExpr",
+        "Count": 2
+      },
+      {
+        "Name": "helper_IsNewForm",
+        "Count": 2
+      },
+      {
+        "Name": "helper_SkyGen_PatientID",
+        "Count": 2
+      },
+      {
+        "Name": "KFI_Text",
+        "Count": 2
+      },
+      {
+        "Name": "lookup_DCFacility_Enc_Prov",
+        "Count": 2
+      },
+      {
+        "Name": "lookup_PatCentric_FindMemID",
+        "Count": 2
+      },
+      {
+        "Name": "lookup_PatCentric_SubLUForRoute",
+        "Count": 2
+      },
+      {
+        "Name": "lookup_PatCentric_WithMCID",
+        "Count": 2
+      },
+      {
+        "Name": "lookup_Sub_stub",
+        "Count": 2
+      },
+      {
+        "Name": "output_XML_checkRejLettertype",
+        "Count": 2
+      },
+      {
+        "Name": "validate_ADA_Corro_DOB",
+        "Count": 2
+      },
+      {
+        "Name": "validate_ArchiveOnly",
+        "Count": 2
+      },
+      {
+        "Name": "validate_Corro",
+        "Count": 2
+      },
+      {
+        "Name": "validate_PtrsVsDiags",
+        "Count": 2
+      },
+      {
+        "Name": "_IKFI",
+        "Count": 1
+      },
+      {
+        "Name": "_IMatchDocAttrConst",
+        "Count": 1
+      },
+      {
+        "Name": "format_FilterPSC",
+        "Count": 1
+      },
+      {
+        "Name": "GetToken",
+        "Count": 1
+      },
+      {
+        "Name": "helper_CheckOrigValue",
+        "Count": 1
+      },
+      {
+        "Name": "helper_COB_No_FieldChecking",
+        "Count": 1
+      },
+      {
+        "Name": "helper_COB_Yes_FieldChecking",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_DCFacility_GRP_Trim",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_Pat_DC",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_Pat_DC_stub",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_Patient_stub",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_RendProv_GRP_Trim",
+        "Count": 1
+      },
+      {
+        "Name": "lookup_SubFindCorrectedID",
+        "Count": 1
+      },
+      {
+        "Name": "MapCheckboxToString",
+        "Count": 1
+      },
+      {
+        "Name": "MapStringToCheckbox",
+        "Count": 1
+      },
+      {
+        "Name": "ParseName",
+        "Count": 1
+      },
+      {
+        "Name": "RectifySingleOCR",
+        "Count": 1
+      },
+      {
+        "Name": "routing_PuertoRico",
+        "Count": 1
+      },
+      {
+        "Name": "Uppercase",
+        "Count": 1
+      },
+      {
+        "Name": "validate_EPSDTAge",
+        "Count": 1
+      },
+      {
+        "Name": "validate_PatCSZ",
+        "Count": 1
+      },
+      {
+        "Name": "validate_SubInfo",
+        "Count": 1
+      }
+    ],
+    "RulesBySource": [
+      {
+        "Name": "OCR_AEG",
+        "Count": 5845
+      },
+      {
+        "Name": "OutputFormat",
+        "Count": 759
+      },
+      {
+        "Name": "CaseSensitive",
+        "Count": 673
+      },
+      {
+        "Name": "MaxSize",
+        "Count": 177
+      },
+      {
+        "Name": "PlugIfSinglePluggableMatch",
+        "Count": 177
+      },
+      {
+        "Name": "DeleteBlanks",
+        "Count": 170
+      },
+      {
+        "Name": "MinLinesBeforeDelete",
+        "Count": 170
+      },
+      {
+        "Name": "Compare",
+        "Count": 117
+      },
+      {
+        "Name": "ForEachF",
+        "Count": 103
+      },
+      {
+        "Name": "ForEachI",
+        "Count": 103
+      },
+      {
+        "Name": "ForEachL",
+        "Count": 103
+      },
+      {
+        "Name": "(none)",
+        "Count": 79
+      },
+      {
+        "Name": "EmptyKeyFails",
+        "Count": 66
+      },
+      {
+        "Name": "AnyEmptyKeysFails",
+        "Count": 60
+      },
+      {
+        "Name": "MaxIndexCount",
+        "Count": 60
+      },
+      {
+        "Name": "MaxMatchCount",
+        "Count": 60
+      },
+      {
+        "Name": "InputFormat",
+        "Count": 55
+      },
+      {
+        "Name": "999966666",
+        "Count": 54
+      },
+      {
+        "Name": "UndefinedIterpretedAs",
+        "Count": 40
+      },
+      {
+        "Name": "CatchResourceUnavailable",
+        "Count": 39
+      },
+      {
+        "Name": "ForEach",
+        "Count": 38
+      },
+      {
+        "Name": "SkipAppendOnBlankField",
+        "Count": 34
+      },
+      {
+        "Name": "SkipAppendOnBlankLine",
+        "Count": 34
+      },
+      {
+        "Name": "TreatMultiLineAllBlankAsBlank",
+        "Count": 34
+      },
+      {
+        "Name": "COBDCMX",
+        "Count": 33
+      },
+      {
+        "Name": "Min",
+        "Count": 28
+      },
+      {
+        "Name": "FieldRejects",
+        "Count": 27
+      },
+      {
+        "Name": "LineRejects",
+        "Count": 27
+      },
+      {
+        "Name": "1111111111",
+        "Count": 25
+      },
+      {
+        "Name": "StripSpaces",
+        "Count": 23
+      },
+      {
+        "Name": "ClearData",
+        "Count": 21
+      },
+      {
+        "Name": "RepeatInAllLines",
+        "Count": 21
+      },
+      {
+        "Name": "RepeatInLine",
+        "Count": 21
+      },
+      {
+        "Name": "EndWhiteSpaceSensitive",
+        "Count": 20
+      },
+      {
+        "Name": "InvertCharSet",
+        "Count": 20
+      },
+      {
+        "Name": "UDFName",
+        "Count": 17
+      },
+      {
+        "Name": "ToleranceWeights",
+        "Count": 16
+      },
+      {
+        "Name": "CaseSensitive2",
+        "Count": 15
+      },
+      {
+        "Name": "Table",
+        "Count": 15
+      },
+      {
+        "Name": "999955555",
+        "Count": 14
+      },
+      {
+        "Name": "sP0L",
+        "Count": 14
+      },
+      {
+        "Name": "MaxNum",
+        "Count": 13
+      },
+      {
+        "Name": "DELTACARE",
+        "Count": 12
+      },
+      {
+        "Name": "COB",
+        "Count": 11
+      },
+      {
+        "Name": "COBCAMX",
+        "Count": 11
+      },
+      {
+        "Name": "COBDC",
+        "Count": 11
+      },
+      {
+        "Name": "COBMX",
+        "Count": 11
+      },
+      {
+        "Name": "COBPR",
+        "Count": 11
+      },
+      {
+        "Name": "COBPRM",
+        "Count": 11
+      },
+      {
+        "Name": "COBVIP",
+        "Count": 11
+      },
+      {
+        "Name": "ConfidenceSpan",
+        "Count": 11
+      },
+      {
+        "Name": "ConfirmPassers",
+        "Count": 11
+      },
+      {
+        "Name": "DefaultThreshold",
+        "Count": 11
+      },
+      {
+        "Name": "RepairFailers",
+        "Count": 11
+      },
+      {
+        "Name": "Yes",
+        "Count": 11
+      },
+      {
+        "Name": "ZeroAreaCheck",
+        "Count": 11
+      },
+      {
+        "Name": "charset_1234",
+        "Count": 10
+      },
+      {
+        "Name": "MinChars",
+        "Count": 10
+      },
+      {
+        "Name": "ThresholdTable",
+        "Count": 10
+      },
+      {
+        "Name": "Columns",
+        "Count": 9
+      },
+      {
+        "Name": "lookup_Rend_GRP_RemoveExtraRows",
+        "Count": 9
+      },
+      {
+        "Name": "ProvMTVID",
+        "Count": 9
+      },
+      {
+        "Name": "selectionlist_BillingProv",
+        "Count": 9
+      },
+      {
+        "Name": "_Disabled",
+        "Count": 8
+      },
+      {
+        "Name": "0-9][0-9][0-9][0-9][0-9]\\).",
+        "Count": 8
+      },
+      {
+        "Name": "MR",
+        "Count": 8
+      },
+      {
+        "Name": "HSE",
+        "Count": 7
+      },
+      {
+        "Name": "MRMX",
+        "Count": 7
+      },
+      {
+        "Name": "MRPR",
+        "Count": 7
+      },
+      {
+        "Name": "MRPRM",
+        "Count": 7
+      },
+      {
+        "Name": "P0L",
+        "Count": 7
+      },
+      {
+        "Name": "RNA",
+        "Count": 7
+      },
+      {
+        "Name": "BracketedField",
+        "Count": 6
+      },
+      {
+        "Name": "CountMethod",
+        "Count": 6
+      },
+      {
+        "Name": "PlugCase",
+        "Count": 6
+      },
+      {
+        "Name": "SelectionListAutoPop",
+        "Count": 6
+      },
+      {
+        "Name": "0-9]\\([0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]\\)[0-9",
+        "Count": 5
+      },
+      {
+        "Name": "COBMED",
+        "Count": 5
+      },
+      {
+        "Name": "DateFormat",
+        "Count": 5
+      },
+      {
+        "Name": "YMD_for_DOB",
+        "Count": 5
+      },
+      {
+        "Name": "ADA_DetailLines_COBOnly",
+        "Count": 4
+      },
+      {
+        "Name": "CAMX",
+        "Count": 4
+      },
+      {
+        "Name": "CHS",
+        "Count": 4
+      },
+      {
+        "Name": "DCMX",
+        "Count": 4
+      },
+      {
+        "Name": "Default",
+        "Count": 4
+      },
+      {
+        "Name": "DelayEval",
+        "Count": 4
+      },
+      {
+        "Name": "DeleteDuplicateRows",
+        "Count": 4
+      },
+      {
+        "Name": "HSC",
+        "Count": 4
+      },
+      {
+        "Name": "Languages",
+        "Count": 4
+      },
+      {
+        "Name": "MEXICO",
+        "Count": 4
+      },
+      {
+        "Name": "Signature on File",
+        "Count": 4
+      },
+      {
+        "Name": "TruncateLeft",
+        "Count": 4
+      },
+      {
+        "Name": "20150701",
+        "Count": 3
+      },
+      {
+        "Name": "20151001",
+        "Count": 3
+      },
+      {
+        "Name": "ADA_DetailLines_MedicaidOnly",
+        "Count": 3
+      },
+      {
+        "Name": "COBPSM",
+        "Count": 3
+      },
+      {
+        "Name": "FBL",
+        "Count": 3
+      },
+      {
+        "Name": "FIN",
+        "Count": 3
+      },
+      {
+        "Name": "GroupFields",
+        "Count": 3
+      },
+      {
+        "Name": "GroupInstances",
+        "Count": 3
+      },
+      {
+        "Name": "MED",
+        "Count": 3
+      },
+      {
+        "Name": "MinNum",
+        "Count": 3
+      },
+      {
+        "Name": "No",
+        "Count": 3
+      },
+      {
+        "Name": "PNF",
+        "Count": 3
+      },
+      {
+        "Name": "RegularExpression",
+        "Count": 3
+      },
+      {
+        "Name": "SelectionList",
+        "Count": 3
+      },
+      {
+        "Name": "XX8",
+        "Count": 3
+      },
+      {
+        "Name": "00",
+        "Count": 2
+      },
+      {
+        "Name": "8888888889",
+        "Count": 2
+      },
+      {
+        "Name": "999990000",
+        "Count": 2
+      },
+      {
+        "Name": "AttributeName",
+        "Count": 2
+      },
+      {
+        "Name": "Blank",
+        "Count": 2
+      },
+      {
+        "Name": "DashDash",
+        "Count": 2
+      },
+      {
+        "Name": "DashNo",
+        "Count": 2
+      },
+      {
+        "Name": "FeeCopied",
+        "Count": 2
+      },
+      {
+        "Name": "HSP",
+        "Count": 2
+      },
+      {
+        "Name": "MCID",
+        "Count": 2
+      },
+      {
+        "Name": "MRPSM",
+        "Count": 2
+      },
+      {
+        "Name": "NextInstance",
+        "Count": 2
+      },
+      {
+        "Name": "selectionlist_DocType",
+        "Count": 2
+      },
+      {
+        "Name": "table_DiagCodes",
+        "Count": 2
+      },
+      {
+        "Name": "table_DocType",
+        "Count": 2
+      },
+      {
+        "Name": "Unk",
+        "Count": 2
+      },
+      {
+        "Name": "USA",
+        "Count": 2
+      },
+      {
+        "Name": "XX",
+        "Count": 2
+      },
+      {
+        "Name": "YesDash",
+        "Count": 2
+      },
+      {
+        "Name": "005010X224A2",
+        "Count": 1
+      },
+      {
+        "Name": "113",
+        "Count": 1
+      },
+      {
+        "Name": "1ST",
+        "Count": 1
+      },
+      {
+        "Name": "207",
+        "Count": 1
+      },
+      {
+        "Name": "208",
+        "Count": 1
+      },
+      {
+        "Name": "209",
+        "Count": 1
+      },
+      {
+        "Name": "210",
+        "Count": 1
+      },
+      {
+        "Name": "214",
+        "Count": 1
+      },
+      {
+        "Name": "2ND",
+        "Count": 1
+      },
+      {
+        "Name": "3RD",
+        "Count": 1
+      },
+      {
+        "Name": "4TH",
+        "Count": 1
+      },
+      {
+        "Name": "ADA_DetailLines",
+        "Count": 1
+      },
+      {
+        "Name": "BatchType",
+        "Count": 1
+      },
+      {
+        "Name": "DCEMN",
+        "Count": 1
+      },
+      {
+        "Name": "DCEMY",
+        "Count": 1
+      },
+      {
+        "Name": "DCEN",
+        "Count": 1
+      },
+      {
+        "Name": "DCEY",
+        "Count": 1
+      },
+      {
+        "Name": "DDS",
+        "Count": 1
+      },
+      {
+        "Name": "Degrees",
+        "Count": 1
+      },
+      {
+        "Name": "DR",
+        "Count": 1
+      },
+      {
+        "Name": "ExactColumns",
+        "Count": 1
+      },
+      {
+        "Name": "IgnoreShiftedDate",
+        "Count": 1
+      },
+      {
+        "Name": "II",
+        "Count": 1
+      },
+      {
+        "Name": "III",
+        "Count": 1
+      },
+      {
+        "Name": "IndexColumn",
+        "Count": 1
+      },
+      {
+        "Name": "IV",
+        "Count": 1
+      },
+      {
+        "Name": "JR",
+        "Count": 1
+      },
+      {
+        "Name": "LastNameFirst",
+        "Count": 1
+      },
+      {
+        "Name": "LastNamePrefixes",
+        "Count": 1
+      },
+      {
+        "Name": "LogLevel",
+        "Count": 1
+      },
+      {
+        "Name": "MaxEditDistance",
+        "Count": 1
+      },
+      {
+        "Name": "Maybe",
+        "Count": 1
+      },
+      {
+        "Name": "MC",
+        "Count": 1
+      },
+      {
+        "Name": "MD",
+        "Count": 1
+      },
+      {
+        "Name": "MEM_MTV_PID",
+        "Count": 1
+      },
+      {
+        "Name": "MISS",
+        "Count": 1
+      },
+      {
+        "Name": "Mode",
+        "Count": 1
+      },
+      {
+        "Name": "MRS",
+        "Count": 1
+      },
+      {
+        "Name": "MS",
+        "Count": 1
+      },
+      {
+        "Name": "NameType",
+        "Count": 1
+      },
+      {
+        "Name": "odbc_BillingProv",
+        "Count": 1
+      },
+      {
+        "Name": "OPS35",
+        "Count": 1
+      },
+      {
+        "Name": "PDC",
+        "Count": 1
+      },
+      {
+        "Name": "PHD",
+        "Count": 1
+      },
+      {
+        "Name": "PR",
+        "Count": 1
+      },
+      {
+        "Name": "Prefixes",
+        "Count": 1
+      },
+      {
+        "Name": "selectionlist_MemberDC",
+        "Count": 1
+      },
+      {
+        "Name": "SER894_All",
+        "Count": 1
+      },
+      {
+        "Name": "SER894_Stage4",
+        "Count": 1
+      },
+      {
+        "Name": "SR",
+        "Count": 1
+      },
+      {
+        "Name": "StartFromSide",
+        "Count": 1
+      },
+      {
+        "Name": "Suffixes",
+        "Count": 1
+      },
+      {
+        "Name": "table_TestingFlag",
+        "Count": 1
+      },
+      {
+        "Name": "UnitsGuesses",
+        "Count": 1
+      },
+      {
+        "Name": "UseNameAddressLogic",
+        "Count": 1
+      },
+      {
+        "Name": "UseSuffixToFindLN",
+        "Count": 1
+      },
+      {
+        "Name": "VAN",
+        "Count": 1
+      },
+      {
+        "Name": "VON",
+        "Count": 1
+      },
+      {
+        "Name": "WRP191_DCNCount",
+        "Count": 1
+      },
+      {
+        "Name": "WRP200_All",
+        "Count": 1
+      },
+      {
+        "Name": "WRP2586_DCNCount",
+        "Count": 1
+      },
+      {
+        "Name": "WRP2634_DDPRLUFlag",
+        "Count": 1
+      },
+      {
+        "Name": "WRP3762_KFIMNFReject",
+        "Count": 1
+      },
+      {
+        "Name": "WRP405_NewFacilityIDLU",
+        "Count": 1
+      },
+      {
+        "Name": "WRP4308_KeyerPresentation",
+        "Count": 1
+      },
+      {
+        "Name": "WRP4308_PLIDLU",
+        "Count": 1
+      },
+      {
+        "Name": "WRP6444_AnesDowncoding",
+        "Count": 1
+      },
+      {
+        "Name": "WRP6902_UnitCountPrompt",
+        "Count": 1
+      },
+      {
+        "Name": "zip",
+        "Count": 1
+      }
+    ],
+    "RulesByActionName": [
+      {
+        "Name": "(none)",
+        "Count": 3550
+      },
+      {
+        "Name": "Yes",
+        "Count": 849
+      },
+      {
+        "Name": "No",
+        "Count": 769
+      },
+      {
+        "Name": "None Rejected",
+        "Count": 123
+      },
+      {
+        "Name": "Plugged",
+        "Count": 103
+      },
+      {
+        "Name": "None Empty",
+        "Count": 68
+      },
+      {
+        "Name": "All",
+        "Count": 63
+      },
+      {
+        "Name": "_Disabled",
+        "Count": 62
+      },
+      {
+        "Name": "Worker is of specified type",
+        "Count": 62
+      },
+      {
+        "Name": "None",
+        "Count": 52
+      },
+      {
+        "Name": "Empty",
+        "Count": 51
+      },
+      {
+        "Name": "All Empty",
+        "Count": 49
+      },
+      {
+        "Name": "Not Plugged",
+        "Count": 49
+      },
+      {
+        "Name": "Reject: All Empty",
+        "Count": 49
+      },
+      {
+        "Name": "Okay",
+        "Count": 45
+      },
+      {
+        "Name": "_RegExMatchBaseline",
+        "Count": 43
+      },
+      {
+        "Name": "_RegExOutputBaseline",
+        "Count": 43
+      },
+      {
+        "Name": "_RegExTestValues",
+        "Count": 43
+      },
+      {
+        "Name": "Attribute is not present",
+        "Count": 43
+      },
+      {
+        "Name": "Not plugged",
+        "Count": 43
+      },
+      {
+        "Name": "OutputFormat",
+        "Count": 43
+      },
+      {
+        "Name": "CaseSensitive",
+        "Count": 41
+      },
+      {
+        "Name": "Default",
+        "Count": 32
+      },
+      {
+        "Name": "Batch is of specified type",
+        "Count": 26
+      },
+      {
+        "Name": "DelayEval",
+        "Count": 22
+      },
+      {
+        "Name": "Equal",
+        "Count": 22
+      },
+      {
+        "Name": "Languages",
+        "Count": 22
+      },
+      {
+        "Name": "Not DeltaCare",
+        "Count": 22
+      },
+      {
+        "Name": "Languages_Fields",
+        "Count": 20
+      },
+      {
+        "Name": "Reject: Not Equal",
+        "Count": 20
+      },
+      {
+        "Name": "Attribute Not Found",
+        "Count": 19
+      },
+      {
+        "Name": "COBPR",
+        "Count": 18
+      },
+      {
+        "Name": "COBPRM",
+        "Count": 18
+      },
+      {
+        "Name": "MinimumValue",
+        "Count": 18
+      },
+      {
+        "Name": "SelectionListAutoPop",
+        "Count": 17
+      },
+      {
+        "Name": "At least one empty",
+        "Count": 16
+      },
+      {
+        "Name": "DeltaCare",
+        "Count": 16
+      },
+      {
+        "Name": "Paper Claim",
+        "Count": 16
+      },
+      {
+        "Name": "Reject: At least one entry",
+        "Count": 16
+      },
+      {
+        "Name": "Reject: Bad Amount",
+        "Count": 16
+      },
+      {
+        "Name": "Reject: Failed row alignment",
+        "Count": 16
+      },
+      {
+        "Name": "Reject: No",
+        "Count": 16
+      },
+      {
+        "Name": "Reject: Not an amount",
+        "Count": 16
+      },
+      {
+        "Name": "Some Failed",
+        "Count": 16
+      },
+      {
+        "Name": "Valid amount",
+        "Count": 16
+      },
+      {
+        "Name": "RegularExpression",
+        "Count": 15
+      },
+      {
+        "Name": "Worker is not of specified type",
+        "Count": 15
+      },
+      {
+        "Name": "_ErrorCode",
+        "Count": 14
+      },
+      {
+        "Name": "Attribute is present",
+        "Count": 14
+      },
+      {
+        "Name": "Entry found",
+        "Count": 14
+      },
+      {
+        "Name": "Reject: Entries found",
+        "Count": 14
+      },
+      {
+        "Name": "Reject: Yes",
+        "Count": 13
+      },
+      {
+        "Name": "Entry not found",
+        "Count": 12
+      },
+      {
+        "Name": "Failed",
+        "Count": 11
+      },
+      {
+        "Name": "OK",
+        "Count": 11
+      },
+      {
+        "Name": "Reject: More",
+        "Count": 11
+      },
+      {
+        "Name": "Reject: None",
+        "Count": 11
+      },
+      {
+        "Name": "Reject: Some characters not in set",
+        "Count": 10
+      },
+      {
+        "Name": "MaxSize",
+        "Count": 9
+      },
+      {
+        "Name": "Multiple entries",
+        "Count": 9
+      },
+      {
+        "Name": "PlugIfSinglePluggableMatch",
+        "Count": 9
+      },
+      {
+        "Name": "Columns",
+        "Count": 8
+      },
+      {
+        "Name": "Compare",
+        "Count": 8
+      },
+      {
+        "Name": "Match",
+        "Count": 8
+      },
+      {
+        "Name": "No - Paper",
+        "Count": 8
+      },
+      {
+        "Name": "No - Prompt",
+        "Count": 8
+      },
+      {
+        "Name": "Not One",
+        "Count": 8
+      },
+      {
+        "Name": "Not the same",
+        "Count": 8
+      },
+      {
+        "Name": "Reject: Display entries",
+        "Count": 8
+      },
+      {
+        "Name": "Reject: Too few",
+        "Count": 8
+      },
+      {
+        "Name": "RP_FACILITY",
+        "Count": 8
+      },
+      {
+        "Name": "SIGNATURE",
+        "Count": 8
+      },
+      {
+        "Name": "Yes - At least one is",
+        "Count": 8
+      },
+      {
+        "Name": "DDPR",
+        "Count": 7
+      },
+      {
+        "Name": "Entries present",
+        "Count": 7
+      },
+      {
+        "Name": "No - Run rules",
+        "Count": 7
+      },
+      {
+        "Name": "SIGONFILE",
+        "Count": 7
+      },
+      {
+        "Name": "1GAUTH",
+        "Count": 6
+      },
+      {
+        "Name": "At least one",
+        "Count": 6
+      },
+      {
+        "Name": "CountMethod",
+        "Count": 6
+      },
+      {
+        "Name": "IGAUT",
+        "Count": 6
+      },
+      {
+        "Name": "IGAUTH",
+        "Count": 6
+      },
+      {
+        "Name": "Less than",
+        "Count": 6
+      },
+      {
+        "Name": "MinLengthLimit",
+        "Count": 6
+      },
+      {
+        "Name": "Reject: Equal",
+        "Count": 6
+      },
+      {
+        "Name": "SIGAUT",
+        "Count": 6
+      },
+      {
+        "Name": "SIGAUTH",
+        "Count": 6
+      },
+      {
+        "Name": "SIGNATUREONFILE",
+        "Count": 6
+      },
+      {
+        "Name": "No - Both Lookup failed (PNF",
+        "Count": 5
+      },
+      {
+        "Name": "No - Proceed with Enterprise Lookups and DC Rules",
+        "Count": 5
+      },
+      {
+        "Name": "No - Validate fields",
+        "Count": 5
+      },
+      {
+        "Name": "Not DDPR",
+        "Count": 5
+      },
+      {
+        "Name": "Reject: Invalid date",
+        "Count": 5
+      },
+      {
+        "Name": "SIGNATUREON",
+        "Count": 5
+      },
+      {
+        "Name": "Yes - One or both lookup succeeded",
+        "Count": 5
+      },
+      {
+        "Name": "Yes - Proceed with DC Rules1",
+        "Count": 5
+      },
+      {
+        "Name": "1 or 2",
+        "Count": 4
+      },
+      {
+        "Name": "3 or more",
+        "Count": 4
+      },
+      {
+        "Name": "AllowedLengths",
+        "Count": 4
+      },
+      {
+        "Name": "BENEFITSASSIGNED",
+        "Count": 4
+      },
+      {
+        "Name": "CatchResourceUnavailable",
+        "Count": 4
+      },
+      {
+        "Name": "DDC and CPP",
+        "Count": 4
+      },
+      {
+        "Name": "DELTACARE",
+        "Count": 4
+      },
+      {
+        "Name": "Greater than",
+        "Count": 4
+      },
+      {
+        "Name": "Is 25",
+        "Count": 4
+      },
+      {
+        "Name": "Is greater than 25",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_CA_MX",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_DC",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_DC_MX",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_MX",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_PR",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_PRM",
+        "Count": 4
+      },
+      {
+        "Name": "KE_COB_VIP",
+        "Count": 4
+      },
+      {
+        "Name": "Less than 6",
+        "Count": 4
+      },
+      {
+        "Name": "No - 2 or less",
+        "Count": 4
+      },
+      {
+        "Name": "Others",
+        "Count": 4
+      },
+      {
+        "Name": "Plugged - Set routing information",
+        "Count": 4
+      },
+      {
+        "Name": "Reject: Greater than",
+        "Count": 4
+      },
+      {
+        "Name": "Rows found - Try to set routing information",
+        "Count": 4
+      },
+      {
+        "Name": "SOF",
+        "Count": 4
+      },
+      {
+        "Name": "StripSpaces",
+        "Count": 4
+      },
+      {
+        "Name": "Table",
+        "Count": 4
+      },
+      {
+        "Name": "Unrestricted",
+        "Count": 4
+      },
+      {
+        "Name": "Valid length",
+        "Count": 4
+      },
+      {
+        "Name": "WorkerType",
+        "Count": 4
+      },
+      {
+        "Name": "Yes - Do \"Other\" Rules",
+        "Count": 4
+      },
+      {
+        "Name": "0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9",
+        "Count": 3
+      },
+      {
+        "Name": "Bad",
+        "Count": 3
+      },
+      {
+        "Name": "Both Empty",
+        "Count": 3
+      },
+      {
+        "Name": "Captured",
+        "Count": 3
+      },
+      {
+        "Name": "Confirmed",
+        "Count": 3
+      },
+      {
+        "Name": "Good",
+        "Count": 3
+      },
+      {
+        "Name": "IGNATUREAUTHORIZATIO",
+        "Count": 3
+      },
+      {
+        "Name": "IGNATUREAUTHORIZATION",
+        "Count": 3
+      },
+      {
+        "Name": "KE_COB_MED",
+        "Count": 3
+      },
+      {
+        "Name": "Less",
+        "Count": 3
+      },
+      {
+        "Name": "MaxLengthLimit",
+        "Count": 3
+      },
+      {
+        "Name": "No returns",
+        "Count": 3
+      },
+      {
+        "Name": "NotPlugged",
+        "Count": 3
+      },
+      {
+        "Name": "odbc_BillingProv",
+        "Count": 3
+      },
+      {
+        "Name": "One has data",
+        "Count": 3
+      },
+      {
+        "Name": "Reject: Entries found show list",
+        "Count": 3
+      },
+      {
+        "Name": "Reject: Not one",
+        "Count": 3
+      },
+      {
+        "Name": "SIGNATUREAUTHORIZATIO",
+        "Count": 3
+      },
+      {
+        "Name": "SIGNATUREAUTHORIZATION",
+        "Count": 3
+      },
+      {
+        "Name": "_RegExSubStringBaseline0",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline1",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline2",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline3",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline4",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline5",
+        "Count": 2
+      },
+      {
+        "Name": "_RegExSubStringBaseline6",
+        "Count": 2
+      },
+      {
+        "Name": "50F",
+        "Count": 2
+      },
+      {
+        "Name": "A55IGNEDT0MEOICARE",
+        "Count": 2
+      },
+      {
+        "Name": "ASSIGNEDTOMEDICARE",
+        "Count": 2
+      },
+      {
+        "Name": "ATIENTSIGNATUREONFILE",
+        "Count": 2
+      },
+      {
+        "Name": "Batch is not of specified type",
+        "Count": 2
+      },
+      {
+        "Name": "BENEFITSASSIGNE",
+        "Count": 2
+      },
+      {
+        "Name": "EDI",
+        "Count": 2
+      },
+      {
+        "Name": "ENEFITSASSIGNE",
+        "Count": 2
+      },
+      {
+        "Name": "ENEFITSASSIGNED",
+        "Count": 2
+      },
+      {
+        "Name": "Has Data",
+        "Count": 2
+      },
+      {
+        "Name": "IGNATUREONFIL",
+        "Count": 2
+      },
+      {
+        "Name": "IGNATUREONFILE",
+        "Count": 2
+      },
+      {
+        "Name": "KE_COB_PSM",
+        "Count": 2
+      },
+      {
+        "Name": "New lookup on",
+        "Count": 2
+      },
+      {
+        "Name": "NO",
+        "Count": 2
+      },
+      {
+        "Name": "No - Both DeltaCare and Enterprise eligibility",
+        "Count": 2
+      },
+      {
+        "Name": "No - Process as ENT",
+        "Count": 2
+      },
+      {
+        "Name": "Not Match",
+        "Count": 2
+      },
+      {
+        "Name": "Not okay",
+        "Count": 2
+      },
+      {
+        "Name": "Not yet",
+        "Count": 2
+      },
+      {
+        "Name": "Okay - Do lookup",
+        "Count": 2
+      },
+      {
+        "Name": "Page 1 rules",
+        "Count": 2
+      },
+      {
+        "Name": "Paper",
+        "Count": 2
+      },
+      {
+        "Name": "PATIENTNOTPRESENTFORSERVICES",
+        "Count": 2
+      },
+      {
+        "Name": "PATIENTSIGNATUREONFIL",
+        "Count": 2
+      },
+      {
+        "Name": "PATIENTSIGNATUREONFILE",
+        "Count": 2
+      },
+      {
+        "Name": "PAYPATIENT",
+        "Count": 2
+      },
+      {
+        "Name": "PAYSUBSCRIBER",
+        "Count": 2
+      },
+      {
+        "Name": "PAYTOSUBSCRIBER",
+        "Count": 2
+      },
+      {
+        "Name": "Present",
+        "Count": 2
+      },
+      {
+        "Name": "Reject: At least one empty",
+        "Count": 2
+      },
+      {
+        "Name": "Reject: Bad",
+        "Count": 2
+      },
+      {
+        "Name": "Reject: Empty",
+        "Count": 2
+      },
+      {
+        "Name": "Reject: Invalid length",
+        "Count": 2
+      },
+      {
+        "Name": "RP_SPECIALTY_CODE",
+        "Count": 2
+      },
+      {
+        "Name": "SGNATUREONFILE",
+        "Count": 2
+      },
+      {
+        "Name": "SIGNATUREAUTHORIZATION03012010",
+        "Count": 2
+      },
+      {
+        "Name": "SIGNATUREONFIL",
+        "Count": 2
+      },
+      {
+        "Name": "SIGNATUREONNOMSLULOHL22016",
+        "Count": 2
+      },
+      {
+        "Name": "Too few",
+        "Count": 2
+      },
+      {
+        "Name": "Yes - 3 or more are",
+        "Count": 2
+      },
+      {
+        "Name": "Yes - All DeltaCare eligibility",
+        "Count": 2
+      },
+      {
+        "Name": "Yes - All Enterprise elgibility.",
+        "Count": 2
+      },
+      {
+        "Name": "Yes - Check Elig table",
+        "Count": 2
+      },
+      {
+        "Name": "Yes - Process as DC",
+        "Count": 2
+      },
+      {
+        "Name": "123456789",
+        "Count": 1
+      },
+      {
+        "Name": "1234567890",
+        "Count": 1
+      },
+      {
+        "Name": "a1b2c3d4e5f6g7h8i9",
+        "Count": 1
+      },
+      {
+        "Name": "ASADSASDA",
+        "Count": 1
+      },
+      {
+        "Name": "asdas0das0",
+        "Count": 1
+      },
+      {
+        "Name": "At least 3 are",
+        "Count": 1
+      },
+      {
+        "Name": "Attribute Found",
+        "Count": 1
+      },
+      {
+        "Name": "Attribute Matched",
+        "Count": 1
+      },
+      {
+        "Name": "AttributeName",
+        "Count": 1
+      },
+      {
+        "Name": "BatchType",
+        "Count": 1
+      },
+      {
+        "Name": "BracketedField",
+        "Count": 1
+      },
+      {
+        "Name": "dasdasdsa",
+        "Count": 1
+      },
+      {
+        "Name": "DCEMN",
+        "Count": 1
+      },
+      {
+        "Name": "DCEMY",
+        "Count": 1
+      },
+      {
+        "Name": "DCPDMN",
+        "Count": 1
+      },
+      {
+        "Name": "DCPDMY",
+        "Count": 1
+      },
+      {
+        "Name": "DDC",
+        "Count": 1
+      },
+      {
+        "Name": "Deviation",
+        "Count": 1
+      },
+      {
+        "Name": "DMN",
+        "Count": 1
+      },
+      {
+        "Name": "DMY",
+        "Count": 1
+      },
+      {
+        "Name": "F12Used",
+        "Count": 1
+      },
+      {
+        "Name": "Field changed",
+        "Count": 1
+      },
+      {
+        "Name": "FieldRejects",
+        "Count": 1
+      },
+      {
+        "Name": "FIP Reject",
+        "Count": 1
+      },
+      {
+        "Name": "Found",
+        "Count": 1
+      },
+      {
+        "Name": "Got it",
+        "Count": 1
+      },
+      {
+        "Name": "InclusionValues",
+        "Count": 1
+      },
+      {
+        "Name": "It is",
+        "Count": 1
+      },
+      {
+        "Name": "Legacy",
+        "Count": 1
+      },
+      {
+        "Name": "LineRejects",
+        "Count": 1
+      },
+      {
+        "Name": "MaximumValue",
+        "Count": 1
+      },
+      {
+        "Name": "MRPR",
+        "Count": 1
+      },
+      {
+        "Name": "Multi",
+        "Count": 1
+      },
+      {
+        "Name": "New",
+        "Count": 1
+      },
+      {
+        "Name": "No - 2 or less (patient centric lookup",
+        "Count": 1
+      },
+      {
+        "Name": "No - KFI Others",
+        "Count": 1
+      },
+      {
+        "Name": "No - Not PR",
+        "Count": 1
+      },
+      {
+        "Name": "No - Patient Centric lookup",
+        "Count": 1
+      },
+      {
+        "Name": "No - Present to keyer",
+        "Count": 1
+      },
+      {
+        "Name": "No - Proceed with Lookup",
+        "Count": 1
+      },
+      {
+        "Name": "No - Reject Doc",
+        "Count": 1
+      },
+      {
+        "Name": "No - Run normal rules",
+        "Count": 1
+      },
+      {
+        "Name": "No - Run SubGroup Logic",
+        "Count": 1
+      },
+      {
+        "Name": "No returns - try to route by Subscriber",
+        "Count": 1
+      },
+      {
+        "Name": "No, it's paper",
+        "Count": 1
+      },
+      {
+        "Name": "No: AC-II or DV",
+        "Count": 1
+      },
+      {
+        "Name": "None Rejected - Reject for Member not Found",
+        "Count": 1
+      },
+      {
+        "Name": "Not",
+        "Count": 1
+      },
+      {
+        "Name": "Not a multi",
+        "Count": 1
+      },
+      {
+        "Name": "Not Empty",
+        "Count": 1
+      },
+      {
+        "Name": "Not Equal",
+        "Count": 1
+      },
+      {
+        "Name": "Not Found",
+        "Count": 1
+      },
+      {
+        "Name": "Not multis",
+        "Count": 1
+      },
+      {
+        "Name": "Not plugged - Reject",
+        "Count": 1
+      },
+      {
+        "Name": "Not present",
+        "Count": 1
+      },
+      {
+        "Name": "odbc_RenderProv",
+        "Count": 1
+      },
+      {
+        "Name": "Okay - Pat plugged",
+        "Count": 1
+      },
+      {
+        "Name": "Old",
+        "Count": 1
+      },
+      {
+        "Name": "Other",
+        "Count": 1
+      },
+      {
+        "Name": "Page 1-n rules",
+        "Count": 1
+      },
+      {
+        "Name": "Plugged - Clean up",
+        "Count": 1
+      },
+      {
+        "Name": "qwele;qjwSSIGNATUREONdasasdasdas",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: All",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Long line count",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Match",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Multiple entries",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: None checked",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Not Keyed",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Short line",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Stop and Verify",
+        "Count": 1
+      },
+      {
+        "Name": "Reject: Verify Rendering NPI",
+        "Count": 1
+      },
+      {
+        "Name": "Run Rules",
+        "Count": 1
+      },
+      {
+        "Name": "Run validation rules",
+        "Count": 1
+      },
+      {
+        "Name": "SIGINATUREAUTHORIZATION 01/18/2017",
+        "Count": 1
+      },
+      {
+        "Name": "SSLADNONRDSADS",
+        "Count": 1
+      },
+      {
+        "Name": "SSLADNONRE83IG",
+        "Count": 1
+      },
+      {
+        "Name": "Sub Plugged - Now find Patient",
+        "Count": 1
+      },
+      {
+        "Name": "UndefinedIterpretedAs",
+        "Count": 1
+      },
+      {
+        "Name": "X |\\ X",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - Don't run SubGroup logic",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - EDI",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - KFI Encounters",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - PR",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - Proceed with Lookup",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - Reject Doc",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - Reject for Member not Found",
+        "Count": 1
+      },
+      {
+        "Name": "Yes - Run RTP rules only",
+        "Count": 1
+      }
+    ],
+    "RulesByDisabledState": [
+      {
+        "Name": "PossibleDisabledSequenceOnly",
+        "Count": 5335
+      },
+      {
+        "Name": "Enabled",
+        "Count": 541
+      },
+      {
+        "Name": "DisabledDirect",
+        "Count": 48
+      }
+    ],
+    "Warnings": []
+  },
+  "treeData": {
+    "SnapshotId": "fwd-20260611-022606-2751227-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T02:26:06.2751227Z",
+    "RequireNativeOk": false,
+    "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
+    "ProcessName": "AC",
+    "ScopeCount": 13,
+    "NodeCount": 5993,
+    "RuleNodeCount": 5926,
+    "EdgeCount": 5921,
+    "DirectDisabledCount": 139,
+    "InheritedDisabledCount": 1784,
+    "MaxHierarchyLevel": 40,
+    "NonRuleTreeScopeCount": 1,
+    "DiagnosticCount": 2618,
+    "Scopes": [
+      {
+        "ScopePath": "AC/Pages/DeltaCare",
+        "ScopeType": "Page",
+        "ScopeName": "DeltaCare",
+        "NodeCount": 1,
+        "RuleNodeCount": 0,
+        "EdgeCount": 0,
+        "DirectDisabledCount": 0,
+        "InheritedDisabledCount": 0,
+        "MaxHierarchyLevel": 0,
+        "Warnings": []
+      }
+    ],
+    "Nodes": [
+      {
+        "NodeId": 501,
+        "ParentNodeId": -1,
+        "ActionListIndex": -1,
+        "HierarchyLevel": 0,
+        "RuleIndexWithinScope": 0,
+        "ScopePath": "AC/Pages/DeltaCare",
+        "ScopeType": "Page",
+        "ScopeName": "DeltaCare",
+        "IsRuleNode": false,
+        "RuleGuid": null,
+        "RuleId": null,
+        "RuleName": "Root rule list",
+        "FunctionName": null,
+        "FunctionVersion": null,
+        "Description": null,
+        "RuleListPath": "Root",
+        "StructuralPath": "Root",
+        "DisplayPath": "Root rule list",
+        "Route": [
+          {
+            "NodeId": 501,
+            "RuleGuid": null,
+            "RuleName": "Root rule list",
+            "FunctionName": null,
+            "ActionListIndex": null,
+            "ActionName": null
+          }
+        ],
+        "ActionNames": [],
+        "Sources": [],
+        "Parameters": {},
+        "Attributes": {},
+        "DisabledState": "Enabled",
+        "DisabledConfidence": "High",
+        "DisabledReason": null,
+        "DisabledAncestorNodeId": null,
+        "DisabledAncestorRuleGuid": null,
+        "DisabledAncestorRuleName": null,
+        "DisabledEvidence": []
+      }
+    ],
+    "Edges": [],
+    "Diagnostics": [],
+    "Warnings": []
+  },
+  "relData": {
+    "SnapshotId": "fwd-20260611-022606-2751227-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T02:26:06.2751227Z",
+    "RequireNativeOk": false,
+    "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
+    "ProcessName": "AC",
+    "RuleSource": "ac-rule-viewer.rules.json",
+    "RuleCount": 5911,
+    "RelationshipCount": 28708,
+    "Truncated": false,
+    "Relationships": [],
+    "RelationshipsByKind": [
+      {
+        "Name": "UsesSource",
+        "Count": 9864
+      },
+      {
+        "Name": "UsesField",
+        "Count": 8267
+      },
+      {
+        "Name": "PossibleDisabledSequenceOnlyFrom",
+        "Count": 5335
+      },
+      {
+        "Name": "MutatesField",
+        "Count": 1651
+      },
+      {
+        "Name": "RejectsField",
+        "Count": 792
+      },
+      {
+        "Name": "WritesAttribute",
+        "Count": 499
+      },
+      {
+        "Name": "UsesOption",
+        "Count": 475
+      },
+      {
+        "Name": "EmitsRejectMessage",
+        "Count": 461
+      },
+      {
+        "Name": "UsesParameter",
+        "Count": 354
+      },
+      {
+        "Name": "ReadsAttribute",
+        "Count": 319
+      },
+      {
+        "Name": "WritesField",
+        "Count": 222
+      },
+      {
+        "Name": "UsesRejectCode",
+        "Count": 121
+      },
+      {
+        "Name": "WritesFieldAttribute",
+        "Count": 109
+      },
+      {
+        "Name": "ClearsAttribute",
+        "Count": 87
+      },
+      {
+        "Name": "DisablesRuleBlock",
+        "Count": 48
+      },
+      {
+        "Name": "UsesAttribute",
+        "Count": 45
+      },
+      {
+        "Name": "ReadsFieldAttribute",
+        "Count": 41
+      },
+      {
+        "Name": "ClearsFieldAttribute",
+        "Count": 10
+      },
+      {
+        "Name": "DisabledBySource",
+        "Count": 8
+      }
+    ],
+    "RelationshipsByTargetType": [
+      {
+        "Name": "Field",
+        "Count": 11090
+      },
+      {
+        "Name": "Source",
+        "Count": 9872
+      },
+      {
+        "Name": "Rule",
+        "Count": 5335
+      },
+      {
+        "Name": "Attribute",
+        "Count": 952
+      },
+      {
+        "Name": "Option",
+        "Count": 475
+      },
+      {
+        "Name": "RejectMessage",
+        "Count": 461
+      },
+      {
+        "Name": "Parameter",
+        "Count": 354
+      },
+      {
+        "Name": "RejectCode",
+        "Count": 121
+      },
+      {
+        "Name": "RuleBlock",
+        "Count": 48
+      }
+    ],
+    "RelationshipsByParameterRole": [
+      {
+        "Name": "SourceTag",
+        "Count": 9872
+      },
+      {
+        "Name": "FieldParameter",
+        "Count": 5901
+      },
+      {
+        "Name": "DisabledSequenceFallback",
+        "Count": 5335
+      },
+      {
+        "Name": "InputField",
+        "Count": 2256
+      },
+      {
+        "Name": "MutatedField",
+        "Count": 1626
+      },
+      {
+        "Name": "AttributeName",
+        "Count": 904
+      },
+      {
+        "Name": "RejectField",
+        "Count": 767
+      },
+      {
+        "Name": "OptionParameter",
+        "Count": 596
+      },
+      {
+        "Name": "RejectMessage",
+        "Count": 461
+      },
+      {
+        "Name": "GenericParameter",
+        "Count": 354
+      },
+      {
+        "Name": "OutputField",
+        "Count": 198
+      },
+      {
+        "Name": "TargetField",
+        "Count": 158
+      },
+      {
+        "Name": "CheckboxField",
+        "Count": 56
+      },
+      {
+        "Name": "AmountField",
+        "Count": 50
+      },
+      {
+        "Name": "AttributeParameter",
+        "Count": 48
+      },
+      {
+        "Name": "DisabledMarker",
+        "Count": 48
+      },
+      {
+        "Name": "MultilineField",
+        "Count": 47
+      },
+      {
+        "Name": "CalculatedField",
+        "Count": 17
+      },
+      {
+        "Name": "GridField",
+        "Count": 8
+      },
+      {
+        "Name": "InstanceField",
+        "Count": 6
+      }
+    ],
+    "RelationshipsByFunction": [
+      {
+        "Name": "Formatf",
+        "Count": 3816
+      },
+      {
+        "Name": "HasRegExpr",
+        "Count": 3576
+      },
+      {
+        "Name": "_IRejectFields",
+        "Count": 2166
+      },
+      {
+        "Name": "IsEmpty",
+        "Count": 1597
+      },
+      {
+        "Name": "DeleteLines",
+        "Count": 1464
+      },
+      {
+        "Name": "_IIterateAllUDF",
+        "Count": 1350
+      },
+      {
+        "Name": "_IIterateOnlyLinesUDF",
+        "Count": 1016
+      },
+      {
+        "Name": "CheckSLState4",
+        "Count": 1016
+      },
+      {
+        "Name": "_ISetDocAttrConst",
+        "Count": 874
+      },
+      {
+        "Name": "Copy",
+        "Count": 829
+      },
+      {
+        "Name": "SelectSelectedListTableApproxMatch",
+        "Count": 671
+      },
+      {
+        "Name": "_IGetDocAttr",
+        "Count": 448
+      },
+      {
+        "Name": "_ISetDocAttr",
+        "Count": 406
+      },
+      {
+        "Name": "MergeFields",
+        "Count": 363
+      },
+      {
+        "Name": "lookup_RendProv2",
+        "Count": 339
+      },
+      {
+        "Name": "_IGetRecordAttr",
+        "Count": 319
+      },
+      {
+        "Name": "_ISetPageAttrConst",
+        "Count": 319
+      },
+      {
+        "Name": "validate_RenderingProvFields",
+        "Count": 292
+      },
+      {
+        "Name": "_IIterateDynamicTableUDF",
+        "Count": 290
+      },
+      {
+        "Name": "_ITestDocAttr",
+        "Count": 278
+      },
+      {
+        "Name": "validate_BillingProvFields",
+        "Count": 255
+      },
+      {
+        "Name": "lookup_PatCentric_Start",
+        "Count": 233
+      },
+      {
+        "Name": "lookup_BillingProvider",
+        "Count": 212
+      },
+      {
+        "Name": "_ISetRecordAttr",
+        "Count": 202
+      },
+      {
+        "Name": "CheckCheckBox",
+        "Count": 202
+      },
+      {
+        "Name": "SetFieldAttr",
+        "Count": 202
+      },
+      {
+        "Name": "_IIterateOnlyFieldsUDF",
+        "Count": 201
+      },
+      {
+        "Name": "lookup_DCFacility_Provider",
+        "Count": 200
+      },
+      {
+        "Name": "_IClearDocAttr",
+        "Count": 192
+      },
+      {
+        "Name": "CheckRejects",
+        "Count": 174
+      },
+      {
+        "Name": "FormatRegExpr",
+        "Count": 172
+      },
+      {
+        "Name": "helper_CheckBusinessUnit",
+        "Count": 167
+      },
+      {
+        "Name": "lookup_DCFacility",
+        "Count": 167
+      },
+      {
+        "Name": "LogSL",
+        "Count": 156
+      },
+      {
+        "Name": "lookup_BillingProvider_DC",
+        "Count": 150
+      },
+      {
+        "Name": "_IIterateOnlyInstancesUDF",
+        "Count": 147
+      },
+      {
+        "Name": "_IWorkerType",
+        "Count": 146
+      },
+      {
+        "Name": "lookup_BillingProvider_Medicaid",
+        "Count": 120
+      },
+      {
+        "Name": "_IBatchType",
+        "Count": 114
+      },
+      {
+        "Name": "_IForceFERepair",
+        "Count": 110
+      },
+      {
+        "Name": "RectifyRangeToConstant",
+        "Count": 110
+      },
+      {
+        "Name": "IsInTable",
+        "Count": 109
+      },
+      {
+        "Name": "validate_PatInfo",
+        "Count": 102
+      },
+      {
+        "Name": "_IGetPageAttr",
+        "Count": 92
+      },
+      {
+        "Name": "CheckAmount",
+        "Count": 92
+      },
+      {
+        "Name": "lookup_DCFacility_Bill_Trim",
+        "Count": 88
+      },
+      {
+        "Name": "ClearSL",
+        "Count": 87
+      },
+      {
+        "Name": "lookup_SubFindMemberID",
+        "Count": 84
+      },
+      {
+        "Name": "_ISetPageAttr",
+        "Count": 82
+      },
+      {
+        "Name": "CheckColumnSum",
+        "Count": 80
+      },
+      {
+        "Name": "CompareFields",
+        "Count": 80
+      },
+      {
+        "Name": "routing_USAvsMX",
+        "Count": 77
+      },
+      {
+        "Name": "lookup_Sub_stub",
+        "Count": 70
+      },
+      {
+        "Name": "lookup_PatCentric_SubLUForRoute",
+        "Count": 68
+      },
+      {
+        "Name": "lookup_PracticeLocation",
+        "Count": 68
+      },
+      {
+        "Name": "CheckLineLength",
+        "Count": 67
+      },
+      {
+        "Name": "FormatDate",
+        "Count": 66
+      },
+      {
+        "Name": "LimitLineCount",
+        "Count": 64
+      },
+      {
+        "Name": "SortFields",
+        "Count": 64
+      },
+      {
+        "Name": "TestFieldAttr",
+        "Count": 64
+      },
+      {
+        "Name": "validate_Corro",
+        "Count": 64
+      },
+      {
+        "Name": "validate_XCN",
+        "Count": 61
+      },
+      {
+        "Name": "CheckPageNum",
+        "Count": 60
+      },
+      {
+        "Name": "helper_SkyGen_PatientID",
+        "Count": 58
+      },
+      {
+        "Name": "ParseField33",
+        "Count": 55
+      },
+      {
+        "Name": "CheckCharPopulation",
+        "Count": 54
+      },
+      {
+        "Name": "lookup_BillingProvProvider_KFI",
+        "Count": 54
+      },
+      {
+        "Name": "lookup_RenderingProvKFI",
+        "Count": 54
+      },
+      {
+        "Name": "CompareAmountFields",
+        "Count": 51
+      },
+      {
+        "Name": "validate_OtherDOB",
+        "Count": 50
+      },
+      {
+        "Name": "AlignInRows4",
+        "Count": 48
+      },
+      {
+        "Name": "helper_CheckLetterAttrs",
+        "Count": 48
+      },
+      {
+        "Name": "lookup_DCFacility_Enc_Prov",
+        "Count": 46
+      },
+      {
+        "Name": "PlugFuzzyMatch",
+        "Count": 46
+      },
+      {
+        "Name": "parse_Name",
+        "Count": 45
+      },
+      {
+        "Name": "FilterChars",
+        "Count": 43
+      },
+      {
+        "Name": "lookup_DCFacility_EncRep_Prov",
+        "Count": 42
+      },
+      {
+        "Name": "validate_BillProvCSZ",
+        "Count": 42
+      },
+      {
+        "Name": "validate_RendProvCSZ",
+        "Count": 42
+      },
+      {
+        "Name": "_IClearPageAttr",
+        "Count": 40
+      },
+      {
+        "Name": "helper_ClearCaptureError",
+        "Count": 40
+      },
+      {
+        "Name": "lookup_DCFacility_BPID_Trim",
+        "Count": 40
+      },
+      {
+        "Name": "helper_FindSAME_driver",
+        "Count": 38
+      },
+      {
+        "Name": "CheckCharSet",
+        "Count": 36
+      },
+      {
+        "Name": "format_ProviderLicense",
+        "Count": 36
+      },
+      {
+        "Name": "validate_ArchiveOnly",
+        "Count": 36
+      },
+      {
+        "Name": "format_DOB_NoPresentation",
+        "Count": 35
+      },
+      {
+        "Name": "GetFieldAttr",
+        "Count": 35
+      },
+      {
+        "Name": "lookup_Pat_DC",
+        "Count": 35
+      },
+      {
+        "Name": "lookup_Pat_DC_stub",
+        "Count": 35
+      },
+      {
+        "Name": "LimitLineLength",
+        "Count": 34
+      },
+      {
+        "Name": "helper_GetFirstFiveNumbers",
+        "Count": 32
+      },
+      {
+        "Name": "helper_MapStrToChckbox_RelCode",
+        "Count": 32
+      },
+      {
+        "Name": "DoMathAndFormat",
+        "Count": 31
+      },
+      {
+        "Name": "CopyLines",
+        "Count": 30
+      },
+      {
+        "Name": "validate_Gen_DOB",
+        "Count": 29
+      },
+      {
+        "Name": "_IClearRecordAttr",
+        "Count": 28
+      },
+      {
+        "Name": "lookup_Patient_stub",
+        "Count": 28
+      },
+      {
+        "Name": "(missing)",
+        "Count": 26
+      },
+      {
+        "Name": "ClearFieldAttr",
+        "Count": 25
+      },
+      {
+        "Name": "HowManyAreEmpty",
+        "Count": 24
+      },
+      {
+        "Name": "lookup_PatCentric_KFI",
+        "Count": 24
+      },
+      {
+        "Name": "validate_ProvCSZ",
+        "Count": 24
+      },
+      {
+        "Name": "lookup_DocType",
+        "Count": 23
+      },
+      {
+        "Name": "lookup_PR_WithMCID",
+        "Count": 23
+      },
+      {
+        "Name": "CheckLineCount",
+        "Count": 20
+      },
+      {
+        "Name": "DeleteSparseRows2",
+        "Count": 20
+      },
+      {
+        "Name": "helper_AddRemarktoNTE",
+        "Count": 19
+      },
+      {
+        "Name": "lookup_PatCentric_FindMemID",
+        "Count": 18
+      },
+      {
+        "Name": "lookup_PatCentric_WithMCID",
+        "Count": 16
+      },
+      {
+        "Name": "routing_CheckBusinessUnit",
+        "Count": 16
+      },
+      {
+        "Name": "validate_PtrsVsDiags",
+        "Count": 16
+      },
+      {
+        "Name": "validate_SubInfo",
+        "Count": 16
+      },
+      {
+        "Name": "_ITestRecordAttr",
+        "Count": 15
+      },
+      {
+        "Name": "validate_EPSDTAge",
+        "Count": 15
+      },
+      {
+        "Name": "CopyFromFirstInstance",
+        "Count": 12
+      },
+      {
+        "Name": "DeleteRegExpr",
+        "Count": 12
+      },
+      {
+        "Name": "SubstChars",
+        "Count": 12
+      },
+      {
+        "Name": "lookup_RendProv_GRP_Trim",
+        "Count": 11
+      },
+      {
+        "Name": "routing_PuertoRico",
+        "Count": 11
+      },
+      {
+        "Name": "validate_SubscriberID",
+        "Count": 11
+      },
+      {
+        "Name": "RectifySingleOCR",
+        "Count": 10
+      },
+      {
+        "Name": "_ITestPageAttr",
+        "Count": 9
+      },
+      {
+        "Name": "helper_COB_No_FieldChecking",
+        "Count": 8
+      },
+      {
+        "Name": "helper_COB_Yes_FieldChecking",
+        "Count": 8
+      },
+      {
+        "Name": "lookup_SubFindCorrectedID",
+        "Count": 8
+      },
+      {
+        "Name": "validate_ADA_Corro_DOB",
+        "Count": 8
+      },
+      {
+        "Name": "validate_PatCSZ",
+        "Count": 7
+      },
+      {
+        "Name": "ClearCaptureError",
+        "Count": 6
+      },
+      {
+        "Name": "GetToken",
+        "Count": 6
+      },
+      {
+        "Name": "helper_IsNewForm",
+        "Count": 6
+      },
+      {
+        "Name": "output_XML_checkRejLettertype",
+        "Count": 6
+      },
+      {
+        "Name": "helper_CheckOrigValue",
+        "Count": 5
+      },
+      {
+        "Name": "lookup_DCFacility_GRP_Trim",
+        "Count": 5
+      },
+      {
+        "Name": "ParseName",
+        "Count": 5
+      },
+      {
+        "Name": "KFI_Text",
+        "Count": 4
+      },
+      {
+        "Name": "MapCheckboxToString",
+        "Count": 4
+      },
+      {
+        "Name": "MapStringToCheckbox",
+        "Count": 4
+      },
+      {
+        "Name": "_IKFI",
+        "Count": 3
+      },
+      {
+        "Name": "format_FilterPSC",
+        "Count": 3
+      },
+      {
+        "Name": "Uppercase",
+        "Count": 3
+      },
+      {
+        "Name": "_IMatchDocAttrConst",
+        "Count": 2
+      },
+      {
+        "Name": "_IEvalPages",
+        "Count": 1
+      }
+    ],
+    "Warnings": []
+  }
+}

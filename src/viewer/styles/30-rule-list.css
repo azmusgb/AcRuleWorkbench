@@ -1,0 +1,3 @@
+/* FW Editor Viewer Rule List / Action List layer. */
+.fw-editor-viewer-shell .action-list-row,
+.fw-editor-viewer-shell .rule-row{scroll-margin-block:12px;}

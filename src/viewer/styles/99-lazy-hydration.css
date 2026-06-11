@@ -1,0 +1,34 @@
+/* Phase 7: lazy detail hydration loading state. */
+.lazy-hydration-workspace {
+  min-height: min(560px, calc(100vh - 260px));
+  display: grid;
+  align-items: center;
+}
+
+.lazy-hydration-card code {
+  font-family: Cascadia Mono, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.lazy-hydration-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  margin-top: 14px;
+}
+
+.lazy-hydration-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.7;
+  animation: lazyHydrationProgress 1.1s ease-in-out infinite;
+}
+
+@keyframes lazyHydrationProgress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(260%); }
+}

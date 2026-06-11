@@ -1,0 +1,8 @@
+/* FW Editor Viewer CSS reset layer.
+   Purpose: stable global tokens and browser normalization before component CSS. */
+:root{--focus-ring:0 0 0 3px color-mix(in srgb,var(--accent,#2563eb) 22%,transparent);}
+html{color-scheme:light dark;}
+body{min-height:100vh;}
+button,input,select,textarea{font:inherit;}
+:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto;transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1;}}

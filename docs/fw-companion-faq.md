@@ -68,7 +68,7 @@ Avoid making parser/extraction terminology part of the normal product experience
 
 FWD rule inspection is dense. FW Companion is optimized for desktop use with keyboard-friendly navigation, resizable panes, and scrollable configuration windows.
 
-## Why are some internal names still `AcRuleWorkbench` or `start-workbench`?
+## Why are some internal names still `AcRuleWorkbench` or `start-fw-editor-viewer`?
 
 Those are compatibility names in the codebase and scripts. The user-facing product direction is FW Companion.
 

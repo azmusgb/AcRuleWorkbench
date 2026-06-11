@@ -31,7 +31,7 @@ lib
 ```text
 AcRuleWorkbench/scripts/build.ps1
 AcRuleWorkbench/scripts/build-and-doctor.ps1
-AcRuleWorkbench/scripts/start-workbench.ps1
+AcRuleWorkbench/scripts/start-fw-editor-viewer.ps1
 AcRuleWorkbench/scripts/start-fw-editor-viewer.cmd
 AcRuleWorkbench/scripts/start-api.ps1
 AcRuleWorkbench/scripts/start-api.cmd
@@ -53,7 +53,7 @@ Build and validate x86 layout:
 Start the workbench:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Run doctor:
@@ -97,5 +97,5 @@ rri_bin\rridc.dll
 rri_bin\rriwf2.dll
 ```
 
-If `-CopyNativeToOutput` is passed to `build-and-doctor.ps1` or `start-workbench.ps1`, the native DLLs are also copied beside the EXE.
+If `-CopyNativeToOutput` is passed to `build-and-doctor.ps1` or `start-fw-editor-viewer.ps1`, the native DLLs are also copied beside the EXE.
 

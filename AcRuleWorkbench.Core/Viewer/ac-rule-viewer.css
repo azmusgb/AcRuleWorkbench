@@ -1,3 +1,38 @@
+/* FW Editor Viewer CSS reset layer.
+   Purpose: stable global tokens and browser normalization before component CSS. */
+:root{--focus-ring:0 0 0 3px color-mix(in srgb,var(--accent,#2563eb) 22%,transparent);}
+html{color-scheme:light dark;}
+body{min-height:100vh;}
+button,input,select,textarea{font:inherit;}
+:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto;transition-duration:.01ms;animation-duration:.01ms;animation-iteration-count:1;}}
+
+
+/* FW Editor Viewer shell layer.
+   New shell selectors should land here instead of the legacy runtime bundle. */
+.fw-editor-viewer-shell .app{isolation:isolate;}
+.fw-editor-viewer-shell .pane{min-width:0;}
+.fw-editor-viewer-shell #content:empty::before{content:'Loading FW Editor configuration…';display:block;color:var(--muted,#64748b);padding:16px;}
+
+
+/* FW Editor Viewer left navigation layer. */
+.fw-editor-viewer-shell .global-view-row:focus-visible,
+.fw-editor-viewer-shell .tree-row:focus-visible{outline:2px solid var(--accent,#2563eb);outline-offset:2px;}
+
+
+/* FW Editor Viewer Rule List / Action List layer. */
+.fw-editor-viewer-shell .action-list-row,
+.fw-editor-viewer-shell .rule-row{scroll-margin-block:12px;}
+
+
+/* FW Editor Viewer inspector layer. */
+.fw-editor-viewer-shell .inspector-body{min-height:0;}
+.fw-editor-viewer-shell .fweditor-rule-properties-fieldset{min-width:0;}
+
+
+/* Legacy runtime CSS bundle quarantine.
+   This keeps current behavior stable while new work migrates selectors into 00-40 layers above.
+   Do not add new selectors below this comment. */
 /* CSS override debt reduced: typographic, cursor, and overflow micro-rules now rely on component order rather than !important.
    FW Editor Viewer v72: read-only FW Editor-style FWD configuration display, light default.
    Semantic target: docs/formworks-editor-ac-reference-guide.md and docs/editor-gap-closure-plan.md. */
@@ -11356,4 +11391,305 @@ body.fw-editor-viewer-shell .product-empty-state-actionable{
   font-style:normal;
   font-weight:800;
   text-align:center;
+}
+
+
+
+
+/* PATCH: ensure inspector/workspace tabs are real hit-test targets above shell chrome. */
+.workspace-tabs,
+.rule-property-tabs,
+[role="tablist"] {
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.workspace-tab,
+.rule-property-tab,
+button[role="tab"],
+[role="tab"] {
+  position: relative;
+  z-index: 21;
+  pointer-events: auto;
+}
+
+.shell .workspace-tab,
+.shell button[role="tab"] {
+  isolation: isolate;
+}
+
+
+
+
+/* PATCH: shell hit-test correction.
+   The shell container must not intercept pointer events from visible tab/button descendants. */
+.shell {
+  pointer-events: none;
+}
+
+.shell button,
+.shell a,
+.shell input,
+.shell select,
+.shell textarea,
+.shell label,
+.shell summary,
+.shell [role="button"],
+.shell [role="tab"],
+.shell [data-action],
+.shell [data-scope],
+.shell .workspace-tab,
+.shell .global-view-row,
+.shell .tree-node,
+.shell .chip,
+.shell .btn {
+  pointer-events: auto;
+}
+
+.workspace-tabs,
+.rule-property-tabs,
+[role="tablist"] {
+  position: relative;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.workspace-tab,
+.rule-property-tab,
+button[role="tab"],
+[role="tab"] {
+  position: relative;
+  z-index: 101;
+  pointer-events: auto;
+}
+
+
+
+
+/* PATCH: app/shell hit-test correction.
+   Prevent chrome wrapper layers from intercepting clicks intended for visible controls. */
+.app,
+.shell {
+  pointer-events: none !important;
+}
+
+.app button,
+.app a,
+.app input,
+.app select,
+.app textarea,
+.app label,
+.app summary,
+.app [role="button"],
+.app [role="tab"],
+.app [data-action],
+.app [data-scope],
+.app .workspace-tab,
+.app .rule-property-tab,
+.app .global-view-row,
+.app .scope-shortcut,
+.app .tree-node,
+.app .btn,
+.app .icon-btn,
+.app .chip,
+.app .pill,
+.app .search-input,
+.app .modal,
+.app .modal *,
+.app #modalBackdrop {
+  pointer-events: auto !important;
+}
+
+.workspace-tabs,
+.rule-property-tabs,
+[role="tablist"] {
+  position: relative !important;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+.workspace-tab,
+.rule-property-tab,
+button[role="tab"],
+[role="tab"] {
+  position: relative !important;
+  z-index: 1001 !important;
+  pointer-events: auto !important;
+  transform: translateZ(0);
+}
+
+
+
+/* PATCH: immediate boot placeholder so the viewer body never appears blank during startup. */
+.fw-boot-placeholder {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(37, 99, 235, 0.10), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  color: #0f172a;
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.fw-boot-placeholder.fw-boot-placeholder-done {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fw-boot-placeholder-card {
+  width: min(520px, 92vw);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.16);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.fw-boot-placeholder-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.fw-boot-placeholder-title {
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.fw-boot-placeholder-detail {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.fw-boot-placeholder-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+  margin-top: 8px;
+}
+
+.fw-boot-placeholder-bar span {
+  display: block;
+  height: 100%;
+  width: 42%;
+  border-radius: inherit;
+  background: #2563eb;
+  animation: fwBootPlaceholderBar 1.1s ease-in-out infinite;
+}
+
+.fw-boot-placeholder[data-state="error"] .fw-boot-placeholder-mark,
+.fw-boot-placeholder[data-state="error"] .fw-boot-placeholder-bar span {
+  background: #b91c1c;
+}
+
+@keyframes fwBootPlaceholderBar {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .fw-boot-placeholder {
+    background:
+      radial-gradient(circle at 20% 12%, rgba(96, 165, 250, 0.18), transparent 32%),
+      linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    color: #e5e7eb;
+  }
+
+  .fw-boot-placeholder-card {
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(51, 65, 85, 0.95);
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
+  }
+
+  .fw-boot-placeholder-mark {
+    background: #e5e7eb;
+    color: #020617;
+  }
+
+  .fw-boot-placeholder-detail {
+    color: #94a3b8;
+  }
+
+  .fw-boot-placeholder-bar {
+    background: #1e293b;
+  }
+}
+
+
+/* Phase 7: lazy detail hydration loading state. */
+.lazy-hydration-workspace {
+  min-height: min(560px, calc(100vh - 260px));
+  display: grid;
+  align-items: center;
+}
+
+.lazy-hydration-card code {
+  font-family: Cascadia Mono, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.lazy-hydration-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  margin-top: 14px;
+}
+
+.lazy-hydration-progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.7;
+  animation: lazyHydrationProgress 1.1s ease-in-out infinite;
+}
+
+@keyframes lazyHydrationProgress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(260%); }
+}
+
+
+/* Phase 8: granular sidecar status affordances. */
+.lazy-hydration-workspace .badge,
+.product-empty-state .badge {
+  white-space: nowrap;
+}
+
+.phase8-sidecar-note {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.phase8-sidecar-note strong {
+  font-weight: 850;
 }

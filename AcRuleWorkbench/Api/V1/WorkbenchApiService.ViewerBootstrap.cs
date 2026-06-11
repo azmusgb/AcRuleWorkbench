@@ -20,9 +20,20 @@ internal sealed partial class WorkbenchApiService
         if (!File.Exists(path!))
             return Fail(request, "FwdPathNotFound", "The configured FWD/CFD path does not exist.", 404, path, "path", "Verify the -FwdPath value supplied to the launcher.");
 
+        DateTime startedUtc = DateTime.UtcNow;
         LiveFwdSessionStatus live = _options.LiveLazyMode
             ? _liveSessionCache.GetOrOpen(path!, process, requireNativeOk)
             : BuildLiveSessionStatusFromSnapshot(GetSnapshot(request));
+
+        Console.WriteLine("[API] viewer/bootstrap mode=" + (_options.LiveLazyMode ? "live-lazy" : "snapshot")
+            + " fwd=" + Path.GetFileName(path!)
+            + " process=" + (string.IsNullOrWhiteSpace(live.ProcessName) ? "<default>" : live.ProcessName)
+            + " docs=" + live.DocumentCount
+            + " pages=" + live.PageCount
+            + " batches=" + live.BatchCount
+            + " processes=" + live.ProcessCount
+            + " pageVariants=" + live.PageVariantCount
+            + " elapsedMs=" + (long)(DateTime.UtcNow - startedUtc).TotalMilliseconds);
 
         return Ok(request, "AcWorkbench.ViewerBootstrap", BuildViewerBootstrapPayload(live), snapshotOverride: null);
     }
@@ -165,6 +176,11 @@ internal sealed partial class WorkbenchApiService
             udfs = new { count = 0, items = Array.Empty<object>(), lazy = true },
             resources = new { count = 0, items = Array.Empty<object>(), lazy = true }
         };
+
+        Console.WriteLine("[API] viewer/bootstrap payload scopes=" + scopes.Count
+            + " rules=0 nodes=0 edges=0 relationships=0"
+            + " diagnostics=" + diagnostics.Length
+            + " note=live-lazy-bootstrap-only");
 
         return new
         {
