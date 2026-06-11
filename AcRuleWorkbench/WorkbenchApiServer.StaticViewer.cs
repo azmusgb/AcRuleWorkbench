@@ -51,9 +51,9 @@ internal sealed partial class WorkbenchApiServer
         string path = HtmlEncode(_options.DefaultFwdPath ?? @"C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd");
         string oneCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\scripts\\start-fw-editor-viewer.ps1 -FwdPath \"" + path + "\" -Port 8787 -KillExisting";
         string manualCommand = "cd C:\\dev\\AcRuleWorkbench\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe ac-viewer --path \"" + path + "\" --out .\\ac-rule-viewer-live.html\n.\\AcRuleWorkbench\\bin\\x86\\Debug\\net48\\AcRuleWorkbench.exe api --path \"" + path + "\" --port 8787 --viewer .\\ac-rule-viewer-live.html --allow-refresh";
-        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>FW Editor Viewer not generated</title>" +
+        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>FormWorks Editor Viewer not generated</title>" +
                "<style>body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}main{max-width:1040px;margin:44px auto;padding:0 22px}.card{background:white;border:1px solid #d7e0eb;border-radius:22px;padding:26px;box-shadow:0 18px 50px rgba(15,23,42,.10)}h1{margin:0 0 10px;font-size:28px}h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:#475569;margin:24px 0 8px}p{color:#64748b;line-height:1.55}.facts{display:grid;grid-template-columns:160px 1fr;gap:8px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:16px 0}.facts b{color:#334155}pre{background:#101827;color:#eaf2ff;border-radius:14px;padding:16px;overflow:auto;white-space:pre-wrap}a{color:#3157d5;font-weight:800}.note{border-left:4px solid #3157d5;background:#eef3ff;padding:12px 14px;border-radius:12px;color:#334155}</style></head>" +
-               "<body><main><section class=\"card\"><h1>FW Editor Viewer file missing</h1><p>The API process is running, but no static <code>ac-rule-viewer.html</code> is attached or discoverable. This is a server setup issue, not an extraction failure.</p>" +
+               "<body><main><section class=\"card\"><h1>FormWorks Editor Viewer file missing</h1><p>The API process is running, but no static <code>ac-rule-viewer.html</code> is attached or discoverable. This is a server setup issue, not an extraction failure.</p>" +
                "<div class=\"facts\"><b>FWD path</b><span><code>" + path + "</code></span><b>Expected viewer</b><span><code>ac-rule-viewer.html</code></span><b>Best fix</b><span>Use the unified start script below. It prepares the viewer and starts the API.</span></div>" +
                "<h2>Recommended command</h2><pre>" + oneCommand + "</pre>" +
                "<h2>Manual command</h2><pre>" + manualCommand + "</pre>" +
@@ -75,7 +75,7 @@ internal sealed partial class WorkbenchApiServer
         html.AppendLine("<head>");
         html.AppendLine("<meta charset=\"utf-8\">");
         html.AppendLine("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">");
-        html.AppendLine("<title>FW Editor Viewer Developer Harness</title>");
+        html.AppendLine("<title>FormWorks Editor Viewer Developer Harness</title>");
         html.AppendLine("<style>");
         html.AppendLine("body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}");
         html.AppendLine("main{max-width:1100px;margin:40px auto;padding:0 20px}");
@@ -87,7 +87,7 @@ internal sealed partial class WorkbenchApiServer
         html.AppendLine("</style>");
         html.AppendLine("</head>");
         html.AppendLine("<body><main><section class=\"card\">");
-        html.AppendLine("<h1>FW Editor Viewer Developer Harness</h1>");
+        html.AppendLine("<h1>FormWorks Editor Viewer Developer Harness</h1>");
         html.AppendLine("<p class=\"muted\">Fallback diagnostic harness loaded. Product clients should use /api/v1 and /api/v1/openapi.json.</p>");
         html.AppendLine("<label>FWD path</label>");
         html.Append("<input id=\"path\" value=\"");

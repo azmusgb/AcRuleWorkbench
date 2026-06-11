@@ -59,6 +59,8 @@ for (const [name, text] of Object.entries({ html: files.html, coreHtml: files.co
   assertIncludes(name, text, `data-ui-build="${viewerBuild}"`);
   assertIncludes(name, text, `ac-rule-viewer.css?v=${cacheKey}`);
   assertIncludes(name, text, `ac-rule-viewer.js?v=${cacheKey}`);
+  assertIncludes(name, text, 'FormWorks Editor Viewer');
+  assert(!text.includes('toggle-mobile-nav'), `${name} must not expose mobile navigation in the desktop-only viewer`);
   assert(!/data-ui-build="v(?:8[0-9]|9[0-2])-fw-editor-viewer"/.test(text), `${name} must not advertise stale pre-${viewerBuild} markers`);
 }
 
@@ -88,7 +90,7 @@ assert(readDir('src/viewer/styles').filter(name => name.endsWith('.css')).length
 assert(exists('tests/fixtures/viewer-minimal/ac-rule-viewer.rules.json'), 'browser fixture rules sidecar is required');
 assert(exists('tests/fixtures/viewer-minimal/ac-rule-viewer.rel.json'), 'browser fixture relationships sidecar is required');
 assert(exists('tests/fixtures/viewer-minimal/ac-rule-viewer.tree.json'), 'browser fixture tree sidecar is required');
-assert(exists('tests/fixtures/viewer-minimal/ac-rule-viewer.fwd.json'), 'browser fixture FWD resource sidecar is required');
+assert(exists('tests/fixtures/viewer-minimal/fwd-hierarchy.fixture.json'), 'tracked browser fixture FWD resource sidecar is required');
 assert(!read('tests/browser/fw-editor-viewer.behavior.spec.js').includes('describe.skip'), 'browser behavior tests must not skip in source-clean packages');
 assert(!read('tests/browser/fw-editor-viewer-resource-workspaces.spec.js').includes('describe.skip'), 'resource browser tests must not skip in source-clean packages');
 
@@ -98,6 +100,14 @@ assert.deepStrictEqual([...new Set(dupes)], [], `Duplicate top-level JS function
 for (const helper of ['selectedPathIds','isHotspotNode','selectedActionList','childActionListGroups','renderGlobalDefinitionExplorer','isGlobalDefinitionView','globalWorkspaceViews','commandRegistry','executeCommand']) {
   assert(rootFns.includes(helper), `Missing required viewer helper function: ${helper}`);
 }
+for (const helper of ['buildFwdEditorIndex','renderGlobalNavigation','renderEditorObject','ruleFunctionPropertyHtml','ruleChildrenPropertyHtml','ruleReferencesPropertyHtml','ruleDiagnosticsPropertyHtml']) {
+  assert(rootFns.includes(helper), `Missing FormWorks Editor Viewer helper function: ${helper}`);
+}
+assertIncludes('viewer JS', files.js, 'Fwd.GetDocsInBatch');
+assertIncludes('viewer JS', files.js, 'Fwd.GetPagesInDoc');
+assertIncludes('viewer JS', files.js, 'Status Results / Actions');
+assertIncludes('viewer JS', files.js, 'Children / Sub-lists');
+assertIncludes('viewer JS', files.js, 'Source / Raw');
 
 assert(files.js.includes("const globalMode=isGlobalDefinitionView(state.workspaceView||'structure');"), 'fweditor-global-mode must be limited to global resource views');
 assert(!files.js.includes("const workspaceActive=validWorkspaceViews().includes(state.workspaceView||'structure');"), 'fweditor-global-mode must not be derived from every valid workspace');
@@ -108,6 +118,8 @@ assert(!files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details={})'
 assert(files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details)'), 'diagnostic bridge should receive the original diagnostic details payload');
 
 for (const [name, css] of Object.entries({ css: files.css, coreCss: files.coreCss })) {
+  assertIncludes(name, css, 'min-width: 1280px');
+  assertIncludes(name, css, 'grid-template-columns: var(--fwe-left-width) minmax(0, 1fr)');
   assert(!/body\.fweditor-global-mode\s+\.main-head\s*\{\s*display\s*:\s*none\s*!important\s*;?\s*\}/m.test(css), `${name} must not hide .main-head in fweditor-global-mode`);
   assert(!/body\.fweditor-global-mode\s+#content\s*\{[^}]*overflow\s*:\s*hidden\s*;[^}]*\}/m.test(css), `${name} must not force #content overflow:hidden in fweditor-global-mode`);
   assert(!/body\.editor-mode\b/.test(css), `${name} default bundle must not contain body.editor-mode legacy selectors`);
@@ -141,7 +153,11 @@ assert(!read('README.md').includes('README_FW_EDITOR_VIEWER_V91.md'), 'README.md
 if (exists('UPDATE_FILES_MANIFEST.txt')) assert(!read('UPDATE_FILES_MANIFEST.txt').includes('v89'), 'update manifest must not mention stale v89 package');
 
 assert(csharpFiles.extractionClient.includes('public sealed partial class FormWorksExtractionClient'), 'FormWorksExtractionClient must be partial after C# split');
+assert(csharpFiles.extractionClient.includes('fwd.GetDocsInBatch(batch)'), 'FWD extraction must preserve batch-to-document ownership');
+assert(csharpFiles.extractionClient.includes('fwd.GetPagesInDoc(document)'), 'FWD extraction must preserve document-to-page ownership');
 assert(csharpFiles.apiService.includes('internal sealed partial class WorkbenchApiService'), 'WorkbenchApiService must remain partial after API split');
+assert(csharpFiles.apiService.includes('parentBatchKeys'), 'FWD document DTOs must expose parent batch keys');
+assert(csharpFiles.apiService.includes('parentDocumentKeys'), 'FWD page DTOs must expose parent document keys');
 assert(csharpFiles.apiDispatch.includes('public ApiHttpResult Dispatch'), 'WorkbenchApiService dispatch should be split into its own partial');
 assert(csharpFiles.apiRuleLists.includes('BuildPhase6RuleListDto'), 'Rule List endpoints should be split into their own partial');
 assert(exists('AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerExport.cs'), 'viewer export extraction partial is required');

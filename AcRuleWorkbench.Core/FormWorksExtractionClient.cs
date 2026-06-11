@@ -99,6 +99,7 @@ public sealed partial class FormWorksExtractionClient : IFormWorksExtractionClie
             AddRangeSafe(report.Pages, () => fwd.GetPageNames(), report, "pages");
             AddRangeSafe(report.Batches, () => fwd.GetBatchNames(), report, "batches");
             AddRangeSafe(report.Processes, () => fwd.GetProcessNames(), report, "processes");
+            PopulateConfiguredHierarchy(fwd, report);
 
             foreach (string page in report.Pages)
             {
@@ -1741,6 +1742,29 @@ private static void ParseAcScopeNode(
         catch (Exception ex)
         {
             report.Warnings.Add($"Could not read {label}: {ex.Message}");
+        }
+    }
+
+    private static void PopulateConfiguredHierarchy(Fwd fwd, FwdInspectionReport report)
+    {
+        foreach (string batch in report.Batches)
+        {
+            var documents = new List<string>();
+            AddRangeSafe(documents, () => fwd.GetDocsInBatch(batch), report, $"documents in batch '{batch}'");
+            report.DocsInBatch[batch] = documents
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        foreach (string document in report.Documents)
+        {
+            var pages = new List<string>();
+            AddRangeSafe(pages, () => fwd.GetPagesInDoc(document), report, $"pages in document '{document}'");
+            report.PagesInDoc[document] = pages
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
     }
 

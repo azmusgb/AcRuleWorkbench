@@ -422,7 +422,7 @@ internal sealed partial class WorkbenchApiService
 
         return new
         {
-            service = "FW Editor Viewer API",
+            service = "FormWorks Editor Viewer API",
             apiVersion = "1.0.0",
             ok = true,
             mode = "local-read-only",
@@ -1343,12 +1343,27 @@ internal sealed partial class WorkbenchApiService
     private object BuildFwdDocuments(WorkbenchSnapshot snapshot, HttpListenerRequest request)
     {
         string? q = Get(request, "q");
+        var parentBatchesByDocument = snapshot.Fwd.DocsInBatch
+            .SelectMany(pair => pair.Value.Select(document => new { document, batch = pair.Key }))
+            .GroupBy(item => item.document, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(item => item.batch).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToArray(),
+                StringComparer.OrdinalIgnoreCase);
         var items = snapshot.Fwd.Documents
             .Where(d => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(d, q))
             .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
             .Select(d => new
             {
+                key = "document:" + d,
+                type = "documentType",
                 name = d,
+                parentBatchKeys = parentBatchesByDocument.TryGetValue(d, out string[]? batches)
+                    ? batches.Select(batch => "batch:" + batch).ToArray()
+                    : Array.Empty<string>(),
+                pageKeys = snapshot.Fwd.PagesInDoc.TryGetValue(d, out List<string>? pages)
+                    ? pages.Select(page => "page:" + page).ToArray()
+                    : Array.Empty<string>(),
                 links = new
                 {
                     fields = "/api/v1/fwd/fields?scopeType=Document&scopeName=" + UrlEncode(d),
@@ -1371,8 +1386,15 @@ internal sealed partial class WorkbenchApiService
             .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
             .Select(p => new
             {
+                key = "page:" + p,
+                type = "pageType",
                 name = p,
                 variantCount = variantsByPage.TryGetValue(p, out int count) ? count : 0,
+                parentDocumentKeys = snapshot.Fwd.PagesInDoc
+                    .Where(pair => pair.Value.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    .Select(pair => "document:" + pair.Key)
+                    .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .ToArray(),
                 links = new
                 {
                     variants = "/api/v1/fwd/page-variants?page=" + UrlEncode(p),
@@ -1391,7 +1413,16 @@ internal sealed partial class WorkbenchApiService
         var items = snapshot.Fwd.Batches
             .Where(b => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(b, q))
             .OrderBy(b => b, StringComparer.OrdinalIgnoreCase)
-            .Select(b => new { name = b, links = new { scopes = "/api/v1/scopes?q=" + UrlEncode(b) } })
+            .Select(b => new
+            {
+                key = "batch:" + b,
+                type = "batchType",
+                name = b,
+                documentKeys = snapshot.Fwd.DocsInBatch.TryGetValue(b, out List<string>? documents)
+                    ? documents.Select(document => "document:" + document).ToArray()
+                    : Array.Empty<string>(),
+                links = new { scopes = "/api/v1/scopes?q=" + UrlEncode(b) }
+            })
             .ToList();
 
         return new { count = items.Count, items };

@@ -42,7 +42,7 @@ let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
 const viewerDiagnostics = {
-  build: 'v103-fw-editor-viewer',
+  build: 'v104-fw-editor-viewer',
   bootStartedAtUtc: new Date().toISOString(),
   events: [],
   fetches: [],
@@ -302,7 +302,7 @@ function beginFwdApiHydration(reason='manual'){
     }
   }).catch(error=>{
     recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
-    console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
+    console.warn('FormWorks Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
 }
@@ -871,7 +871,7 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const viewerStateBuild='v103-fw-editor-viewer';
+const viewerStateBuild='v104-fw-editor-viewer';
 const storeKey=`fw-editor-viewer-${viewerStateBuild}`;
 const themeStoreKey=`${storeKey}-theme`;
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
@@ -981,20 +981,20 @@ function definitionSearchText(row){
 function safeJson(s,fallback){
   try { return JSON.parse(s); }
   catch (error) {
-    console.warn('FW Editor Viewer: failed to parse JSON state; using fallback.', error);
+    console.warn('FormWorks Editor Viewer: failed to parse JSON state; using fallback.', error);
     return fallback;
   }
 }
 function readStorage(key){
   try { return window.localStorage ? localStorage.getItem(key) : null; }
   catch (error) {
-    console.warn('FW Editor Viewer: localStorage read failed.', error);
+    console.warn('FormWorks Editor Viewer: localStorage read failed.', error);
     return null;
   }
 }
 function writeStorage(key,value){
   try { if (window.localStorage) localStorage.setItem(key,value); }
-  catch (error) { console.warn('FW Editor Viewer: localStorage write failed.', error); }
+  catch (error) { console.warn('FormWorks Editor Viewer: localStorage write failed.', error); }
 }
 function readState(){
   const saved=safeJson(readStorage(storeKey)||'{}',{});
@@ -1006,12 +1006,14 @@ function readState(){
   return {
     scopeId:saved.scopeId||'',query:'',treeQuery:'',scopeQuery:'',scopeKindFilter:saved.scopeKindFilter||'all',treeFilter:'all',
     selectedType:'scope',selectedId:'',expanded:new Set(),collapsedActionLists:new Set(),
+    selectedEditorObjectKey:text(saved.selectedEditorObjectKey||''),
+    fwdExpanded:new Set(Array.isArray(saved.fwdExpanded)?saved.fwdExpanded:['fwd:root','group:batches','group:documents','group:pages','group:resources']),
     workspaceView:saved.workspaceView&&saved.workspaceView!=='overview'?saved.workspaceView:'structure',
     fieldResolutionFilter:saved.fieldResolutionFilter||'unresolved',
     inventoryFilter:['all','StructuralMatch','AdditionalRule','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:'all',
     messageFilter:normalizeMessageFilter(saved.messageFilter),
     inspectorView:(()=>{const view=savedInspectorView==='config'?'fields':savedInspectorView==='actions'?'status-results':savedInspectorView;return ['general','fields','attributes','status-results','description','references','messages','raw','summary'].includes(view)?view:'general';})(),
-    rulePropertyPage:(()=>{const page=text(saved.rulePropertyPage||savedInspectorView||'general');const normalized=page==='summary'?'general':page==='config'?'fields':page==='actions'?'status-results':page;return ['general','fields','attributes','status-results','description'].includes(normalized)?normalized:'general';})(),
+    rulePropertyPage:(()=>{const page=text(saved.rulePropertyPage||savedInspectorView||'summary');const normalized=page==='general'?'summary':page==='config'?'fields':page==='actions'?'status-results':page;return ['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(normalized)?normalized:'summary';})(),
     focusNodeId:'',theme:['light','dark'].includes(saved.theme)?saved.theme:'light',density:saved.density==='high'?'high':'standard',modal:'',
     selectedResourceKey:saved.selectedResourceKey||'',
     selectedFunctionName:saved.selectedFunctionName||'',
@@ -2048,7 +2050,7 @@ function installPaneResizers(){
 function reportUiError(context,error){
   const message=error&&error.message?error.message:String(error||'Unknown error');
   if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','ui-error',{context,message,stack:error&&error.stack?String(error.stack).slice(0,4000):''});
-  console.error(`FW Editor Viewer ${context} failed:`, error);
+  console.error(`FormWorks Editor Viewer ${context} failed:`, error);
   const banner=optionalElement('globalErrorBanner');
   if(banner){
     banner.textContent=`${context==='data load'?'FWD snapshot load error':'Editor viewer error'}: ${message}`;
@@ -2145,6 +2147,7 @@ function addUniqueIndex(map,key,id){if(!key)return;if(!map.has(key))map.set(key,
 function uniqueLookup(map,key){const hits=key&&map.get(key);return hits&&hits.length===1?hits[0]:'';}
 function correlationNodeId(x,exact,guid,nameFn){return exact.get(ruleKeyParts(x))||uniqueLookup(guid,scopedGuidKey(x))||uniqueLookup(nameFn,scopedNameFunctionKey(x))||'';}
 /** Build the normalized client-side indexes used by the tree, inspector, and search. */
+
 function buildModel(){
   const scopes=new Map();
   const upsertScope=x=>{
@@ -2445,6 +2448,7 @@ function setEditorModeClasses(){
   // That class belongs to an older full-screen mimic layer and hides the topbar/main head.
   // The current read-only shell is controlled by `fw-editor-viewer-shell` only.
   document.body.classList.remove('editor-mode');
+  if(editorShell)document.body.classList.remove('layout-v61');
   document.body.classList.toggle('advanced-mode',isAdvancedMode());
   document.body.classList.toggle('fweditor-global-mode',globalMode);
   document.body.classList.toggle('global-workspace',globalMode);
@@ -2474,8 +2478,8 @@ function globalViewHeading(view=state.workspaceView){
 }
 
 function workspaceHeroHtml(options={}){
-  const eyebrow=text(options.eyebrow||'FW Editor Viewer');
-  const title=text(options.title||'FW Editor Viewer');
+  const eyebrow=text(options.eyebrow||'FormWorks Editor Viewer');
+  const title=text(options.title||'FormWorks Editor Viewer');
   const caption=text(options.caption||'Read-only FWD configuration browsing.');
   const metrics=list(options.metrics).filter(Boolean);
   const actions=text(options.actions||'');
@@ -2557,7 +2561,7 @@ function processPanelHtml(scope=currentScope()){
 function scopeBannerHtml(scope=currentScope()){
   const kind=editorScopeKind(scope);
   const process=text(state.selectedProcessName).trim();
-  return `<div class="editor-scope-banner"><div><span class="workspace-eyebrow">FW Editor Viewer</span><b>Scope: ${esc(kind)} / ${esc(scope.name||scope.scopeId)}</b><small>${esc(scope.scopeId||'FWD scope')} - read-only FW Editor-style AC configuration.</small></div><div class="editor-scope-badges"><span class="head-chip kind">${esc(kind)}</span>${process?`<span class="head-chip active">Process: ${esc(process)}</span>`:''}<span class="head-chip">${fmt(scopedRuleNodes().length)} rules</span><span class="head-chip">read-only</span></div></div>`;
+  return `<div class="editor-scope-banner"><div><span class="workspace-eyebrow">FormWorks Editor Viewer</span><b>Scope: ${esc(kind)} / ${esc(scope.name||scope.scopeId)}</b><small>${esc(scope.scopeId||'FWD scope')} - read-only FormWorks Editor-style AC configuration.</small></div><div class="editor-scope-badges"><span class="head-chip kind">${esc(kind)}</span>${process?`<span class="head-chip active">Process: ${esc(process)}</span>`:''}<span class="head-chip">${fmt(scopedRuleNodes().length)} rules</span><span class="head-chip">read-only</span></div></div>`;
 }
 function statusActionPreviewHtml(){
   const actionList=selectedActionList();
@@ -2597,7 +2601,7 @@ function workspaceTabDefinitions(){
   ];
 }
 function fweditorMenuStripHtml(){
-  return `<div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FW Editor Viewer</b></div>`;
+  return `<div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FormWorks Editor Viewer</b></div>`;
 }
 function fweditorViewStripHtml(activeView=state.workspaceView){
   const groups=[
@@ -2625,7 +2629,7 @@ function fweditorRootClass(baseClass){
   return `${baseClass} ${editorPaneSizeClasses()}${state.editorMessageExpanded?' message-expanded':''}`;
 }
 function fweditorTreeSplitterHtml(){
-  return `<div class="fweditor-splitter fweditor-tree-splitter" role="separator" aria-label="Resize FW Editor Viewer navigation" aria-orientation="vertical" tabindex="0" data-editor-resize="tree"></div>`;
+  return `<div class="fweditor-splitter fweditor-tree-splitter" role="separator" aria-label="Resize FormWorks Editor Viewer navigation" aria-orientation="vertical" tabindex="0" data-editor-resize="tree"></div>`;
 }
 function fweditorMessageSplitterHtml(){
   return `<div class="fweditor-splitter fweditor-load-status-splitter" role="separator" aria-label="Resize Load Status" aria-orientation="horizontal" tabindex="0" data-editor-resize="message"></div>`;
@@ -2660,7 +2664,7 @@ function fweditorScopeTreeHtml(selectedScopeId=state.scopeId){
     const omitted=items.length>700?`<div class="fweditor-note">${fmt(items.length-700)} additional ${esc(kind)} scopes hidden; use command search.</div>`:'';
     return `<details class="fweditor-tree-folder nested" ${open?'open':''}><summary><span class="fweditor-folder-icon">+</span><b>${esc(kind)}</b><small>${fmt(items.length)}</small></summary><div class="fweditor-tree-children">${rows}${omitted}</div></details>`;
   }).join('');
-  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FW Editor Viewer navigation scopes"><details class="fweditor-tree-folder root" open><summary><span class="fweditor-folder-icon">+</span><b>FWD</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div>`;
+  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FormWorks Editor Viewer navigation scopes"><details class="fweditor-tree-folder root" open><summary><span class="fweditor-folder-icon">+</span><b>FWD</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div>`;
 }
 function fweditorScopeMessageWindowHtml(scope=currentScope()){
   const stats=messageWindowStats(scope);
@@ -2671,14 +2675,14 @@ function fweditorScopeMessageWindowHtml(scope=currentScope()){
 }
 function fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options={}){
   const scope=currentScope();
-  const path=options.path||`FW Editor Viewer navigation \\ ${editorScopeKind(scope)} \\ ${scope.name||scope.scopeId} \\ ${title}`;
+  const path=options.path||`FormWorks Editor Viewer navigation \\ ${editorScopeKind(scope)} \\ ${scope.name||scope.scopeId} \\ ${title}`;
   const chips=list(options.chips).map((chip,index)=>`<span class="fweditor-state-chip ${index===0?'primary':''}">${esc(chip)}</span>`).join('');
-  return `<section class="fweditor-config-window fweditor-scope-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(title)}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(path)}</span>${chips}</div><div class="fweditor-config-body">${fweditorScopePageTabsHtml(activePage)}<div class="fweditor-active-page" role="tabpanel">${bodyHtml}</div></div></section>`;
+  return `<section class="fweditor-config-window fweditor-scope-config-window" aria-label="FormWorks Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(title)}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(path)}</span>${chips}</div><div class="fweditor-config-body">${fweditorScopePageTabsHtml(activePage)}<div class="fweditor-active-page" role="tabpanel">${bodyHtml}</div></div></section>`;
 }
 function fweditorScopeRootHtml(activePage,title,bodyHtml,options={}){
   const scope=currentScope();
   const advancedMessages=isAdvancedMode()?`${fweditorMessageSplitterHtml()}${fweditorScopeMessageWindowHtml(scope)}`:'';
-  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" aria-label="FW Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FW Editor Viewer navigation"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(model.scopes.length)}</b><span>Scopes</span></div><div class="fweditor-filter-note">Search filters the current Editor window.</div></div>${fweditorScopeTreeHtml(scope.scopeId)}</aside>${fweditorTreeSplitterHtml()}${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
+  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" aria-label="FormWorks Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea">${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
 }
 
 function severityIsProblem(severity){return /warn|error|fatal/i.test(text(severity));}
@@ -3660,17 +3664,17 @@ function fweditorObjectNoun(kind){
 }
 function fweditorDefinitionRootPath(kind){
   const map={
-    resources:'FW Editor Viewer navigation \\ Resources',
-    functions:'FW Editor Viewer navigation \\ Resources \\ Functions',
-    'selection-lists':'FW Editor Viewer navigation \\ Resources \\ SelectionLists',
-    tables:'FW Editor Viewer navigation \\ Resources \\ Tables',
-    udfs:'FW Editor Viewer navigation \\ Resources \\ Functions',
-    drivers:'FW Editor Viewer navigation \\ Processes \\ Drivers',
-    'rule-lists':'FW Editor Viewer navigation \\ Rule Lists',
-    'object-graph':'FW Editor Viewer navigation \\ Object Graph',
-    'runtime-impact':'FW Editor Viewer navigation \\ Runtime Impact'
+    resources:'FormWorks Editor Viewer navigation \\ Resources',
+    functions:'FormWorks Editor Viewer navigation \\ Resources \\ Functions',
+    'selection-lists':'FormWorks Editor Viewer navigation \\ Resources \\ SelectionLists',
+    tables:'FormWorks Editor Viewer navigation \\ Resources \\ Tables',
+    udfs:'FormWorks Editor Viewer navigation \\ Resources \\ Functions',
+    drivers:'FormWorks Editor Viewer navigation \\ Processes \\ Drivers',
+    'rule-lists':'FormWorks Editor Viewer navigation \\ Rule Lists',
+    'object-graph':'FormWorks Editor Viewer navigation \\ Object Graph',
+    'runtime-impact':'FormWorks Editor Viewer navigation \\ Runtime Impact'
   };
-  return map[kind]||'FW Editor Viewer navigation \\ Resources';
+  return map[kind]||'FormWorks Editor Viewer navigation \\ Resources';
 }
 function fweditorDefinitionPath(kind,row){
   const type=text(row?.type||fweditorObjectNoun(kind));
@@ -3791,8 +3795,9 @@ function fweditorGlobalMessageWindowHtml(kind,selected,rows,originUi){
 function fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml){
   const title=fweditorKindTitle(kind);
   const noun=fweditorObjectNoun(kind);
-  return `<section class="fweditor-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div>${fweditorGlobalPropertyTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${fweditorGlobalActivePageHtml(kind,selected,originUi,usageCount,detailHtml)}</div></div></section>`;
+  return `<section class="fweditor-config-window" aria-label="FormWorks Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div>${fweditorGlobalPropertyTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${fweditorGlobalActivePageHtml(kind,selected,originUi,usageCount,detailHtml)}</div></div></section>`;
 }
+
 function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,detailHtml){
   const q=lower(state.query).trim();
   if(q){
@@ -3800,7 +3805,7 @@ function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,deta
   }
   const host=$('content');
   if(!rows.length){
-    host.innerHTML=`<section class="fweditor-resource-workspace empty" aria-label="${esc(fweditorKindTitle(kind))} resources"><div class="fweditor-workspace-titlebar"><div><span class="workspace-eyebrow">FW Editor Viewer</span><h3>${esc(copy.emptyTitle||'No definitions found')}</h3><p>${esc(copy.emptyBody||'Clear search or choose another resource group.')}</p></div></div></section>`;
+    host.innerHTML=`<section class="fweditor-resource-workspace empty" aria-label="${esc(fweditorKindTitle(kind))} resources"><div class="fweditor-workspace-titlebar"><div><span class="workspace-eyebrow">FormWorks Editor Viewer</span><h3>${esc(copy.emptyTitle||'No definitions found')}</h3><p>${esc(copy.emptyBody||'Clear search or choose another resource group.')}</p></div></div></section>`;
     return;
   }
   const selected=rows.find(r=>r.key===selectedKey)||rows[0];
@@ -3808,7 +3813,7 @@ function renderGlobalDefinitionExplorer(kind,rows,selectedKey,stateKey,copy,deta
   const originUi=definitionOriginUi(kind,selected);
   const usageCount=list(selected.usage).length||selected.metric||0;
   const advancedMessages=isAdvancedMode()?`<section class="fweditor-resource-status">${fweditorGlobalMessageWindowHtml(kind,selected,rows,originUi)}</section>`:'';
-  host.innerHTML=`<section class="fweditor-resource-workspace" aria-label="Read-only ${esc(fweditorKindTitle(kind))} resource configuration"><div class="fweditor-workspace-titlebar"><div><span class="workspace-eyebrow">FW Editor Viewer</span><h3>${esc(copy.title||fweditorKindTitle(kind))}</h3><p>${esc(copy.body||'Read-only resource configuration.')}</p></div><div class="fweditor-workspace-metrics"><span><b>${fmt(rows.length)}</b> items</span><span><b>${fmt(usageCount)}</b> references</span></div></div><div class="fweditor-resource-two-pane"><aside class="fweditor-resource-index" aria-label="${esc(fweditorKindTitle(kind))} list"><div class="fweditor-pane-title visible">FWD Tree</div>${fweditorDefinitionTreeHtml(kind,rows,selected.key)}</aside><article class="fweditor-resource-detail" aria-label="${esc(copy.title||fweditorKindTitle(kind))} details">${fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml)}</article></div>${advancedMessages}</section>`;
+  host.innerHTML=`<section class="fweditor-resource-workspace" aria-label="Read-only ${esc(fweditorKindTitle(kind))} resource configuration"><div class="fweditor-workspace-titlebar"><div><span class="workspace-eyebrow">FormWorks Editor Viewer</span><h3>${esc(copy.title||fweditorKindTitle(kind))}</h3><p>${esc(copy.body||'Read-only resource configuration.')}</p></div><div class="fweditor-workspace-metrics"><span><b>${fmt(rows.length)}</b> items</span><span><b>${fmt(usageCount)}</b> references</span></div></div><div class="fweditor-resource-two-pane"><aside class="fweditor-resource-index" aria-label="${esc(fweditorKindTitle(kind))} list"><div class="fweditor-pane-title visible">FWD Tree</div>${fweditorDefinitionTreeHtml(kind,rows,selected.key)}</aside><article class="fweditor-resource-detail" aria-label="${esc(copy.title||fweditorKindTitle(kind))} details">${fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml)}</article></div>${advancedMessages}</section>`;
 }
 
 function functionUsageRowsForName(functionName){
@@ -4372,7 +4377,7 @@ function udfEditorTreeHtml(rows,selectedKey){
     groups.get(key).push(u);
   });
   const ordered=[...groups.entries()].sort((a,b)=>a[0].localeCompare(b[0],undefined,{sensitivity:'base'}));
-  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FW Editor Viewer navigation UDF resources"><details open class="fweditor-tree-folder root"><summary><span class="fweditor-folder-icon">▾</span>FWD</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Resources</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Function <b>${fmt(rows.length)}</b></summary>${ordered.map(([group,items],idx)=>`<details class="fweditor-tree-folder nested" ${items.some(x=>x.key===selectedKey)||idx<6?'open':''}><summary><span class="fweditor-folder-icon">▾</span>${esc(group)} <b>${fmt(items.length)}</b></summary><div class="fweditor-tree-children">${items.map(u=>udfEditorTreeNodeHtml(u,selectedKey)).join('')}</div></details>`).join('')}</details></details></details></div>`;
+  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FormWorks Editor Viewer navigation UDF resources"><details open class="fweditor-tree-folder root"><summary><span class="fweditor-folder-icon">▾</span>FWD</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Resources</summary><details open class="fweditor-tree-folder"><summary><span class="fweditor-folder-icon">▾</span>Function <b>${fmt(rows.length)}</b></summary>${ordered.map(([group,items],idx)=>`<details class="fweditor-tree-folder nested" ${items.some(x=>x.key===selectedKey)||idx<6?'open':''}><summary><span class="fweditor-folder-icon">▾</span>${esc(group)} <b>${fmt(items.length)}</b></summary><div class="fweditor-tree-children">${items.map(u=>udfEditorTreeNodeHtml(u,selectedKey)).join('')}</div></details>`).join('')}</details></details></details></div>`;
 }
 function udfEditorDefinitionStateHtml(u){
   const pieces=[
@@ -4504,7 +4509,7 @@ function udfEditorMessageWindowHtml(selected,allRows,filteredRows){
   return `<section class="fweditor-load-status-window ${state.editorMessageExpanded?'expanded':''}" aria-label="Advanced diagnostics"><div class="fweditor-load-status-title"><span>Load Status</span><button class="fweditor-title-button" type="button" data-action="toggle-editor-message">${state.editorMessageExpanded?'Collapse':'Expand'}</button></div><table class="fweditor-load-status-table"><thead><tr><th>Sev</th><th>Object</th><th>Message</th></tr></thead><tbody>${rows.map(r=>`<tr><td><span class="sev ${lower(r.sev)}">${esc(r.sev)}</span></td><td>${esc(r.item)}</td><td>${esc(r.message)}</td></tr>`).join('')}</tbody></table></section>`;
 }
 function udfEditorConfigurationWindowHtml(u,callers){
-  return `<section class="fweditor-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>User Defined Function - ${esc(udfShortName(u))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(udfEditorPathText(u))}</span>${udfEditorDefinitionStateHtml(u)}</div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">Function Resource</div><h2>${esc(udfShortName(u))}</h2><p>User Defined Function interface, field-list parameters, status results, caller rules, internal Rule List details, and configuration messages.</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="udfs">Details</button></div>${udfEditorTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${udfEditorActivePanelHtml(u,callers)}</div></div></section>`;
+  return `<section class="fweditor-config-window" aria-label="FormWorks Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>User Defined Function - ${esc(udfShortName(u))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(udfEditorPathText(u))}</span>${udfEditorDefinitionStateHtml(u)}</div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">Function Resource</div><h2>${esc(udfShortName(u))}</h2><p>User Defined Function interface, field-list parameters, status results, caller rules, internal Rule List details, and configuration messages.</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="udfs">Details</button></div>${udfEditorTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${udfEditorActivePanelHtml(u,callers)}</div></div></section>`;
 }
 
 function renderDomainCatalog(title,rows,caption){
@@ -4613,7 +4618,7 @@ function renderNoData(){
 // Curated in-product guide content for first-use navigation.
 function renderHelp(){
   const quickStart=`<div class="panel"><h3>Quick Start</h3><ol class="config-list"><li>Choose a document, page, processing scope, UDF, table, SelectionList, function, or resource from the left rail.</li><li>Open <b>Structure</b> to inspect Rule Lists, Parent Rules, Status Results, and Action Lists.</li><li>Select a rule and read the inspector from Summary through Raw.</li><li>Use <b>Functions</b>, <b>UDFs</b>, and <b>Tables</b> for function behavior, reusable rule-list functions, and lookup configuration.</li></ol></div>`;
-  const productModel=`<div class="panel"><h3>Product Boundary</h3><div class="kv">${kv('Read-only','FW Editor Viewer inspects FWD configuration. It does not edit, save, or write back to the FWD.')}${kv('FW Editor','FW Editor remains the authoring and save surface for the FWD.')}${kv('Runtime boundary','The viewer does not execute AC, run AC Rules Tester, or prove actual claim outcomes.')}</div></div>`;
+  const productModel=`<div class="panel"><h3>Product Boundary</h3><div class="kv">${kv('Read-only','FormWorks Editor Viewer inspects FWD configuration. It does not edit, save, or write back to the FWD.')}${kv('FormWorks Editor','FormWorks Editor remains the authoring and save surface for the FWD.')}${kv('Runtime boundary','The viewer does not execute AC, run AC Rules Tester, or prove actual claim outcomes.')}</div></div>`;
   const ruleModel=`<div class="panel"><h3>FW Editor Rule Model</h3><div class="mini-list"><div class="mini-row"><span><b>Rule List</b></span><span class="caption">Ordered rules in a page, document, UDF, Store, or process scope</span></div><div class="mini-row"><span><b>Rule</b></span><span class="caption">Function plus fields/parameters, attributes, sources, messages, and actions</span></div><div class="mini-row"><span><b>Status Result</b></span><span class="caption">Function return token owned by the parent rule</span></div><div class="mini-row"><span><b>Action List / Sub-list</b></span><span class="caption">Nested Rule List selected by a parent status result</span></div></div></div>`;
   const inspectorModel=`<div class="panel"><h3>Inspector Reading Order</h3><ol class="config-list"><li>Rule name and scope</li><li>Function and function type</li><li>Fields / Parameters</li><li>Attributes</li><li>Status Results / Actions</li><li>Parent Rule / Sub-list path</li><li>References</li><li>Load Status</li><li>Raw, only when formatted views need confirmation</li></ol></div>`;
   const fwdModel=`<div class="panel"><h3>Load Status</h3><div class="kv">${kv('Loaded','Configuration section loaded normally.')}${kv('Partial','Useful configuration loaded, but some placement or detail could not be fully confirmed.')}${kv('Additional Rules','Searchable/readable rules whose exact Rule List placement is not confirmed.')}${kv('Raw','Final confirmation when formatted views are incomplete or inconsistent.')}</div></div>`;
@@ -4622,6 +4627,7 @@ function renderHelp(){
   const shortcuts=`<div class="panel"><h3>Keyboard Shortcuts</h3><div class="kv">${kv('/ or Ctrl/⌘ + K','Focus command search')}${kv('Alt + I','Toggle inspector')}${kv('Alt + C','Copy selected config')}${kv('Alt + S','Focus selected subtree')}${kv('Alt + R','Reset pane widths')}${kv('Alt + A','Expand all visible rules')}${kv('Alt + D','Expand selected rule one level')}${kv('Alt + P','Collapse selected rule peers')}${kv('Alt + F','Clear focus/subtree mode')}</div><div class="caption mt-8">Tip: Use arrow keys and Enter to review dense trees without leaving the keyboard.</div></div>`;
   $('helpBody').innerHTML=`${quickStart}${productModel}${ruleModel}${inspectorModel}${fwdModel}${docsModel}${operators}${shortcuts}`;
 }
+
 function renderScopeInspector(s){
   const hotspots=scopedRuleNodes().filter(isHotspotNode).length;
   renderInspectorTabBar(['summary','raw'],{summary:fmt(s?.structural||0),raw:'JSON'});
@@ -5070,6 +5076,8 @@ function saveState(){
     treeFilter:state.treeFilter,
     scopeKindFilter:state.scopeKindFilter,
     workspaceView:state.workspaceView,
+    selectedEditorObjectKey:state.selectedEditorObjectKey,
+    fwdExpanded:[...state.fwdExpanded],
     fieldResolutionFilter:state.fieldResolutionFilter,
     inventoryFilter:state.inventoryFilter,
     messageFilter:state.messageFilter,
@@ -5112,11 +5120,13 @@ function restoreSnapshotState(){
   if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;
   state.workspaceView=validWorkspaceViews().includes(saved.workspaceView)?saved.workspaceView:'structure';
   state.workspaceView=requestedWorkspaceView()||state.workspaceView;
+  state.selectedEditorObjectKey=text(saved.selectedEditorObjectKey||state.selectedEditorObjectKey||'');
+  state.fwdExpanded=new Set(Array.isArray(saved.fwdExpanded)?saved.fwdExpanded:[...state.fwdExpanded]);
   state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';
   state.inventoryFilter=['all','StructuralMatch','AdditionalRule','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:state.inventoryFilter;
   state.messageFilter=normalizeMessageFilter(saved.messageFilter||state.messageFilter);
   state.inspectorView=(()=>{const view=saved.inspectorView==='config'?'fields':saved.inspectorView==='actions'?'status-results':saved.inspectorView;return ['general','fields','attributes','status-results','description','summary','references','messages','raw'].includes(view)?view:'general';})();
-  state.rulePropertyPage=(()=>{const page=text(saved.rulePropertyPage||state.rulePropertyPage||'general');const normalized=page==='summary'?'general':page==='config'?'fields':page==='actions'?'status-results':page;return ['general','fields','attributes','status-results','description'].includes(normalized)?normalized:'general';})();
+  state.rulePropertyPage=(()=>{const page=text(saved.rulePropertyPage||state.rulePropertyPage||'summary');const normalized=page==='general'?'summary':page==='config'?'fields':page==='actions'?'status-results':page;return ['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(normalized)?normalized:'summary';})();
   state.selectedResourceKey=text(saved.selectedResourceKey||'');
   state.selectedFunctionName=text(saved.selectedFunctionName||'');
   state.selectedDriverKey=text(saved.selectedDriverKey||'');
@@ -5299,7 +5309,7 @@ function searchResults(){
     addGlobalDefinitionSearchRows(rows,q,'Resource','resources',buildGlobalResourceDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Driver','drivers',buildGlobalDriverDefinitions());
   }catch(error){
-    console.warn('FW Editor Viewer: global search definition indexing failed.',error);
+    console.warn('FormWorks Editor Viewer: global search definition indexing failed.',error);
   }
   for(const r of model.rels){
     if(matchesSearchQuery(r,q))rows.push({kind:'Reference',scopeId:r.scopeId,nodeId:r.nodeId,title:`${r.kind}: ${r.target}`,subtitle:`${r.targetType}`,badges:['Reference']});
@@ -5751,7 +5761,8 @@ function selectMessageFilter(mode){
   renderAll();
 }
 
-function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'FW Editor Viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FW Editor Viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
+function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'FormWorks Editor Viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FormWorks Editor Viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
+
 function commandRegistry(){return Object.freeze({});}
 function executeCommand(action){return handleAction(action);}
 function handleAction(a){if(text(a).startsWith('message-filter-')){selectMessageFilter(text(a).replace(/^message-filter-/,''));return;}if(a==='open-global-detail'){state.globalDetailKind=state.workspaceView;state.modal='global-detail';renderModal();return;}if(a==='go-structure'){state.workspaceView='structure';state.treeFilter='all';state.query='';state.treeQuery='';state.focusNodeId='';renderAll();toast('Rule List ready');return;}if(a==='clear-tree-search'){state.query='';state.treeQuery='';syncQueryInputs();renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();closeSearchPopover();window.setTimeout(()=>focusActiveSearch(),0);return;}if(a==='show-messages'){const d=firstDiagnosticForFilter(state.messageFilter)||scopedDiags()[0];if(d){state.selectedType='diag';state.selectedId=d.id;document.body.classList.add('inspector-open');renderAll();}else toast('No diagnostics in this scope');return;}if(a==='open-help'){state.modal='help';renderModal();return;}if(a==='help-action-list'||a==='help-model'||a==='help-disabled'){state.modal=a.replace(/^help-/,'help-');renderModal();return;}if(a==='close-modal'){closeModalRender();return;}if(a==='toggle-theme'){state.theme=state.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=state.theme;syncThemeControl();saveState();toast(`${state.theme==='dark'?'Dark':'Light'} mode`);return;}if(a==='toggle-mobile-nav'){const open=document.body.classList.toggle('mobile-nav-open');const btn=optionalElement('mobileNavToggle')||document.querySelector('[data-action="toggle-mobile-nav"]');if(btn)btn.setAttribute('aria-expanded',open?'true':'false');return;}if(a==='close-inspector'){document.body.classList.remove('inspector-open');applyPaneLayout();syncInspectorVisibility();saveState();return;}if(a==='show-inspector'){document.body.classList.add('inspector-open');applyPaneLayout();syncInspectorVisibility();saveState();return;}if(a==='reset-pane-layout'){resetPaneLayout();return;}if(a==='expand-all'){const count=scopedRuleNodes().length;if(count>2500&&!confirm(`Expand ${fmt(count)} structural rules and all action lists? This can be slow.`))return;scopedNodes().forEach(n=>state.expanded.add(n.id));state.collapsedActionLists.clear();renderAll();return;}if(a==='collapse-all'){state.expanded.clear();(model.rootsByScope.get(state.scopeId)||[]).forEach(id=>state.expanded.add(String(id)));state.collapsedActionLists=new Set(allActionListKeysForScope(state.scopeId));renderAll();return;}if(a==='expand-selected-depth'){const n=selectedNode();if(!n){toast('Select a rule first');return;}state.expanded.add(n.id);collapseActionListsForNode(n.id);renderAll();return;}if(a==='expand-selected-subtree'){const n=selectedNode();if(!n){toast('Select a rule first');return;}subtreeNodes(n.id).forEach(x=>state.expanded.add(x.id));childActionListGroups(n.id).forEach(g=>state.collapsedActionLists.delete(actionListKey(n.id,g)));renderAll();return;}if(a==='collapse-siblings'){const n=selectedNode();if(!n){toast('Select a rule first');return;}const parent=model.parentByChild.get(n.id);if(parent){childIds(parent).filter(id=>id!==n.id).forEach(id=>state.expanded.delete(id));}renderAll();return;}if(a==='expand-action-groups'){allActionListKeysForScope(state.scopeId).forEach(k=>state.collapsedActionLists.delete(k));renderAll();return;}if(a==='collapse-action-groups'){allActionListKeysForScope(state.scopeId).forEach(k=>state.collapsedActionLists.add(k));renderAll();return;}if(a==='clear-focus'){state.focusNodeId='';renderAll();return;}if(a==='focus-selected'){const n=selectedNode();if(n){state.focusNodeId=n.id;state.expanded.add(n.id);collapseActionListsForNode(n.id);renderAll();}return;}if(a==='open-linked-node'){const obj=selectedInventory()||selectedRel();if(obj&&obj.nodeId){selectNode(obj.nodeId);}else toast('No linked Rule List node');return;}if(a==='copy-action-list-path'){const b=selectedActionList();if(b){copyText(JSON.stringify({schema:'FwEditorViewer.ActionListPath',scopeId:b.scopeId,path:actionListPathObjects(b)},null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or Action List first');return;}copyText(JSON.stringify(selectedPathPacket(n),null,2));return;}if(a==='copy-rule-config'){const b=selectedActionList();if(b){copyText(JSON.stringify(actionListPacket(b),null,2));return;}const n=selectedNode();if(!n){toast('Select a rule or Action List first');return;}copyText(JSON.stringify(selectedRuleConfigPacket(n),null,2));return;}if(a==='copy-rule-explanation'){const n=selectedNode();if(!n){toast('Select a rule first');return;}copyText(rulePlainLanguageNarrative(n));return;}if(a==='first-warning-scope'){const s=model.scopes.find(x=>x.warnings>0);if(s)selectScope(s.scopeId);return;}if(a==='largest-scope'){const s=[...model.scopes].sort((a,b)=>b.structural-a.structural)[0];if(s)selectScope(s.scopeId);return;}}
@@ -5926,8 +5937,8 @@ function handleRulePropertyTabKeyboard(e){
   return true;
 }
 function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='toggle-editor-message'){e.preventDefault();state.editorMessageExpanded=!state.editorMessageExpanded;state.editorMessageHeight=state.editorMessageExpanded?Math.max(normalizedEditorMessageHeight(),240):104;renderContent();saveState();return;}if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act.startsWith('view-')&&validWorkspaceViews().includes(normalizeWorkspaceViewName(act.replace(/^view-/,'')))){e.preventDefault();state.workspaceView=normalizeWorkspaceViewName(act.replace(/^view-/,''));document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}if(typeof maybeHydrateWorkspaceOnDemand==='function'&&maybeHydrateWorkspaceOnDemand(state.workspaceView,act))return;renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();executeCommand(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const rulePropertyTab=e.target.closest('[data-rule-property-tab]')?.dataset.rulePropertyTab;if(rulePropertyTab){e.preventDefault();setRulePropertyPage(rulePropertyTab);return;}
-const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseActionListsForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-action-list]')?.dataset.toggleActionList;if(br){state.collapsedActionLists.has(br)?state.collapsedActionLists.delete(br):state.collapsedActionLists.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const actionList=e.target.closest('[data-action-list]')?.dataset.actionList;if(actionList){selectActionList(actionList);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
-  document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
+const fwdToggle=e.target.closest('[data-fwd-toggle]')?.dataset.fwdToggle;if(fwdToggle){e.preventDefault();toggleFwdTreeKey(fwdToggle);return;}const fwdObject=e.target.closest('[data-fwd-object]')?.dataset.fwdObject;if(fwdObject){e.preventDefault();selectEditorObject(fwdObject);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseActionListsForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-action-list]')?.dataset.toggleActionList;if(br){state.collapsedActionLists.has(br)?state.collapsedActionLists.delete(br):state.collapsedActionLists.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const actionList=e.target.closest('[data-action-list]')?.dataset.actionList;if(actionList){selectActionList(actionList);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+  document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'||e.target.id==='fwdTreeFilter'){closeSearchPopover();state.scopeQuery=e.target.value;renderGlobalNavigation();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch')applyQueryInput(e.target.value,e.target.id);});
   document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderDiagnosticsDock();renderViewbar();return;}});
   document.addEventListener('keydown',e=>{
@@ -5989,6 +6000,7 @@ const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTa
     if(!typing&&e.altKey&&key==='p'){e.preventDefault();handleAction('collapse-siblings');return;}
     if(!typing&&e.altKey&&key==='f'){e.preventDefault();handleAction('clear-focus');return;}
     if(!typing&&handleRulePropertyTabKeyboard(e))return;
+    if(!typing&&handleFwdTreeNavigation(e))return;
     if(!typing&&handleEditorTreeNavigation(e))return;
     const inRuleTree=!!document.activeElement?.closest?.('.workspace-tree,.tree');
     if(!typing&&inRuleTree&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
@@ -6067,6 +6079,40 @@ function handleEditorTreeNavigation(e){
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.action-list-row[data-action-list]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.actionList&&state.selectedId===r.dataset.actionList));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.actionList)selectActionList(row.dataset.actionList);row.focus();}
 function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const actionList=active?.closest?.('[data-action-list]')?.dataset.actionList;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(actionList)selectActionList(actionList);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(actionList){state.collapsedActionLists.has(actionList)?state.collapsedActionLists.delete(actionList):state.collapsedActionLists.add(actionList);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseActionListsForNode(node));}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(actionList)state.collapsedActionLists.delete(actionList);else if(node){state.expanded.add(node);collapseActionListsForNode(node);}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(actionList)state.collapsedActionLists.add(actionList);else if(node)state.expanded.delete(node);renderContent();renderDiagnosticsDock();renderInspector();return;}}
+function handleFwdTreeNavigation(e){
+  const active=document.activeElement?.closest?.('.fwd-tree-row');
+  if(!active)return false;
+  const rows=[...document.querySelectorAll('.fwd-editor-tree .fwd-tree-select')].filter(row=>row.offsetParent!==null);
+  const selected=active.querySelector('.fwd-tree-select');
+  const index=rows.indexOf(selected);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Home'||e.key==='End'){
+    e.preventDefault();
+    let nextIndex=index;
+    if(e.key==='Home')nextIndex=0;
+    else if(e.key==='End')nextIndex=rows.length-1;
+    else nextIndex=Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowDown'?1:-1)));
+    rows[nextIndex]?.focus();
+    return true;
+  }
+  const toggle=active.querySelector('[data-fwd-toggle]');
+  if(e.key==='ArrowRight'&&toggle){
+    e.preventDefault();
+    toggleFwdTreeKey(toggle.dataset.fwdToggle,true);
+    return true;
+  }
+  if(e.key==='ArrowLeft'&&toggle){
+    e.preventDefault();
+    toggleFwdTreeKey(toggle.dataset.fwdToggle,false);
+    return true;
+  }
+  if(e.key==='Enter'||e.key===' '){
+    e.preventDefault();
+    const key=selected?.dataset.fwdObject;
+    if(key)selectEditorObject(key);
+    return true;
+  }
+  return false;
+}
 
 
 function udfHasInternalRules(u){return list(u?.internalRules).length>0||/RuleListAvailable/i.test(text(u?.availabilityState));}
@@ -6075,7 +6121,7 @@ function udfHasInternalRules(u){return list(u?.internalRules).length>0||/RuleLis
    Default mode is a read-only FW Editor-style configuration browser.
    Advanced diagnostics remain available only behind ?advanced=1. */
 function localWorkspaceViews(){
-  return ['structure','field-resolution',...(isAdvancedMode()?['load-status']:[])];
+  return ['editor-object','structure','field-resolution',...(isAdvancedMode()?['load-status']:[])];
 }
 function normalizeWorkspaceViewName(view){
   const normalized=text(view).trim();
@@ -6091,6 +6137,7 @@ function validWorkspaceViews(){
 function productViewTitle(view=state.workspaceView){
   const map={
     overview:['Rule List','Open the selected scope Rule List.'],
+    'editor-object':['FWD Object','Read-only FormWorks Editor object configuration.'],
     structure:['Rule Lists','Read-only Rule Lists with Status Results and Action Lists.'],
     'field-resolution':['Fields','Field and parameter references resolved against the FWD catalog.'],
     'load-status':['Load Status','Advanced load status and configuration warnings.'],
@@ -6109,11 +6156,17 @@ function productViewTitle(view=state.workspaceView){
   return map[view]||map.overview;
 }
 function renderMainHead(){
-  const [title,caption]=productViewTitle();
+  let [title,caption]=productViewTitle();
   const selectedScope=currentScope();
+  const editorObject=state.workspaceView==='editor-object'?fwdEditorObject():null;
+  if(editorObject){
+    title=editorObject.name;
+    caption=`${editorObject.type} configuration and relationships.`;
+  }
   $('scopeTitle').textContent=title;
   $('scopeCaption').innerHTML=`<span class="scope-caption-note">${esc(caption)}</span>`;
-  const crumbParts=['FW Editor Viewer'];
+  const crumbParts=['FormWorks Editor Viewer'];
+  if(editorObject)crumbParts.push(editorObject.type,editorObject.name);
   if(state.workspaceView==='structure'&&selectedScope)crumbParts.push(selectedScope.name||selectedScope.scopeId);
   $('crumbs').innerHTML=`${crumbParts.map(x=>`<span class="head-chip">${esc(x)}</span>`).join('')}<span class="head-chip">Read-only</span>${fwdHydrationSummary().level==='warn'?'<span class="head-chip warning">Status partial</span>':'<span class="head-chip success">Loaded</span>'}`;
   renderWorkspaceTabs();
@@ -6121,21 +6174,30 @@ function renderMainHead(){
 }
 function renderWorkspaceTabs(){
   const host=$('tabs');
-  if(state.workspaceView==='overview'||isGlobalDefinitionView()){
+  if(state.workspaceView==='overview'||state.workspaceView==='editor-object'||isGlobalDefinitionView()){
     host.innerHTML='';
+    host.hidden=true;
     host.setAttribute('aria-hidden','true');
     return;
   }
+  host.hidden=false;
   host.removeAttribute('aria-hidden');
   const tabs=[['structure','Rule List'],['field-resolution','Fields / Parameters'],...(isAdvancedMode()?[[ 'load-status','Load Status' ]]:[])];
   host.innerHTML=tabs.map(([id,label])=>`<button class="workspace-tab ${state.workspaceView===id?'active':''}" type="button" role="tab" data-action="view-${esc(id)}" aria-selected="${state.workspaceView===id?'true':'false'}"><span>${esc(label)}</span></button>`).join('');
 }
 function renderViewbar(){
   const view=state.workspaceView||'overview';
+  const host=$('viewbar');
+  if(view==='overview'||view==='editor-object'){
+    host.innerHTML='';
+    host.hidden=true;
+    return;
+  }
+  host.hidden=false;
   const [title]=productViewTitle(view);
   const search=viewSearchMeta();
   const showSearch=view!=='overview';
-  $('viewbar').innerHTML=`<div class="product-viewbar"><div class="product-view-pill"><span>${esc(title)}</span><b>${isGlobalDefinitionView(view)?'Global resource':'Workspace'}</b></div>${showSearch?`<div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" ${text(state.query).trim()?'':'disabled'}>Clear</button></div>`:''}${state.workspaceView==='structure'?`<div class="viewbar-right"><select id="treeFilter" aria-label="Rule List filter"><option value="all" ${state.treeFilter==='all'?'selected':''}>All rules</option><option value="disabled" ${state.treeFilter==='disabled'?'selected':''}>Disabled</option><option value="warnings" ${state.treeFilter==='warnings'?'selected':''}>Warnings</option><option value="actions" ${state.treeFilter==='actions'?'selected':''}>Action parents</option></select><button class="btn" type="button" data-action="collapse-all">Collapse</button><button class="btn" type="button" data-action="expand-selected-depth">Open selected</button></div>`:''}</div>`;
+  host.innerHTML=`<div class="product-viewbar"><div class="product-view-pill"><span>${esc(title)}</span><b>${isGlobalDefinitionView(view)?'Global resource':'Workspace'}</b></div>${showSearch?`<div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" ${text(state.query).trim()?'':'disabled'}>Clear</button></div>`:''}${state.workspaceView==='structure'?`<div class="viewbar-right"><select id="treeFilter" aria-label="Rule List filter"><option value="all" ${state.treeFilter==='all'?'selected':''}>All rules</option><option value="disabled" ${state.treeFilter==='disabled'?'selected':''}>Disabled</option><option value="warnings" ${state.treeFilter==='warnings'?'selected':''}>Warnings</option><option value="actions" ${state.treeFilter==='actions'?'selected':''}>Action parents</option></select><button class="btn" type="button" data-action="collapse-all">Collapse</button><button class="btn" type="button" data-action="expand-selected-depth">Open selected</button></div>`:''}</div>`;
 }
 function productCounts(){
   if(productCountsCache)return productCountsCache;
@@ -6178,8 +6240,10 @@ function renderOverview(){
   const ruleSummary=`<div class="product-summary-grid"><div><span>Total rules</span><b>${fmt(c.rules)}</b></div><div><span>Placed rules</span><b>${fmt(c.placed)}</b></div><div><span>Additional Rules</span><b>${fmt(c.additional)}</b></div><div><span>Status</span><b>${hydration.level==='warn'?'Partial':'Loaded'}</b></div></div>`;
   $('content').innerHTML=`<section class="product-overview"><div class="product-hero"><div><div class="eyebrow">Read-only FW Editor-style configuration viewer</div><h2>Browse this FWD configuration in a read-only FW Editor-style view.</h2><p>Use the navigation to inspect Rule Lists, UDFs, Functions, Tables, SelectionLists, Resources, Documents, and Pages. This viewer does not edit or execute FormWorks configuration.</p></div><div class="product-status-card"><span>Snapshot</span><b>${esc(snapshotId())}</b><small>${esc(hydration.label||'Loaded')}</small></div></div>${ruleSummary}<div class="product-card-grid">${cards}</div><section class="product-callout ${c.additional?'warn':'ok'}"><b>${c.additional?'Additional Rules present':'Rule placement complete'}</b><span>${c.additional?`${fmt(c.additional)} rules are readable/searchable but do not have confirmed Rule List placement in this snapshot.`:'All exported rules are represented in placed Rule Lists.'}</span></section></section>`;
 }
+
 function renderContent(){
   if(state.workspaceView==='overview')state.workspaceView='structure';
+  if(state.workspaceView==='editor-object')return renderEditorObject();
   if(state.workspaceView==='field-resolution')return renderFieldResolutionCatalog();
   if(isLoadStatusView())return isAdvancedMode()?renderMessages():renderStructure();
   if(state.workspaceView==='resources')return renderGlobalResourceDefinitions();
@@ -6193,38 +6257,297 @@ function renderContent(){
   if(isAdvancedMode()&&state.workspaceView==='runtime-impact')return renderRuntimeImpactDefinitions();
   return renderStructure();
 }
+
+function fwdPacketItems(name){
+  const packet=model?.fwd?.[name];
+  if(Array.isArray(packet))return packet;
+  return list(first(packet?.items,packet?.Items,[]));
+}
+function fwdStableKey(type,name){
+  return `${type}:${text(name).trim()}`;
+}
+function fwdScopeFor(kind,name){
+  return list(model?.scopes).find(scope=>sameName(scope.kind,kind)&&sameName(scope.name,name))
+    || list(model?.scopes).find(scope=>new RegExp(kind,'i').test(text(scope.kind))&&sameName(scope.name,name))
+    || null;
+}
+function buildFwdEditorIndex(){
+  const byKey=new Map();
+  const add=record=>{
+    if(!record?.key)return null;
+    const existing=byKey.get(record.key)||{};
+    const merged={childKeys:[],parentKeys:[],metadata:{},...existing,...record};
+    merged.childKeys=[...new Set([...list(existing.childKeys),...list(record.childKeys)])];
+    merged.parentKeys=[...new Set([...list(existing.parentKeys),...list(record.parentKeys)])];
+    merged.metadata={...(existing.metadata||{}),...(record.metadata||{})};
+    byKey.set(merged.key,merged);
+    return merged;
+  };
+  const batches=fwdPacketItems('batches').map(item=>add({
+    key:text(first(item.key,item.Key,fwdStableKey('batch',item.name||item.Name))),
+    type:'batchType',
+    name:text(first(item.name,item.Name,'Unnamed batch')),
+    childKeys:list(first(item.documentKeys,item.DocumentKeys,[])),
+    source:'Fwd.GetDocsInBatch',
+    raw:item
+  }));
+  const documents=fwdPacketItems('documents').map(item=>{
+    const name=text(first(item.name,item.Name,'Unnamed document'));
+    const scope=fwdScopeFor('Document',name);
+    return add({
+      key:text(first(item.key,item.Key,fwdStableKey('document',name))),
+      type:'documentType',
+      name,
+      parentKeys:list(first(item.parentBatchKeys,item.ParentBatchKeys,[])),
+      childKeys:list(first(item.pageKeys,item.PageKeys,[])),
+      scopeId:scope?.scopeId||'',
+      source:'Fwd.GetPagesInDoc',
+      raw:item
+    });
+  });
+  const pageVariantBuckets=new Map(fwdPacketItems('pageVariants').map(item=>[
+    lower(first(item.page,item.Page,'')),
+    list(first(item.variants,item.Variants,[]))
+  ]));
+  const fieldsByPage=new Map();
+  fwdPacketItems('fields').forEach(item=>{
+    if(!/page/i.test(text(first(item.scopeType,item.ScopeType,''))))return;
+    const page=text(first(item.scopeName,item.ScopeName,''));
+    if(!fieldsByPage.has(lower(page)))fieldsByPage.set(lower(page),[]);
+    fieldsByPage.get(lower(page)).push(item);
+  });
+  const pages=fwdPacketItems('pages').map(item=>{
+    const name=text(first(item.name,item.Name,'Unnamed page'));
+    const scope=fwdScopeFor('Page',name);
+    const variants=pageVariantBuckets.get(lower(name))||[];
+    const fields=fieldsByPage.get(lower(name))||[];
+    const page=add({
+      key:text(first(item.key,item.Key,fwdStableKey('page',name))),
+      type:'pageType',
+      name,
+      parentKeys:list(first(item.parentDocumentKeys,item.ParentDocumentKeys,[])),
+      childKeys:[],
+      scopeId:scope?.scopeId||'',
+      source:'Fwd.PageNames',
+      metadata:{variantCount:variants.length,fieldCount:fields.length},
+      raw:item
+    });
+    variants.forEach(variant=>{
+      const variantName=text(first(variant?.name,variant?.Name,variant));
+      const key=fwdStableKey('pageVariant',`${name}:${variantName}`);
+      add({key,type:'pageVariant',name:variantName,parentKeys:[page.key],source:'Fwd.VariantNames',metadata:{pageName:name},raw:variant});
+      page.childKeys.push(key);
+    });
+    fields.forEach(field=>{
+      const fieldName=text(first(field.name,field.Name,'Unnamed field'));
+      const key=fwdStableKey('field',`${name}:${fieldName}`);
+      add({
+        key,
+        type:'field',
+        name:fieldName,
+        parentKeys:[page.key],
+        source:'Fwd.Page.Fields',
+        metadata:{
+          pageName:name,
+          fieldType:text(first(field.type,field.Type,'')),
+          geometry:text(first(field.geometry,field.Geometry,'')),
+          subfieldCount:Number(first(field.subfieldCount,field.SubfieldCount,0))||0
+        },
+        raw:field
+      });
+      page.childKeys.push(key);
+    });
+    if(page.scopeId){
+      const acKey=fwdStableKey('acProcess',`page:${name}:AC`);
+      add({key:acKey,type:'acProcess',name:'AC',parentKeys:[page.key],scopeId:page.scopeId,source:'AC/Pages',metadata:{ownerType:'Page',ownerName:name}});
+      page.childKeys.push(acKey);
+    }
+    return page;
+  });
+  documents.forEach(document=>{
+    if(document.scopeId){
+      const acKey=fwdStableKey('acProcess',`document:${document.name}:AC`);
+      add({key:acKey,type:'acProcess',name:'AC',parentKeys:[document.key],scopeId:document.scopeId,source:'AC/Documents',metadata:{ownerType:'Document',ownerName:document.name}});
+      document.childKeys.unshift(acKey);
+    }
+  });
+  batches.forEach(batch=>batch.childKeys.forEach(key=>{
+    const child=byKey.get(key);
+    if(child&&!child.parentKeys.includes(batch.key))child.parentKeys.push(batch.key);
+  }));
+  documents.forEach(document=>document.childKeys.forEach(key=>{
+    const child=byKey.get(key);
+    if(child&&!child.parentKeys.includes(document.key))child.parentKeys.push(document.key);
+  }));
+  add({
+    key:'fwd:root',
+    type:'fwdRoot',
+    name:text(first(model?.fwd?.overview?.path,treeData?.FwdPath,rulesData?.FwdPath,'FWD Configuration')),
+    childKeys:['group:batches','group:documents','group:pages','group:resources','diagnostics:root','source:root'],
+    source:'FwdInspectionReport',
+    raw:model?.fwd?.overview||{}
+  });
+  add({key:'diagnostics:root',type:'diagnosticCollection',name:'Diagnostics',source:'Reader diagnostics',metadata:{count:model.diags.length}});
+  add({key:'source:root',type:'sourceRoot',name:'Source / Raw',source:'FWD snapshot',raw:model?.fwd||{}});
+  return {byKey,batches,documents,pages};
+}
+function fwdEditorObject(key=state.selectedEditorObjectKey){
+  const index=buildFwdEditorIndex();
+  return index.byKey.get(key)||index.byKey.get('fwd:root');
+}
+function selectEditorObject(key){
+  const record=fwdEditorObject(key);
+  if(!buildFwdEditorIndex().byKey.has(key)&&/^(group|folder):/.test(text(key))){
+    toggleFwdTreeKey(key);
+    return;
+  }
+  if(!record)return;
+  state.selectedEditorObjectKey=record.key;
+  if(record.type==='acProcess'&&record.scopeId){
+    state.scopeId=record.scopeId;
+    state.workspaceView='structure';
+    state.selectedType='scope';
+    state.selectedId='';
+    noteRecentScope(record.scopeId);
+    seedExpanded(record.scopeId);
+  }else{
+    state.workspaceView='editor-object';
+    state.selectedType='editor-object';
+    state.selectedId=record.key;
+  }
+  saveState();
+  renderAll();
+}
+function toggleFwdTreeKey(key,force){
+  const open=state.fwdExpanded.has(key);
+  const next=force===undefined?!open:!!force;
+  if(next)state.fwdExpanded.add(key);else state.fwdExpanded.delete(key);
+  saveState();
+  renderGlobalNavigation();
+}
+function fwdTreeRow(record,options={}){
+  const depth=Number(options.depth||0);
+  const depthClass=`fwd-depth-${Math.max(0,Math.min(8,depth))}`;
+  const childrenHtml=text(options.childrenHtml||'');
+  const expandable=!!childrenHtml;
+  const open=expandable&&state.fwdExpanded.has(record.key);
+  const active=record.key===state.selectedEditorObjectKey||(record.type==='acProcess'&&record.scopeId===state.scopeId&&state.workspaceView==='structure');
+  const count=options.count;
+  const marker=expandable?`<button class="fwd-tree-toggle" type="button" data-fwd-toggle="${esc(record.key)}" aria-label="${open?'Collapse':'Expand'} ${esc(record.name)}" aria-expanded="${open?'true':'false'}">${open?'&#9662;':'&#9656;'}</button>`:'<span class="fwd-tree-toggle placeholder" aria-hidden="true"></span>';
+  return `<div class="fwd-tree-node" role="treeitem" aria-level="${depth+1}" ${expandable?`aria-expanded="${open?'true':'false'}"`:''}><div class="fwd-tree-row ${depthClass} ${active?'active':''}">${marker}<button class="fwd-tree-select" type="button" data-fwd-object="${esc(record.key)}" title="${esc(record.type)}: ${esc(record.name)}"><span class="fwd-tree-icon ${esc(record.type)}" aria-hidden="true"></span><span class="fwd-tree-label">${esc(record.name)}</span>${count===undefined?'':`<span class="fwd-tree-count">${fmt(count)}</span>`}</button></div>${open?`<div class="fwd-tree-children" role="group">${childrenHtml}</div>`:''}</div>`;
+}
+function fwdTreeGroup(key,label,records,renderRecord){
+  const record={key,type:'folder',name:label};
+  return fwdTreeRow(record,{depth:0,count:records.length,childrenHtml:records.map(renderRecord).join('')||'<div class="fwd-tree-empty">No configured items</div>'});
+}
+function fwdTreeReferenceRow(record,depth){
+  return fwdTreeRow(record,{depth,count:undefined});
+}
 function renderGlobalNavigation(){
   const el=$('globalNav');
   if(!el)return;
   if(!model){el.innerHTML='';return;}
+  const index=buildFwdEditorIndex();
   const counts=globalNavigationCounts();
-  function row(action,label,count,title){
+  const filter=lower(state.scopeQuery).trim();
+  const matchesFilter=record=>!filter||lower([record?.name,record?.type,record?.key].join(' ')).includes(filter);
+  function resourceRow(action,label,count,title){
     const view=action.replace(/^view-/,'');
     const active=state.workspaceView===view;
-    return `<button class="global-view-row ${active?'active':''}" type="button" data-action="${esc(action)}" aria-current="${active?'page':'false'}" title="${esc(title)}"><span class="global-view-name">${esc(label)}</span>${count===undefined?'':`<span class="global-view-count">${fmt(count)}</span>`}</button>`;
+    return `<button class="fwd-tree-resource-row ${active?'active':''}" type="button" data-action="${esc(action)}" aria-current="${active?'page':'false'}" title="${esc(title)}"><span class="fwd-tree-icon resource" aria-hidden="true"></span><span>${esc(label)}</span>${count===undefined?'':`<b>${fmt(count)}</b>`}</button>`;
   }
-  function scopeSection(title,scopes,limit=10){
-    const visible=list(scopes).slice(0,limit);
-    if(!visible.length)return '';
-    const rows=visible.map(scope=>{
-      const active=scope.scopeId===state.scopeId&&state.workspaceView==='structure';
-      return `<button class="global-view-row scope-shortcut ${active?'active':''}" type="button" data-scope="${esc(scope.scopeId)}" aria-current="${active?'page':'false'}" title="Open ${esc(scope.scopeId)}"><span class="global-view-name">${esc(scope.name||scope.scopeId)}</span><span class="global-view-count">${fmt(scope.structural||scope.rules||0)}</span></button>`;
-    }).join('');
-    const remaining=scopes.length-visible.length;
-    return `<details class="product-nav-folder" ${state.workspaceView==='structure'?'open':''}><summary><span>${esc(title)}</span><b>${fmt(scopes.length)}</b></summary>${rows}${remaining>0?`<button class="global-view-row muted-row" type="button" data-action="nav-${esc(title.toLowerCase())}"><span class="global-view-name">Show ${fmt(remaining)} more</span><span class="global-view-count">Filter</span></button>`:''}</details>`;
+  const renderDocument=(document,depth=1,full=true)=>{
+    const pages=list(document.childKeys).map(key=>index.byKey.get(key)).filter(item=>item?.type==='pageType');
+    const processes=list(document.childKeys).map(key=>index.byKey.get(key)).filter(item=>item?.type==='acProcess');
+    const children=full?[
+      ...processes.map(process=>fwdTreeRow(process,{depth:depth+1})),
+      ...(pages.length?[fwdTreeRow({key:`folder:document-pages:${document.key}`,type:'folder',name:'Pages in Document'},{depth:depth+1,count:pages.length,childrenHtml:pages.map(page=>fwdTreeReferenceRow(page,depth+2)).join('')})]:[])
+    ].join(''):'';
+    return fwdTreeRow(document,{depth,count:pages.length,childrenHtml:children});
+  };
+  const renderPage=(page,depth=1)=>{
+    const children=list(page.childKeys).map(key=>index.byKey.get(key)).filter(Boolean);
+    const variants=children.filter(item=>item.type==='pageVariant');
+    const fields=children.filter(item=>item.type==='field');
+    const processes=children.filter(item=>item.type==='acProcess');
+    const fieldLimit=200;
+    const childHtml=[
+      ...processes.map(process=>fwdTreeRow(process,{depth:depth+1})),
+      ...(variants.length?[fwdTreeRow({key:`folder:page-variants:${page.key}`,type:'folder',name:'Page Variants'},{depth:depth+1,count:variants.length,childrenHtml:variants.map(item=>fwdTreeReferenceRow(item,depth+2)).join('')})]:[]),
+      ...(fields.length?[fwdTreeRow({key:`folder:page-fields:${page.key}`,type:'folder',name:'Fields'},{depth:depth+1,count:fields.length,childrenHtml:fields.slice(0,fieldLimit).map(item=>fwdTreeReferenceRow(item,depth+2)).join('')+(fields.length>fieldLimit?`<div class="fwd-tree-empty">Showing ${fmt(fieldLimit)} of ${fmt(fields.length)} fields</div>`:'')})]:[])
+    ].join('');
+    return fwdTreeRow(page,{depth,count:fields.length,childrenHtml:childHtml});
+  };
+  const visibleBatches=index.batches.filter(batch=>matchesFilter(batch)||list(batch.childKeys).some(key=>matchesFilter(index.byKey.get(key))));
+  const visibleDocuments=index.documents.filter(document=>matchesFilter(document)||list(document.childKeys).some(key=>matchesFilter(index.byKey.get(key))));
+  const visiblePages=index.pages.filter(page=>matchesFilter(page)||list(page.childKeys).some(key=>matchesFilter(index.byKey.get(key))));
+  if(filter){
+    ['fwd:root','group:batches','group:documents','group:pages'].forEach(key=>state.fwdExpanded.add(key));
   }
-  const countsSummary=productCounts();
-  const docs=model.scopes.filter(s=>/document/i.test(s.kind)).sort((a,b)=>text(a.name).localeCompare(text(b.name),undefined,{sensitivity:'base'}));
-  const pages=model.scopes.filter(s=>/page/i.test(s.kind)).sort((a,b)=>text(a.name).localeCompare(text(b.name),undefined,{sensitivity:'base'}));
-  const processes=model.scopes.filter(s=>/process|\bac\b|\bdv\b|store|ocr|fip/i.test(`${s.kind} ${s.scopeId}`)).sort((a,b)=>text(a.name).localeCompare(text(b.name),undefined,{sensitivity:'base'}));
-  const diagnosticsRows=isAdvancedMode()?`<div class="scope-group global-nav-heading advanced-only"><span>Developer</span></div><div class="global-view-list advanced-only">${row('view-load-status','Load Status',counts.messages||model.diags.length,'Advanced load status and configuration warnings')}${row('view-object-graph','Object Graph',counts.objectGraph,'Developer object graph')}${row('view-runtime-impact','Runtime Impact',counts.runtimeImpact,'Developer static impact records')}</div>`:'';
-  el.innerHTML=`<div class="left-nav-shell product-left-nav"><div class="fwd-tree-root"><b>FWD</b><span>Read-only FW Editor-style configuration</span></div><div class="scope-group global-nav-heading"><span>Processing</span></div><div class="global-view-list" role="group" aria-label="Processing configuration">${row('view-structure','AC Rule List',countsSummary.rules,'Selected scope AC Rule List')}${row('view-rule-lists','Rule Lists',counts.ruleLists,'Rule Lists, Status Results, and Action Lists')}</div><div class="scope-group global-nav-heading"><span>Resources</span></div><div class="global-view-list" role="group" aria-label="Resources">${row('view-udfs','User Defined Functions',counts.udfs,'User Defined Functions and caller bindings')}${row('view-functions','Functions',counts.functions,'AC function catalog')}${row('view-tables','Tables',counts.tables,'Table resources')}${row('view-selection-lists','SelectionLists',counts.selectionLists,'SelectionList configuration')}${row('view-resources','Resources',counts.resources,'FWD resource definitions')}${row('view-drivers','Drivers',counts.drivers,'Driver definitions')}</div><div class="scope-group global-nav-heading"><span>FWD Tree</span></div>${scopeSection('Documents',docs,8)}${scopeSection('Pages',pages,12)}${scopeSection('Processes',processes,8)}${diagnosticsRows}</div>`;
+  const batches=fwdTreeGroup('group:batches','Batches',visibleBatches,batch=>{
+    const documents=list(batch.childKeys).map(key=>index.byKey.get(key)).filter(Boolean);
+    return fwdTreeRow(batch,{depth:1,count:documents.length,childrenHtml:documents.map(document=>renderDocument(document,2,false)).join('')});
+  });
+  const documents=fwdTreeGroup('group:documents','Documents',visibleDocuments,document=>renderDocument(document));
+  const pages=fwdTreeGroup('group:pages','Pages',visiblePages,page=>renderPage(page));
+  const resources=fwdTreeRow({key:'group:resources',type:'folder',name:'Resources'},{depth:0,count:counts.resources,childrenHtml:[
+    resourceRow('view-functions','Functions',counts.functions,'AC function catalog'),
+    resourceRow('view-udfs','User Defined Functions',counts.udfs,'User Defined Functions and internal Rule Lists'),
+    resourceRow('view-tables','Tables',counts.tables,'Table resources'),
+    resourceRow('view-selection-lists','Selection Lists',counts.selectionLists,'Selection List configuration'),
+    resourceRow('view-resources','Other Resources',counts.resources,'FWD resource definitions'),
+    resourceRow('view-drivers','Drivers',counts.drivers,'Driver definitions'),
+    resourceRow('view-rule-lists','Rule Lists',counts.ruleLists,'Snapshot-wide Rule Lists')
+  ].join('')});
+  const diagnostics=fwdTreeRow(index.byKey.get('diagnostics:root'),{depth:0,count:model.diags.length});
+  const source=fwdTreeRow(index.byKey.get('source:root'),{depth:0});
+  const developer=isAdvancedMode()?`<div class="fwd-tree-developer">${resourceRow('view-load-status','Load Status',counts.messages||model.diags.length,'Load and parse status')}${resourceRow('view-object-graph','Object Graph',counts.objectGraph,'Canonical object graph')}${resourceRow('view-runtime-impact','Runtime Impact',counts.runtimeImpact,'Static impact records')}</div>`:'';
+  const root=index.byKey.get('fwd:root');
+  el.innerHTML=`<div class="fwd-editor-tree-shell fweditor-fwd-tree-window"><div class="fwd-tree-toolbar"><label for="fwdTreeFilter">FWD Tree</label><input id="fwdTreeFilter" type="search" value="${esc(state.scopeQuery)}" placeholder="Filter FWD objects"></div><div class="fwd-editor-tree" role="tree" aria-label="FWD configuration tree">${fwdTreeRow(root,{depth:0,count:index.batches.length+index.documents.length+index.pages.length,childrenHtml:`${batches}${documents}${pages}${resources}${diagnostics}${source}${developer}`})}</div></div>`;
+}
+
+function editorObjectButton(record,label=record?.name){
+  if(!record)return '';
+  return `<button class="editor-object-link" type="button" data-fwd-object="${esc(record.key)}"><span class="fwd-tree-icon ${esc(record.type)}" aria-hidden="true"></span><span>${esc(label)}</span></button>`;
+}
+function editorObjectList(title,records,emptyText){
+  const rows=list(records);
+  return `<section class="editor-object-section"><h4>${esc(title)} <span>${fmt(rows.length)}</span></h4>${rows.length?`<div class="editor-object-list">${rows.map(record=>editorObjectButton(record)).join('')}</div>`:`<div class="fweditor-empty compact">${esc(emptyText)}</div>`}</section>`;
+}
+function renderEditorObject(){
+  const index=buildFwdEditorIndex();
+  const record=index.byKey.get(state.selectedEditorObjectKey)||index.byKey.get('fwd:root');
+  state.selectedEditorObjectKey=record.key;
+  const parents=list(record.parentKeys).map(key=>index.byKey.get(key)).filter(Boolean);
+  const children=list(record.childKeys).map(key=>index.byKey.get(key)).filter(Boolean);
+  const processes=children.filter(item=>item.type==='acProcess');
+  const variants=children.filter(item=>item.type==='pageVariant');
+  const fields=children.filter(item=>item.type==='field');
+  const ordinaryChildren=children.filter(item=>!['acProcess','pageVariant','field'].includes(item.type));
+  let body='';
+  if(record.type==='diagnosticCollection'){
+    const rows=list(model.diags).slice(0,500);
+    body=`<section class="editor-object-section"><h4>Diagnostics <span>${fmt(model.diags.length)}</span></h4><div class="editor-diagnostic-list">${rows.map(diag=>`<button type="button" data-diag="${esc(diag.id)}"><b>${esc(diag.severity||'Info')}</b><span>${esc(diag.title||diag.detail||'Diagnostic')}</span><small>${esc(diag.scopeId||'FWD')}</small></button>`).join('')||'<div class="fweditor-empty compact">No diagnostics were reported.</div>'}</div></section>`;
+  }else if(record.type==='sourceRoot'){
+    body=`<section class="editor-object-section"><h4>Source / Raw</h4><p>Bounded read-only snapshot data for the loaded FWD configuration.</p>${previewJsonHtml(record.raw,{open:true,maxDepth:4,maxArray:80,maxKeys:100,maxChars:24000})}</section>`;
+  }else{
+    body=`<div class="editor-object-grid">${editorObjectList('Parent Objects',parents,'This object has no configured parent in the current snapshot.')}${editorObjectList('Configured Children',ordinaryChildren,'No configured child objects were found.')}${processes.length?editorObjectList('Processing',processes,'No processing nodes were found.'):''}${variants.length?editorObjectList('Page Variants',variants,'No page variants were found.'):''}${fields.length?editorObjectList('Fields',fields.slice(0,500),'No fields were found.'):''}</div>`;
+    if(record.type==='field'){
+      body+=`<section class="editor-object-section"><h4>Field Configuration</h4><div class="kv">${kv('Page',esc(record.metadata.pageName||''))}${kv('Type',esc(record.metadata.fieldType||'Unknown'))}${kv('Geometry',esc(record.metadata.geometry||'Unavailable'))}${kv('Subfields',fmt(record.metadata.subfieldCount||0))}</div></section>`;
+    }
+    if(record.scopeId){
+      body+=`<section class="editor-object-section"><h4>AC Processing</h4><button class="btn primary" type="button" data-scope="${esc(record.scopeId)}">Open AC Rule List</button><p class="caption">Opens the configured page- or document-level Rule List for this object.</p></section>`;
+    }
+    body+=`<section class="editor-object-section"><h4>Source / Raw</h4>${previewJsonHtml({key:record.key,type:record.type,name:record.name,path:[...parents.map(parent=>parent.name),record.name],source:record.source,metadata:record.metadata,raw:record.raw},{maxDepth:4,maxArray:60,maxKeys:80,maxChars:18000})}</section>`;
+  }
+  const path=[...parents.map(parent=>parent.name),record.name].filter(Boolean).join(' / ');
+  $('content').innerHTML=`<section class="fweditor-object-view"><header class="editor-object-header"><div><span class="workspace-eyebrow">${esc(record.type)}</span><h3>${esc(record.name)}</h3><p class="mono">${esc(path||record.key)}</p></div><div class="tree-detail-badges"><span class="badge blue">Read-only</span><span class="badge">${esc(record.source||'FWD')}</span></div></header>${body}</section>`;
 }
 
 function modernRowMeta(row,kind){
   const metric=list(row.usage).length||row.metric||row.count||0;
   const stateText=kind==='selection-lists'?(row.selectionList?.schemaParsed?'Parsed schema':'Rule reference'):(row.defined===false?'Observed':'Loaded');
-  return `${stateText}${metric?` · ${fmt(metric)} refs`:''}`;
+  return `${stateText}${metric?` &middot; ${fmt(metric)} refs`:''}`;
 }
 
 function pagedRows(rows,pageSize=300){
@@ -6254,7 +6577,7 @@ function renderModernCatalog(kind,rows,selectedKey,stateKey,copy){
   const selected=filtered.find(r=>r.key===selectedKey)||filtered[0];
   state[stateKey]=selected.key;
   const page=pagedRows(filtered,300);
-  const rowsHtml=page.rows.map(row=>`<button class="product-index-row ${row.key===selected.key?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span><b>${esc(row.name||row.key)}</b><small>${esc(row.type||'Item')} · ${esc(modernRowMeta(row,kind))}</small></span><em>${esc(row.source||'FWD')}</em></button>`).join('');
+  const rowsHtml=page.rows.map(row=>`<button class="product-index-row ${row.key===selected.key?'active':''}" type="button" data-global-kind="${esc(kind)}" data-global-key="${esc(row.key)}"><span><b>${esc(row.name||row.key)}</b><small>${esc(row.type||'Item')} &middot; ${modernRowMeta(row,kind)}</small></span><em>${esc(row.source||'FWD')}</em></button>`).join('');
   $('content').innerHTML=`<section class="product-workspace product-catalog product-catalog-${esc(kind)}"><div class="product-catalog-head"><div><h3>${esc(copy.title)}</h3><p>${esc(copy.body)}</p></div><span class="badge blue">${fmt(filtered.length)} shown</span></div><div class="product-catalog-grid"><aside class="product-index" aria-label="${esc(copy.title)} list">${rowsHtml}${page.truncated?`<div class="caption mt-8">Showing first ${fmt(page.limit)} of ${fmt(page.total)}. Narrow search for more.</div>`:''}</aside><article class="product-detail" aria-label="${esc(copy.title)} detail"><div class="product-detail-head"><div><div class="eyebrow">${esc(copy.title)}</div><h3>${esc(selected.name||selected.key)}</h3><p>${esc(selected.type||selected.source||'Read-only configuration')}</p></div><button class="btn" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Open FW Editor details</button></div>${modernCatalogDetail(kind,selected)}</article></div></section>`;
 }
 function renderGlobalResourceDefinitions(){
@@ -6302,7 +6625,7 @@ function renderRuleListPacketDefinitions(){
 function renderMessages(){
   const stats=messageWindowStats();
   const rows=filteredDiags().slice(0,500);
-  const rowsHtml=rows.map(d=>`<button class="product-index-row" type="button" data-diag="${esc(d.id)}"><span><b>${esc(d.title||d.severity||'Status message')}</b><small>${esc(d.scopeId||'Snapshot')} · ${esc(d.detail||d.Message||'')}</small></span><em>${esc(d.severity||'Info')}</em></button>`).join('');
+  const rowsHtml=rows.map(d=>`<button class="product-index-row" type="button" data-diag="${esc(d.id)}"><span><b>${esc(d.title||d.severity||'Status message')}</b><small>${esc(d.scopeId||'Snapshot')} &middot; ${esc(d.detail||d.Message||'')}</small></span><em>${esc(d.severity||'Info')}</em></button>`).join('');
   $('content').innerHTML=`<section class="product-workspace product-catalog"><div class="product-catalog-head"><div><h3>Load Status</h3><p>Configuration load status and warnings. This area is hidden unless advanced mode is enabled.</p></div><div class="product-status-inline"><span>Items <b>${fmt(stats.diags.length)}</b></span><span>Warnings <b>${fmt(stats.warningCount)}</b></span><span>Linked <b>${fmt(stats.linkedCount)}</b></span></div></div><div class="product-catalog-grid single"><aside class="product-index">${rowsHtml||'<div class="product-empty-state compact"><h3>No diagnostics</h3><p>No diagnostics match the current filter.</p></div>'}</aside></div></section>`;
 }
 function normalizeWorkspaceViewForScope(){
@@ -6314,25 +6637,29 @@ function normalizeWorkspaceViewForScope(){
 
 
 /* v80 FW Editor parity: selected rule property sheet, keyboard tabs, locked default editor shell, load-status routing, and normal-mode terminology cleanup. */
-function fweditorRuleDetailTabsHtml(active='general'){
+function fweditorRuleDetailTabsHtml(active='summary'){
   const tabs=[
-    ['general','General'],
+    ['summary','Summary'],
+    ['function','Function'],
     ['fields','Fields / Parameters'],
     ['attributes','Attributes'],
-    ['status-results','Status Results'],
-    ['description','Description']
+    ['status-results','Status Results / Actions'],
+    ['children','Children / Sub-lists'],
+    ['references','References'],
+    ['raw','Source / Raw'],
+    ['diagnostics','Diagnostics']
   ];
   return `<div class="fweditor-property-tabs" role="tablist" aria-label="Rule property pages">${tabs.map(([id,label])=>`<button class="${id===active?'active':''}" type="button" data-rule-property-tab="${esc(id)}" role="tab" aria-selected="${id===active?'true':'false'}">${esc(label)}</button>`).join('')}</div>`;
 }
 function normalizedRulePropertyPage(){
-  const page=text(state.rulePropertyPage||state.inspectorView||'general');
-  if(page==='summary')return 'general';
+  const page=text(state.rulePropertyPage||state.inspectorView||'summary');
+  if(page==='general')return 'summary';
   if(page==='config')return 'fields';
   if(page==='actions')return 'status-results';
-  return ['general','fields','attributes','status-results','description'].includes(page)?page:'general';
+  return ['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(page)?page:'summary';
 }
 function setRulePropertyPage(page){
-  const next=['general','fields','attributes','status-results','description'].includes(page)?page:'general';
+  const next=['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(page)?page:'summary';
   state.rulePropertyPage=next;
   renderContent();
   saveState();
@@ -6355,6 +6682,33 @@ function ruleDescriptionPropertyHtml(n){
   const configured=`This read-only property page shows the rule as configured in the FWD: function, field-list parameters, attributes, and Status Result to Action List mapping.`;
   return `<div class="fweditor-description-page"><div class="notice compact"><div class="notice-icon">i</div><div><b>${esc(functionName||'Rule')}</b><br>${esc(desc||configured)}</div></div>${functionMetadataBlock(n)}<div class="table-columns-head mt-12">Rule List Path</div>${pathHtml(n)}</div>`;
 }
+function ruleFunctionPropertyHtml(n){
+  const functionName=text(n.fn||n.FunctionName||'');
+  const fnRow=buildGlobalFunctionDefinitions().find(row=>sameName(row.name,functionName)||sameName(row.key,functionName));
+  const udf=udfForFunctionName(functionName);
+  return `<div class="fweditor-function-page">${functionMetadataBlock(n)}${fnRow?functionConfigurationHtml(fnRow.fn||fnRow,fnRow):''}${udf?`<div class="table-columns-head mt-12">User Defined Function</div>${linkedDefinitionHtml(udf.displayName||udf.rawName||functionName,'UDF','')}`:''}</div>`;
+}
+function ruleChildrenPropertyHtml(n){
+  const groups=childActionListGroups(n.id);
+  if(!groups.length)return '<div class="fweditor-empty compact">This rule has no configured child Action Lists or sub-lists.</div>';
+  return `<div class="mini-list">${groups.map(group=>{
+    const key=actionListKey(n.id,group);
+    const children=list(group.childIds).map(id=>model.nodesById.get(String(id))).filter(Boolean);
+    return `<button class="mini-row" type="button" data-action-list="${esc(key)}"><span><b>${esc(group.label)}</b><small>${esc(group.routeState||'Action List')} - ${fmt(children.length)} child rules</small></span><span class="badge ${group.resolved?'green':'amber'}">${group.resolved?'Resolved':'Review'}</span></button>`;
+  }).join('')}</div>`;
+}
+function ruleReferencesPropertyHtml(n){
+  const refs=list(model.relsByNode?.get(String(n.id))).length
+    ? list(model.relsByNode?.get(String(n.id)))
+    : model.rels.filter(reference=>String(reference.nodeId)===String(n.id));
+  if(!refs.length)return '<div class="fweditor-empty compact">No inbound or outbound references are linked to this rule in the current snapshot.</div>';
+  return `<div class="mini-list">${refs.map(reference=>`<div class="mini-row"><span><b>${esc(reference.kind||'Reference')}</b><small>${esc(reference.targetType||'Object')}</small></span><span>${relationshipTargetHtml(reference)}</span></div>`).join('')}</div>`;
+}
+function ruleDiagnosticsPropertyHtml(n){
+  const diagnostics=list(model.diagsByNode?.get(String(n.id)));
+  if(!diagnostics.length)return '<div class="fweditor-empty compact">No diagnostics are linked to this rule.</div>';
+  return `<div class="editor-diagnostic-list">${diagnostics.map(diagnostic=>`<button type="button" data-diag="${esc(diagnostic.id)}"><b>${esc(diagnostic.severity||'Info')}</b><span>${esc(diagnostic.title||diagnostic.detail||'Diagnostic')}</span><small>${esc(diagnostic.scopeId||n.scopeId||'Rule')}</small></button>`).join('')}</div>`;
+}
 function fweditorActionListPropertiesHtml(actionList){
   if(!actionList)return '<div class="fweditor-empty">Select a rule or Action List.</div>';
   const rows=actionList.childNodes.length?actionList.childNodes.map(n=>`<button class="mini-row" type="button" data-node="${esc(n.id)}"><span><b>${esc(n.title)}</b><small>${esc(n.fn||'No function')}</small></span><span class="badge blue">Rule</span></button>`).join(''):'<div class="muted">No rules are assigned to this Action List.</div>';
@@ -6373,7 +6727,11 @@ function fweditorRulePropertiesHtml(){
   if(active==='fields')body=`${paramBlockForRule(n)}<div class="table-columns-head mt-12">Field Catalog Match</div>${renderFieldResolutionBlock(resolveNodeFieldReferences(n))}`;
   else if(active==='attributes')body=attributesBlockForRule(n);
   else if(active==='status-results')body=`${statusActionsBlockForRule(n)}<div class="table-columns-head mt-12">Parent Rule / Sub-list Path</div>${parentRuleActionListBlock(n)}`;
-  else if(active==='description')body=ruleDescriptionPropertyHtml(n);
+  else if(active==='function')body=ruleFunctionPropertyHtml(n);
+  else if(active==='children')body=ruleChildrenPropertyHtml(n);
+  else if(active==='references')body=ruleReferencesPropertyHtml(n);
+  else if(active==='raw')body=previewJsonHtml(selectedRuleConfigPacket(n),{open:true,maxDepth:5,maxArray:100,maxKeys:120,maxChars:28000});
+  else if(active==='diagnostics')body=ruleDiagnosticsPropertyHtml(n);
   else body=ruleGeneralPropertyHtml(n);
   return `<div class="fweditor-rule-properties"><div class="fweditor-property-title"><div><span class="workspace-eyebrow">Selected Rule</span><h4>${esc(n.title||'Unnamed rule')}</h4><p>${esc(n.fn||'No function')}</p></div><div class="tree-detail-badges"><span class="badge blue">${fmt(paramCount)} fields</span><span class="badge blue">${fmt(attrCount)} attrs</span><span class="badge amber">${fmt(actionRows.length)} statuses</span></div></div>${fweditorRuleDetailTabsHtml(active)}<div class="fweditor-property-body" role="tabpanel">${body}</div></div>`;
 }
@@ -6419,6 +6777,9 @@ function selectBestAvailableScope(){
 function workspaceContentScore(view){
   if(!model)return 0;
   const normalized=normalizeWorkspaceViewName(view);
+  if(normalized==='editor-object'){
+    return buildFwdEditorIndex().byKey.has(state.selectedEditorObjectKey)?1:0;
+  }
   if(normalized==='structure')return list(model.nodes).length+list(model.inventory).length+list(model.scopes).reduce((sum,scope)=>sum+scopeRuleContentScore(scope),0);
   if(normalized==='field-resolution'){
     // Field Resolution is a scope-local workspace. It must be considered valid

@@ -18,6 +18,10 @@ function contentType(filePath) {
 }
 
 function resolveServedFile(pathname) {
+  if (pathname === '/ac-rule-viewer.fwd.json') {
+    return path.join(fixtureDir, 'fwd-hierarchy.fixture.json');
+  }
+
   const requested = pathname === '/' ? '/ac-rule-viewer.html' : pathname;
   const decoded = decodeURIComponent(requested);
   const relative = decoded.replace(/^\//, '');
@@ -88,7 +92,7 @@ test.beforeAll(async () => {
 
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address();
-  viewerUrl = `http://127.0.0.1:${port}/ac-rule-viewer.html?fwdApi=off`;
+  viewerUrl = `http://127.0.0.1:${port}/ac-rule-viewer.html?fwdApi=off&bootSidecar=off&granular=off`;
 });
 
 test.afterAll(async () => {
@@ -116,7 +120,7 @@ async function openViewer(page) {
   });
 
   await page.goto(viewerUrl);
-  await expect(page.getByText('FW Editor Viewer').first()).toBeVisible();
+  await expect(page.getByText('FormWorks Editor Viewer').first()).toBeVisible();
   await expect(page.locator('#statusPill')).not.toContainText(/Loading/i, { timeout: 15000 });
 
   return { pageErrors, consoleErrors };
@@ -127,8 +131,7 @@ async function clickViewerAction(page, action, fallbackName) {
 
   if (await byAction.count()) {
     await expect(byAction).toBeVisible({ timeout: 10000 });
-    await byAction.scrollIntoViewIfNeeded();
-    await byAction.evaluate(element => element.click());
+    await byAction.click();
     return;
   }
 
@@ -160,14 +163,35 @@ test.describe('FW Editor Viewer normal mode', () => {
     await expect(firstRule).toBeVisible({ timeout: 10000 });
     await firstRule.evaluate(element => element.click());
 
-    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'General' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Summary' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Function' })).toBeVisible();
     await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Fields / Parameters' })).toBeVisible();
     await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Attributes' })).toBeVisible();
-    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Status Results' })).toBeVisible();
-    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Description' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Status Results / Actions' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Children / Sub-lists' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'References' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Source / Raw' })).toBeVisible();
+    await expect(page.getByLabel('Rule property pages').getByRole('tab', { name: 'Diagnostics' })).toBeVisible();
 
     await page.getByLabel('Rule property pages').getByRole('tab', { name: 'Fields / Parameters' }).evaluate(element => element.click());
     await expect(page.locator('.fweditor-property-body')).toContainText(/Field|Parameter|No parsed/i);
+
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('uses configured batch, document, and page ownership in the FWD tree', async ({ page }) => {
+    const { pageErrors, consoleErrors } = await openViewer(page);
+
+    await expect(page.locator('[data-fwd-object="batch:ClaimsBatch"]')).toBeVisible();
+    await page.locator('[data-fwd-toggle="batch:ClaimsBatch"]').click();
+    const batchTreeItem = page.locator('[data-fwd-object="batch:ClaimsBatch"]').locator('xpath=ancestor::*[@role="treeitem"][1]');
+    const ownedDocument = batchTreeItem.locator('[data-fwd-object="document:ClaimDocument"]');
+    await expect(ownedDocument).toBeVisible();
+
+    await ownedDocument.click();
+    await expect(page.locator('.fweditor-object-view')).toContainText('ClaimDocument');
+    await expect(page.locator('.fweditor-object-view')).toContainText('DentalADA');
 
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);

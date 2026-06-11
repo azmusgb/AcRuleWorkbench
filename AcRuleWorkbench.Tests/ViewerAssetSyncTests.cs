@@ -72,14 +72,16 @@ public sealed class ViewerAssetSyncTests
         Assert.AreEqual(NormalizeEol(inlineTemplateCss), NormalizeEol(shippedCss),
             "The inline template CSS and shipped viewer CSS diverged. Keep all viewer styles synchronized.");
 
-        AssertContains(shipped, "data-ui-build=\"" + viewerBuild + "\"", "Viewer HTML must advertise the current FW Editor Viewer build.");
+        AssertContains(shipped, "data-ui-build=\"" + viewerBuild + "\"", "Viewer HTML must advertise the current FormWorks Editor Viewer build.");
         AssertContains(shipped, viewerCacheKey, "Viewer HTML asset cache key must track viewer-build.txt.");
-        AssertContains(shipped, "FW Editor Viewer", "Viewer shell must present the product as FW Editor Viewer.");
+        AssertContains(shipped, "FormWorks Editor Viewer", "Viewer shell must present the canonical product name.");
         AssertContains(shippedScript, "const viewerStateBuild='" + viewerBuild + "'", "Persisted viewer state key must track the current viewer build.");
         AssertContains(startScript, "Get-WbViewerBuildMarker", "Startup stale-viewer detection must read the build marker from viewer-build.txt.");
         AssertContains(startScript, "data-ui-build=", "Startup stale-viewer detection must inspect the viewer build marker.");
         Assert.IsFalse(System.Text.RegularExpressions.Regex.IsMatch(startScript, "data-ui-build=\\\"v\\d+-fw-editor-viewer\\\""), "Startup script should not hardcode release-specific build markers.");
         AssertContains(shippedScript, "function fweditorRulePropertiesHtml", "Selected Rule property sheet is missing.");
+        AssertContains(shippedScript, "function buildFwdEditorIndex", "Configured FWD hierarchy index is missing.");
+        AssertContains(shippedScript, "function renderEditorObject", "FWD object detail rendering is missing.");
         AssertContains(shippedScript, "data-rule-property-tab", "Rule property tab wiring is missing.");
         AssertContains(shippedCss, ".fweditor-rulelist-layout", "Rule List/property layout CSS is missing.");
         AssertContains(shippedCss, "html:not([data-theme])", "Viewer CSS must default to light mode without requiring persisted theme state.");

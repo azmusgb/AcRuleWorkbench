@@ -9786,7 +9786,7 @@ body.fw-editor-viewer-shell .diagnostics-dock{
 }
 body.fw-editor-viewer-shell .shell{
   display:grid!important;
-  grid-template-columns:var(--left-pane-w,360px) 6px minmax(0,1fr) 6px var(--right-pane-w,380px)!important;
+  grid-template-columns:var(--fwe-left-width,320px) minmax(0,1fr)!important;
   height:calc(100dvh - var(--topbar-h))!important;
   min-height:0!important;
   overflow:hidden!important;
@@ -9800,7 +9800,7 @@ body.fw-editor-viewer-shell .pane.left{
   background:var(--surface);
 }
 body.fw-editor-viewer-shell .pane.main{
-  grid-column:3!important;
+  grid-column:2!important;
   flex-direction:column!important;
   min-width:0!important;
   overflow:hidden!important;
@@ -9809,7 +9809,7 @@ body.fw-editor-viewer-shell .pane.right{
   grid-column:5!important;
 }
 body.fw-editor-viewer-shell .pane-resizer{
-  display:block!important;
+  display:none!important;
 }
 body.fw-editor-viewer-shell .global-nav{
   display:block!important;
@@ -9960,7 +9960,7 @@ body.fw-editor-viewer-shell .app{
   overflow: hidden !important;
 }
 body.fw-editor-viewer-shell .shell{
-  grid-template-columns: var(--left-w) 6px minmax(0, 1fr) 0 0 !important;
+  grid-template-columns: var(--fwe-left-width,320px) minmax(0, 1fr) !important;
   background: #e7edf4 ;
 }
 body.fw-editor-viewer-shell.inspector-open .shell{
@@ -9985,7 +9985,7 @@ body.fw-editor-viewer-shell.inspector-open .pane.right{
   border-left: 1px solid var(--border, #d8e1ea) ;
 }
 body.fw-editor-viewer-shell .left-resizer{ grid-column: 2 !important; }
-body.fw-editor-viewer-shell .pane.main{ grid-column: 3 !important; }
+body.fw-editor-viewer-shell .pane.main{ grid-column: 2 !important; }
 body.fw-editor-viewer-shell .right-resizer{ grid-column: 4 !important; }
 body.fw-editor-viewer-shell .pane.right{ grid-column: 5 !important; }
 body.fw-editor-viewer-shell .topbar{
@@ -10010,7 +10010,7 @@ body.fw-editor-viewer-shell .scope-kicker{
   letter-spacing: .11em;
 }
 body.fw-editor-viewer-shell .scope-title{
-  min-height: 72px !important;
+  min-height: 0 !important;
   border-bottom: 1px solid var(--border, #d8e1ea) ;
   background: #fff ;
 }
@@ -10189,18 +10189,18 @@ body.product-shell-v70 button.btn{border:1px solid var(--fwc-line);background:va
 body.product-shell-v70 .btn:hover{border-color:var(--fwc-accent);background:var(--fwc-accent-soft)!important}
 body.product-shell-v70 .shell{
   display:grid!important;
-  grid-template-columns:var(--left-w) 10px minmax(0,1fr) 0!important;
+  grid-template-columns:var(--fwe-left-width,320px) minmax(0,1fr)!important;
   min-height:0!important;
   height:calc(100vh - var(--topbar-h))!important;
   height:calc(100dvh - var(--topbar-h))!important;
   overflow:hidden!important;
   background:var(--fwc-bg);
 }
-body.product-shell-v70.inspector-open .shell{grid-template-columns:var(--left-w) 10px minmax(0,1fr) 10px var(--right-w)!important}
+body.product-shell-v70.inspector-open .shell{grid-template-columns:var(--fwe-left-width,320px) minmax(0,1fr)!important}
 body.product-shell-v70 .pane.left{
   display:block!important;overflow:auto!important;background:var(--fwc-surface);border-right:1px solid var(--fwc-line);padding:14px;color:var(--fwc-text)!important
 }
-body.product-shell-v70 .pane.main{display:grid!important;grid-template-rows:auto minmax(0,1fr) auto!important;min-width:0!important;background:var(--fwc-bg);border:0;color:var(--fwc-text)!important}
+body.product-shell-v70 .pane.main{display:grid!important;grid-column:2!important;grid-template-rows:auto minmax(0,1fr) auto!important;min-width:0!important;background:var(--fwc-bg);border:0;color:var(--fwc-text)!important}
 body.product-shell-v70 .pane.right{background:var(--fwc-surface);border-left:1px solid var(--fwc-line);color:var(--fwc-text)!important}
 body.product-shell-v70:not(.inspector-open) .pane.right{display:none!important}
 body.product-shell-v70 .pane-resizer{background:transparent;border:0!important}
@@ -10215,6 +10215,7 @@ body.product-shell-v70 .head-chip{display:inline-flex;margin:8px 6px 0 0;padding
 body.product-shell-v70 .head-chip.warning{background:var(--fwc-warn-soft);border-color:color-mix(in srgb,var(--fwc-warn) 35%,var(--fwc-line));color:var(--fwc-warn)}
 body.product-shell-v70 .head-chip.success{background:var(--fwc-ok-soft);border-color:color-mix(in srgb,var(--fwc-ok) 35%,var(--fwc-line));color:var(--fwc-ok)}
 body.product-shell-v70 .tabs{margin-top:12px;gap:8px!important}
+body.product-shell-v70 .tabs[hidden]{display:none!important}
 body.product-shell-v70 .workspace-tab{border:1px solid var(--fwc-line);background:var(--fwc-surface-soft);color:var(--fwc-muted);border-radius:999px;padding:8px 12px;font-weight:700}
 body.product-shell-v70 .workspace-tab.active{background:var(--fwc-accent-soft);color:var(--fwc-accent);border-color:color-mix(in srgb,var(--fwc-accent) 40%,var(--fwc-line))!important}
 body.product-shell-v70 .product-viewbar{display:flex;gap:12px;align-items:center;margin-top:12px}
@@ -10238,6 +10239,7 @@ body.product-shell-v70 .global-view-row.active .global-view-count{color:var(--fw
 body.product-shell-v70 #scopeList,
 body.product-shell-v70 #recentScopes{display:none!important}
 body.product-shell-v70 .diagnostics-dock{background:var(--fwc-surface);border-top:1px solid var(--fwc-line);color:var(--fwc-text);padding:8px 14px;min-height:42px!important}
+body.product-shell-v70 .diagnostics-dock[hidden]{display:none!important}
 body.product-shell-v70 .load-status-window-title b{color:var(--fwc-text)!important}
 body.product-shell-v70 .load-status-window-title span,
 body.product-shell-v70 .diagnostics-feed{color:var(--fwc-muted)!important}
@@ -10575,11 +10577,11 @@ body.product-shell-v70.ui-2026 .shell{
   min-width:0!important;
   padding:clamp(10px,1vw,18px);
   gap:clamp(10px,1vw,16px);
-  grid-template-columns:var(--left-w) minmax(0,1fr) 0!important;
+  grid-template-columns:var(--fwe-left-width,320px) minmax(0,1fr)!important;
   background:transparent;
 }
 body.product-shell-v70.ui-2026.inspector-open .shell{
-  grid-template-columns:var(--left-w) minmax(0,1fr) var(--right-w)!important;
+  grid-template-columns:var(--fwe-left-width,320px) minmax(0,1fr)!important;
 }
 body.product-shell-v70.ui-2026 .pane-resizer{
   display:none!important;
@@ -11691,4 +11693,11 @@ body.fw-editor-viewer-shell .product-empty-state-actionable{
 }
 /* END FW PRODUCT SHELL V70 MID WIDTH TWO COLUMN FINAL GUARD */
 /* END FW STARTUP LAYOUT PRIORITY QUARANTINE */
+
+/* Hidden shell regions stay out of layout after all legacy compatibility layers. */
+body.product-shell-v70.fw-editor-viewer-shell .tabs[hidden],
+body.product-shell-v70.fw-editor-viewer-shell .diagnostics-dock[hidden],
+body.product-shell-v70.fw-editor-viewer-shell #viewbar[hidden] {
+  display: none !important;
+}
 

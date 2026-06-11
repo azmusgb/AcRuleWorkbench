@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace AcRuleWorkbench.Core;
@@ -19,6 +20,10 @@ public sealed class FwdInspectionReport
     public List<string> Batches { get; } = new();
 
     public List<string> Processes { get; } = new();
+
+    public Dictionary<string, List<string>> DocsInBatch { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Dictionary<string, List<string>> PagesInDoc { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public List<ResourceBucket> Resources { get; } = new();
 

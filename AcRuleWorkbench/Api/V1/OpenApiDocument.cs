@@ -31,11 +31,11 @@ internal static class OpenApiDocument
             openapi = "3.0.3",
             info = new
             {
-                title = "FW Editor Viewer API",
+                title = "FormWorks Editor Viewer API",
                 version = ApiV1Routes.ApiVersion,
                 description = "Read-only FormWorks/DCM AutoCapture configuration API. The API exposes static FWD configuration only; it does not execute AC rules or write to FWD configuration."
             },
-            servers = new[] { new { url, description = "Local FW Editor Viewer server" } },
+            servers = new[] { new { url, description = "Local FormWorks Editor Viewer server" } },
             tags = new[]
             {
                 new { name = "system", description = "Server status, capabilities, health, and OpenAPI." },

@@ -15,5 +15,5 @@
     "@playwright/test": "^1.46.0",
     "eslint": "^9.0.0"
   },
-  "viewerBuild": "v103-fw-editor-viewer"
+  "viewerBuild": "v104-fw-editor-viewer"
 }

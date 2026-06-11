@@ -528,9 +528,52 @@ private static object BuildAcViewerStaticFwdData(FwdInspectionReport fwd, AcRule
                     rules = rules.Rules.Count
                 }
             },
-            documents = new { count = fwd.Documents.Count, items = fwd.Documents.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new { name }).ToList() },
-            pages = new { count = fwd.Pages.Count, items = fwd.Pages.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new { name }).ToList() },
-            batches = new { count = fwd.Batches.Count, items = fwd.Batches.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new { name }).ToList() },
+            documents = new
+            {
+                count = fwd.Documents.Count,
+                items = fwd.Documents.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new
+                {
+                    key = "document:" + name,
+                    type = "documentType",
+                    name,
+                    parentBatchKeys = fwd.DocsInBatch
+                        .Where(pair => pair.Value.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        .Select(pair => "batch:" + pair.Key)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                    pageKeys = fwd.PagesInDoc.TryGetValue(name, out List<string>? pages)
+                        ? pages.Select(page => "page:" + page).ToList()
+                        : new List<string>()
+                }).ToList()
+            },
+            pages = new
+            {
+                count = fwd.Pages.Count,
+                items = fwd.Pages.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new
+                {
+                    key = "page:" + name,
+                    type = "pageType",
+                    name,
+                    parentDocumentKeys = fwd.PagesInDoc
+                        .Where(pair => pair.Value.Contains(name, StringComparer.OrdinalIgnoreCase))
+                        .Select(pair => "document:" + pair.Key)
+                        .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                        .ToList()
+                }).ToList()
+            },
+            batches = new
+            {
+                count = fwd.Batches.Count,
+                items = fwd.Batches.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new
+                {
+                    key = "batch:" + name,
+                    type = "batchType",
+                    name,
+                    documentKeys = fwd.DocsInBatch.TryGetValue(name, out List<string>? documents)
+                        ? documents.Select(document => "document:" + document).ToList()
+                        : new List<string>()
+                }).ToList()
+            },
             processes = new { count = fwd.Processes.Count, items = fwd.Processes.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Select(name => new { name, processName = name }).ToList() },
             processDrivers = new { count = 0, items = Array.Empty<object>(), notes = new[] { "Process driver details require the live API process-private traversal endpoint." } },
             resources = new { count = resourceBuckets.Sum(b => b.count), buckets = resourceBuckets },
@@ -590,6 +633,41 @@ private static object BuildAcViewerStaticObjectGraph(FwdInspectionReport fwd)
 
         AddStaticGraphNode(nodes, rootId, "FwdRoot", fwd.Path, "StaticViewerExport", "High", new Dictionary<string, object?>());
 
+        foreach (string batch in fwd.Batches.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            string batchId = "batchtype:" + ViewerSafeId(batch);
+            AddStaticGraphNode(nodes, batchId, "BatchType", batch, "Fwd.GetBatchNames", "High", new Dictionary<string, object?>());
+            AddStaticGraphEdge(edges, rootId, batchId, "containsBatch", "Fwd.GetBatchNames", "High");
+        }
+
+        foreach (string document in fwd.Documents.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            string documentId = "documenttype:" + ViewerSafeId(document);
+            AddStaticGraphNode(nodes, documentId, "DocumentType", document, "Fwd.GetDocumentNames", "High", new Dictionary<string, object?>());
+            AddStaticGraphEdge(edges, rootId, documentId, "containsDocument", "Fwd.GetDocumentNames", "High");
+        }
+
+        foreach (string page in fwd.Pages.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            string pageId = "pagetype:" + ViewerSafeId(page);
+            AddStaticGraphNode(nodes, pageId, "PageType", page, "Fwd.GetPageNames", "High", new Dictionary<string, object?>());
+            AddStaticGraphEdge(edges, rootId, pageId, "containsPage", "Fwd.GetPageNames", "High");
+        }
+
+        foreach (KeyValuePair<string, List<string>> membership in fwd.DocsInBatch)
+        {
+            string batchId = "batchtype:" + ViewerSafeId(membership.Key);
+            foreach (string document in membership.Value)
+                AddStaticGraphEdge(edges, batchId, "documenttype:" + ViewerSafeId(document), "containsDocument", "Fwd.GetDocsInBatch", "High");
+        }
+
+        foreach (KeyValuePair<string, List<string>> membership in fwd.PagesInDoc)
+        {
+            string documentId = "documenttype:" + ViewerSafeId(membership.Key);
+            foreach (string page in membership.Value)
+                AddStaticGraphEdge(edges, documentId, "pagetype:" + ViewerSafeId(page), "containsPage", "Fwd.GetPagesInDoc", "High");
+        }
+
         foreach (ResourceBucket bucket in fwd.Resources.OrderBy(b => b.Type, StringComparer.OrdinalIgnoreCase))
         {
             foreach (string name in bucket.Names.Where(n => !string.IsNullOrWhiteSpace(n)).OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -621,7 +699,7 @@ private static object BuildAcViewerStaticObjectGraph(FwdInspectionReport fwd)
         {
             nodes,
             edges,
-            diagnostics = new[] { "Static export object graph includes FWD resource nodes and resource-private descendants only. Live API adds fields, rule lists, pages, variants, and process-private nodes." }
+            diagnostics = new[] { "Static export object graph includes configured batch, document, page, resource, and resource-private nodes. Live API adds fields, rule lists, variants, and process-private nodes." }
         };
     }
 

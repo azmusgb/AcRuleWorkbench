@@ -1064,7 +1064,7 @@ internal static class Program
 
     private static void PrintAcViewer(AcViewerReport report)
     {
-        Console.WriteLine("FW Editor Viewer Export");
+        Console.WriteLine("FormWorks Editor Viewer Export");
         Console.WriteLine("=======================");
         Console.WriteLine("FWD           : " + report.FwdPath);
         Console.WriteLine("Output        : " + report.OutputPath);

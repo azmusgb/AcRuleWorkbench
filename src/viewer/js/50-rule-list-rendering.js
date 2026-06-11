@@ -369,6 +369,8 @@ function saveState(){
     treeFilter:state.treeFilter,
     scopeKindFilter:state.scopeKindFilter,
     workspaceView:state.workspaceView,
+    selectedEditorObjectKey:state.selectedEditorObjectKey,
+    fwdExpanded:[...state.fwdExpanded],
     fieldResolutionFilter:state.fieldResolutionFilter,
     inventoryFilter:state.inventoryFilter,
     messageFilter:state.messageFilter,
@@ -411,11 +413,13 @@ function restoreSnapshotState(){
   if(saved.scopeKindFilter)state.scopeKindFilter=saved.scopeKindFilter;
   state.workspaceView=validWorkspaceViews().includes(saved.workspaceView)?saved.workspaceView:'structure';
   state.workspaceView=requestedWorkspaceView()||state.workspaceView;
+  state.selectedEditorObjectKey=text(saved.selectedEditorObjectKey||state.selectedEditorObjectKey||'');
+  state.fwdExpanded=new Set(Array.isArray(saved.fwdExpanded)?saved.fwdExpanded:[...state.fwdExpanded]);
   state.fieldResolutionFilter=['all','resolved','unresolved'].includes(saved.fieldResolutionFilter)?saved.fieldResolutionFilter:'unresolved';
   state.inventoryFilter=['all','StructuralMatch','AdditionalRule','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:state.inventoryFilter;
   state.messageFilter=normalizeMessageFilter(saved.messageFilter||state.messageFilter);
   state.inspectorView=(()=>{const view=saved.inspectorView==='config'?'fields':saved.inspectorView==='actions'?'status-results':saved.inspectorView;return ['general','fields','attributes','status-results','description','summary','references','messages','raw'].includes(view)?view:'general';})();
-  state.rulePropertyPage=(()=>{const page=text(saved.rulePropertyPage||state.rulePropertyPage||'general');const normalized=page==='summary'?'general':page==='config'?'fields':page==='actions'?'status-results':page;return ['general','fields','attributes','status-results','description'].includes(normalized)?normalized:'general';})();
+  state.rulePropertyPage=(()=>{const page=text(saved.rulePropertyPage||state.rulePropertyPage||'summary');const normalized=page==='general'?'summary':page==='config'?'fields':page==='actions'?'status-results':page;return ['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(normalized)?normalized:'summary';})();
   state.selectedResourceKey=text(saved.selectedResourceKey||'');
   state.selectedFunctionName=text(saved.selectedFunctionName||'');
   state.selectedDriverKey=text(saved.selectedDriverKey||'');
@@ -598,7 +602,7 @@ function searchResults(){
     addGlobalDefinitionSearchRows(rows,q,'Resource','resources',buildGlobalResourceDefinitions());
     addGlobalDefinitionSearchRows(rows,q,'Driver','drivers',buildGlobalDriverDefinitions());
   }catch(error){
-    console.warn('FW Editor Viewer: global search definition indexing failed.',error);
+    console.warn('FormWorks Editor Viewer: global search definition indexing failed.',error);
   }
   for(const r of model.rels){
     if(matchesSearchQuery(r,q))rows.push({kind:'Reference',scopeId:r.scopeId,nodeId:r.nodeId,title:`${r.kind}: ${r.target}`,subtitle:`${r.targetType}`,badges:['Reference']});
@@ -1050,4 +1054,4 @@ function selectMessageFilter(mode){
   renderAll();
 }
 
-function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'FW Editor Viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FW Editor Viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}
+function renderModal(){const open=!!state.modal;const app=optionalElement('mainContent')?.closest('.app');$('modalBackdrop').classList.toggle('open',open);$('helpModal').classList.toggle('open',open);$('helpModal').classList.toggle('wide',state.modal==='global-detail');if(app){if(open)app.setAttribute('aria-hidden','true');else app.removeAttribute('aria-hidden');}if(!open){if(modalPreviouslyFocusedEl&&typeof modalPreviouslyFocusedEl.focus==='function')modalPreviouslyFocusedEl.focus();modalPreviouslyFocusedEl=null;return;}if(!modalPreviouslyFocusedEl)modalPreviouslyFocusedEl=document.activeElement;const detail=state.modal==='global-detail'?globalDetailRecord():null;const title=state.modal==='global-detail'?(detail?.row?.name||detail?.row?.displayName||detail?.row?.key||'Definition details'):state.modal?.startsWith('help-')?'Contextual help':'FormWorks Editor Viewer help';$('helpTitle').textContent=title;$('helpCaption').textContent=state.modal==='global-detail'?(detail?.label||'Definition details'):'Read-only FormWorks Editor Viewer.';if(state.modal==='global-detail')$('helpBody').innerHTML=renderGlobalDefinitionModal();else if(state.modal?.startsWith('help-'))$('helpBody').innerHTML=renderContextHelp(state.modal.replace(/^help-/,''));else renderHelp();const firstNode=modalFocusableElements()[0];window.setTimeout(()=>{(firstNode||$('helpModal')).focus();},0);}

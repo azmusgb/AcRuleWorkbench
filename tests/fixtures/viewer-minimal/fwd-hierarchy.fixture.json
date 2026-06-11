@@ -1,0 +1,161 @@
+{
+  "overview": {
+    "counts": {
+      "pages": 1,
+      "documents": 1,
+      "batches": 1,
+      "functions": 1,
+      "tables": 1,
+      "udfs": 1,
+      "ruleLists": 1
+    }
+  },
+  "batches": {
+    "count": 1,
+    "items": [
+      {
+        "key": "batch:ClaimsBatch",
+        "type": "batchType",
+        "name": "ClaimsBatch",
+        "documentKeys": [
+          "document:ClaimDocument"
+        ]
+      }
+    ]
+  },
+  "documents": {
+    "count": 1,
+    "items": [
+      {
+        "key": "document:ClaimDocument",
+        "type": "documentType",
+        "name": "ClaimDocument",
+        "parentBatchKeys": [
+          "batch:ClaimsBatch"
+        ],
+        "pageKeys": [
+          "page:DentalADA"
+        ]
+      }
+    ]
+  },
+  "pages": {
+    "count": 1,
+    "items": [
+      {
+        "key": "page:DentalADA",
+        "type": "pageType",
+        "name": "DentalADA",
+        "parentDocumentKeys": [
+          "document:ClaimDocument"
+        ],
+        "variantCount": 1
+      }
+    ]
+  },
+  "pageVariants": {
+    "count": 1,
+    "items": [
+      {
+        "page": "DentalADA",
+        "variants": [
+          {
+            "name": "Default"
+          }
+        ]
+      }
+    ]
+  },
+  "fields": {
+    "count": 1,
+    "items": [
+      {
+        "scopeType": "Page",
+        "scopeName": "DentalADA",
+        "name": "SubscriberID",
+        "type": "Text",
+        "geometry": "10,10,120,20",
+        "subfieldCount": 0
+      }
+    ]
+  },
+  "functions": {
+    "count": 1,
+    "items": [
+      {
+        "name": "IsEmpty",
+        "category": "Testing",
+        "statusResults": [
+          "Empty",
+          "None Empty"
+        ]
+      }
+    ]
+  },
+  "tables": {
+    "count": 1,
+    "items": [
+      {
+        "name": "MemberTable",
+        "source": "Fixture",
+        "configuration": {
+          "columns": [
+            "SubscriberID"
+          ]
+        }
+      }
+    ]
+  },
+  "selectionLists": {
+    "count": 1,
+    "items": [
+      {
+        "name": "MemberTable",
+        "matchFields": [
+          "SubscriberID"
+        ],
+        "plugFields": [
+          "MemberID"
+        ]
+      }
+    ]
+  },
+  "udfs": {
+    "count": 1,
+    "items": [
+      {
+        "name": "CopyIfDestBlank",
+        "definitionParsed": true,
+        "bodyParsed": true,
+        "fieldListParameters": [
+          "Source",
+          "Destination"
+        ],
+        "internalRules": [
+          {
+            "name": "UdfRuleBody",
+            "functionName": "Copy"
+          }
+        ]
+      }
+    ]
+  },
+  "ruleLists": {
+    "count": 1,
+    "items": [
+      {
+        "key": "ruleList:page:DentalADA:AC",
+        "name": "DentalADA",
+        "scope": "page",
+        "ownerDisplayName": "DentalADA",
+        "rules": [
+          {
+            "key": "rule:page:DentalADA:AC:node:node-000001",
+            "name": "Fixture required field check",
+            "functionName": "IsEmpty"
+          }
+        ]
+      }
+    ]
+  }
+}

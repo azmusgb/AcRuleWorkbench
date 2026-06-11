@@ -173,8 +173,8 @@ function handleRulePropertyTabKeyboard(e){
   return true;
 }
 function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='toggle-editor-message'){e.preventDefault();state.editorMessageExpanded=!state.editorMessageExpanded;state.editorMessageHeight=state.editorMessageExpanded?Math.max(normalizedEditorMessageHeight(),240):104;renderContent();saveState();return;}if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act.startsWith('view-')&&validWorkspaceViews().includes(normalizeWorkspaceViewName(act.replace(/^view-/,'')))){e.preventDefault();state.workspaceView=normalizeWorkspaceViewName(act.replace(/^view-/,''));document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}if(typeof maybeHydrateWorkspaceOnDemand==='function'&&maybeHydrateWorkspaceOnDemand(state.workspaceView,act))return;renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();executeCommand(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const rulePropertyTab=e.target.closest('[data-rule-property-tab]')?.dataset.rulePropertyTab;if(rulePropertyTab){e.preventDefault();setRulePropertyPage(rulePropertyTab);return;}
-const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseActionListsForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-action-list]')?.dataset.toggleActionList;if(br){state.collapsedActionLists.has(br)?state.collapsedActionLists.delete(br):state.collapsedActionLists.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const actionList=e.target.closest('[data-action-list]')?.dataset.actionList;if(actionList){selectActionList(actionList);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
-  document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
+const fwdToggle=e.target.closest('[data-fwd-toggle]')?.dataset.fwdToggle;if(fwdToggle){e.preventDefault();toggleFwdTreeKey(fwdToggle);return;}const fwdObject=e.target.closest('[data-fwd-object]')?.dataset.fwdObject;if(fwdObject){e.preventDefault();selectEditorObject(fwdObject);return;}const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseActionListsForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-action-list]')?.dataset.toggleActionList;if(br){state.collapsedActionLists.has(br)?state.collapsedActionLists.delete(br):state.collapsedActionLists.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const actionList=e.target.closest('[data-action-list]')?.dataset.actionList;if(actionList){selectActionList(actionList);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
+  document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'||e.target.id==='fwdTreeFilter'){closeSearchPopover();state.scopeQuery=e.target.value;renderGlobalNavigation();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch')applyQueryInput(e.target.value,e.target.id);});
   document.addEventListener('change',e=>{if(e.target.id==='treeFilter'){state.treeFilter=e.target.value;renderContent();renderDiagnosticsDock();renderInspector();renderViewbar();return;}if(e.target.id==='disclosureLevel'){state.disclosureLevel=Number(e.target.value)||2;saveState();renderContent();renderDiagnosticsDock();renderViewbar();return;}});
   document.addEventListener('keydown',e=>{
@@ -236,6 +236,7 @@ const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTa
     if(!typing&&e.altKey&&key==='p'){e.preventDefault();handleAction('collapse-siblings');return;}
     if(!typing&&e.altKey&&key==='f'){e.preventDefault();handleAction('clear-focus');return;}
     if(!typing&&handleRulePropertyTabKeyboard(e))return;
+    if(!typing&&handleFwdTreeNavigation(e))return;
     if(!typing&&handleEditorTreeNavigation(e))return;
     const inRuleTree=!!document.activeElement?.closest?.('.workspace-tree,.tree');
     if(!typing&&inRuleTree&&(e.key==='ArrowDown'||e.key==='ArrowUp')){
@@ -314,6 +315,40 @@ function handleEditorTreeNavigation(e){
 function focusableRows(){return [...document.querySelectorAll('.tree-row[data-node],.action-list-row[data-action-list]')];}
 function moveSelection(delta){const rows=focusableRows();if(!rows.length)return;let idx=rows.findIndex(r=>(r.dataset.node&&state.selectedId===r.dataset.node)||(r.dataset.actionList&&state.selectedId===r.dataset.actionList));idx=idx<0?0:Math.max(0,Math.min(rows.length-1,idx+delta));const row=rows[idx];if(row.dataset.node)selectNode(row.dataset.node);else if(row.dataset.actionList)selectActionList(row.dataset.actionList);row.focus();}
 function handleTreeKey(e){const active=document.activeElement;const node=active?.closest?.('[data-node]')?.dataset.node;const actionList=active?.closest?.('[data-action-list]')?.dataset.actionList;if(e.key==='Home'){e.preventDefault();focusableRows()[0]?.focus();return;}if(e.key==='End'){e.preventDefault();const rows=focusableRows();rows[rows.length-1]?.focus();return;}if(e.key==='Enter'){e.preventDefault();if(actionList)selectActionList(actionList);else if(node)selectNode(node);return;}if(e.key===' '){e.preventDefault();if(actionList){state.collapsedActionLists.has(actionList)?state.collapsedActionLists.delete(actionList):state.collapsedActionLists.add(actionList);}else if(node){state.expanded.has(node)?state.expanded.delete(node):(state.expanded.add(node),collapseActionListsForNode(node));}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowRight'){e.preventDefault();if(actionList)state.collapsedActionLists.delete(actionList);else if(node){state.expanded.add(node);collapseActionListsForNode(node);}renderContent();renderDiagnosticsDock();renderInspector();return;}if(e.key==='ArrowLeft'){e.preventDefault();if(actionList)state.collapsedActionLists.add(actionList);else if(node)state.expanded.delete(node);renderContent();renderDiagnosticsDock();renderInspector();return;}}
+function handleFwdTreeNavigation(e){
+  const active=document.activeElement?.closest?.('.fwd-tree-row');
+  if(!active)return false;
+  const rows=[...document.querySelectorAll('.fwd-editor-tree .fwd-tree-select')].filter(row=>row.offsetParent!==null);
+  const selected=active.querySelector('.fwd-tree-select');
+  const index=rows.indexOf(selected);
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'||e.key==='Home'||e.key==='End'){
+    e.preventDefault();
+    let nextIndex=index;
+    if(e.key==='Home')nextIndex=0;
+    else if(e.key==='End')nextIndex=rows.length-1;
+    else nextIndex=Math.max(0,Math.min(rows.length-1,index+(e.key==='ArrowDown'?1:-1)));
+    rows[nextIndex]?.focus();
+    return true;
+  }
+  const toggle=active.querySelector('[data-fwd-toggle]');
+  if(e.key==='ArrowRight'&&toggle){
+    e.preventDefault();
+    toggleFwdTreeKey(toggle.dataset.fwdToggle,true);
+    return true;
+  }
+  if(e.key==='ArrowLeft'&&toggle){
+    e.preventDefault();
+    toggleFwdTreeKey(toggle.dataset.fwdToggle,false);
+    return true;
+  }
+  if(e.key==='Enter'||e.key===' '){
+    e.preventDefault();
+    const key=selected?.dataset.fwdObject;
+    if(key)selectEditorObject(key);
+    return true;
+  }
+  return false;
+}
 
 
 function udfHasInternalRules(u){return list(u?.internalRules).length>0||/RuleListAvailable/i.test(text(u?.availabilityState));}
@@ -322,7 +357,7 @@ function udfHasInternalRules(u){return list(u?.internalRules).length>0||/RuleLis
    Default mode is a read-only FW Editor-style configuration browser.
    Advanced diagnostics remain available only behind ?advanced=1. */
 function localWorkspaceViews(){
-  return ['structure','field-resolution',...(isAdvancedMode()?['load-status']:[])];
+  return ['editor-object','structure','field-resolution',...(isAdvancedMode()?['load-status']:[])];
 }
 function normalizeWorkspaceViewName(view){
   const normalized=text(view).trim();
@@ -338,6 +373,7 @@ function validWorkspaceViews(){
 function productViewTitle(view=state.workspaceView){
   const map={
     overview:['Rule List','Open the selected scope Rule List.'],
+    'editor-object':['FWD Object','Read-only FormWorks Editor object configuration.'],
     structure:['Rule Lists','Read-only Rule Lists with Status Results and Action Lists.'],
     'field-resolution':['Fields','Field and parameter references resolved against the FWD catalog.'],
     'load-status':['Load Status','Advanced load status and configuration warnings.'],
@@ -356,11 +392,17 @@ function productViewTitle(view=state.workspaceView){
   return map[view]||map.overview;
 }
 function renderMainHead(){
-  const [title,caption]=productViewTitle();
+  let [title,caption]=productViewTitle();
   const selectedScope=currentScope();
+  const editorObject=state.workspaceView==='editor-object'?fwdEditorObject():null;
+  if(editorObject){
+    title=editorObject.name;
+    caption=`${editorObject.type} configuration and relationships.`;
+  }
   $('scopeTitle').textContent=title;
   $('scopeCaption').innerHTML=`<span class="scope-caption-note">${esc(caption)}</span>`;
-  const crumbParts=['FW Editor Viewer'];
+  const crumbParts=['FormWorks Editor Viewer'];
+  if(editorObject)crumbParts.push(editorObject.type,editorObject.name);
   if(state.workspaceView==='structure'&&selectedScope)crumbParts.push(selectedScope.name||selectedScope.scopeId);
   $('crumbs').innerHTML=`${crumbParts.map(x=>`<span class="head-chip">${esc(x)}</span>`).join('')}<span class="head-chip">Read-only</span>${fwdHydrationSummary().level==='warn'?'<span class="head-chip warning">Status partial</span>':'<span class="head-chip success">Loaded</span>'}`;
   renderWorkspaceTabs();
@@ -368,21 +410,30 @@ function renderMainHead(){
 }
 function renderWorkspaceTabs(){
   const host=$('tabs');
-  if(state.workspaceView==='overview'||isGlobalDefinitionView()){
+  if(state.workspaceView==='overview'||state.workspaceView==='editor-object'||isGlobalDefinitionView()){
     host.innerHTML='';
+    host.hidden=true;
     host.setAttribute('aria-hidden','true');
     return;
   }
+  host.hidden=false;
   host.removeAttribute('aria-hidden');
   const tabs=[['structure','Rule List'],['field-resolution','Fields / Parameters'],...(isAdvancedMode()?[[ 'load-status','Load Status' ]]:[])];
   host.innerHTML=tabs.map(([id,label])=>`<button class="workspace-tab ${state.workspaceView===id?'active':''}" type="button" role="tab" data-action="view-${esc(id)}" aria-selected="${state.workspaceView===id?'true':'false'}"><span>${esc(label)}</span></button>`).join('');
 }
 function renderViewbar(){
   const view=state.workspaceView||'overview';
+  const host=$('viewbar');
+  if(view==='overview'||view==='editor-object'){
+    host.innerHTML='';
+    host.hidden=true;
+    return;
+  }
+  host.hidden=false;
   const [title]=productViewTitle(view);
   const search=viewSearchMeta();
   const showSearch=view!=='overview';
-  $('viewbar').innerHTML=`<div class="product-viewbar"><div class="product-view-pill"><span>${esc(title)}</span><b>${isGlobalDefinitionView(view)?'Global resource':'Workspace'}</b></div>${showSearch?`<div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" ${text(state.query).trim()?'':'disabled'}>Clear</button></div>`:''}${state.workspaceView==='structure'?`<div class="viewbar-right"><select id="treeFilter" aria-label="Rule List filter"><option value="all" ${state.treeFilter==='all'?'selected':''}>All rules</option><option value="disabled" ${state.treeFilter==='disabled'?'selected':''}>Disabled</option><option value="warnings" ${state.treeFilter==='warnings'?'selected':''}>Warnings</option><option value="actions" ${state.treeFilter==='actions'?'selected':''}>Action parents</option></select><button class="btn" type="button" data-action="collapse-all">Collapse</button><button class="btn" type="button" data-action="expand-selected-depth">Open selected</button></div>`:''}</div>`;
+  host.innerHTML=`<div class="product-viewbar"><div class="product-view-pill"><span>${esc(title)}</span><b>${isGlobalDefinitionView(view)?'Global resource':'Workspace'}</b></div>${showSearch?`<div class="field tree-filter"><label class="sr-only" for="viewSearch">${esc(search.label)}</label><input id="viewSearch" type="search" value="${esc(state.query)}" placeholder="${esc(search.placeholder)}"><button class="filter-clear" type="button" data-action="clear-tree-search" ${text(state.query).trim()?'':'disabled'}>Clear</button></div>`:''}${state.workspaceView==='structure'?`<div class="viewbar-right"><select id="treeFilter" aria-label="Rule List filter"><option value="all" ${state.treeFilter==='all'?'selected':''}>All rules</option><option value="disabled" ${state.treeFilter==='disabled'?'selected':''}>Disabled</option><option value="warnings" ${state.treeFilter==='warnings'?'selected':''}>Warnings</option><option value="actions" ${state.treeFilter==='actions'?'selected':''}>Action parents</option></select><button class="btn" type="button" data-action="collapse-all">Collapse</button><button class="btn" type="button" data-action="expand-selected-depth">Open selected</button></div>`:''}</div>`;
 }
 function productCounts(){
   if(productCountsCache)return productCountsCache;

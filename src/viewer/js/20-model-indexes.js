@@ -299,6 +299,7 @@ function setEditorModeClasses(){
   // That class belongs to an older full-screen mimic layer and hides the topbar/main head.
   // The current read-only shell is controlled by `fw-editor-viewer-shell` only.
   document.body.classList.remove('editor-mode');
+  if(editorShell)document.body.classList.remove('layout-v61');
   document.body.classList.toggle('advanced-mode',isAdvancedMode());
   document.body.classList.toggle('fweditor-global-mode',globalMode);
   document.body.classList.toggle('global-workspace',globalMode);
@@ -328,8 +329,8 @@ function globalViewHeading(view=state.workspaceView){
 }
 
 function workspaceHeroHtml(options={}){
-  const eyebrow=text(options.eyebrow||'FW Editor Viewer');
-  const title=text(options.title||'FW Editor Viewer');
+  const eyebrow=text(options.eyebrow||'FormWorks Editor Viewer');
+  const title=text(options.title||'FormWorks Editor Viewer');
   const caption=text(options.caption||'Read-only FWD configuration browsing.');
   const metrics=list(options.metrics).filter(Boolean);
   const actions=text(options.actions||'');
@@ -411,7 +412,7 @@ function processPanelHtml(scope=currentScope()){
 function scopeBannerHtml(scope=currentScope()){
   const kind=editorScopeKind(scope);
   const process=text(state.selectedProcessName).trim();
-  return `<div class="editor-scope-banner"><div><span class="workspace-eyebrow">FW Editor Viewer</span><b>Scope: ${esc(kind)} / ${esc(scope.name||scope.scopeId)}</b><small>${esc(scope.scopeId||'FWD scope')} - read-only FW Editor-style AC configuration.</small></div><div class="editor-scope-badges"><span class="head-chip kind">${esc(kind)}</span>${process?`<span class="head-chip active">Process: ${esc(process)}</span>`:''}<span class="head-chip">${fmt(scopedRuleNodes().length)} rules</span><span class="head-chip">read-only</span></div></div>`;
+  return `<div class="editor-scope-banner"><div><span class="workspace-eyebrow">FormWorks Editor Viewer</span><b>Scope: ${esc(kind)} / ${esc(scope.name||scope.scopeId)}</b><small>${esc(scope.scopeId||'FWD scope')} - read-only FormWorks Editor-style AC configuration.</small></div><div class="editor-scope-badges"><span class="head-chip kind">${esc(kind)}</span>${process?`<span class="head-chip active">Process: ${esc(process)}</span>`:''}<span class="head-chip">${fmt(scopedRuleNodes().length)} rules</span><span class="head-chip">read-only</span></div></div>`;
 }
 function statusActionPreviewHtml(){
   const actionList=selectedActionList();
@@ -451,7 +452,7 @@ function workspaceTabDefinitions(){
   ];
 }
 function fweditorMenuStripHtml(){
-  return `<div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FW Editor Viewer</b></div>`;
+  return `<div class="fweditor-menu-strip"><span>File</span><span>Edit</span><span>Resources</span><span>Rule</span><span>Window</span><span>Help</span><b>Read-only FormWorks Editor Viewer</b></div>`;
 }
 function fweditorViewStripHtml(activeView=state.workspaceView){
   const groups=[
@@ -479,7 +480,7 @@ function fweditorRootClass(baseClass){
   return `${baseClass} ${editorPaneSizeClasses()}${state.editorMessageExpanded?' message-expanded':''}`;
 }
 function fweditorTreeSplitterHtml(){
-  return `<div class="fweditor-splitter fweditor-tree-splitter" role="separator" aria-label="Resize FW Editor Viewer navigation" aria-orientation="vertical" tabindex="0" data-editor-resize="tree"></div>`;
+  return `<div class="fweditor-splitter fweditor-tree-splitter" role="separator" aria-label="Resize FormWorks Editor Viewer navigation" aria-orientation="vertical" tabindex="0" data-editor-resize="tree"></div>`;
 }
 function fweditorMessageSplitterHtml(){
   return `<div class="fweditor-splitter fweditor-load-status-splitter" role="separator" aria-label="Resize Load Status" aria-orientation="horizontal" tabindex="0" data-editor-resize="message"></div>`;
@@ -514,7 +515,7 @@ function fweditorScopeTreeHtml(selectedScopeId=state.scopeId){
     const omitted=items.length>700?`<div class="fweditor-note">${fmt(items.length-700)} additional ${esc(kind)} scopes hidden; use command search.</div>`:'';
     return `<details class="fweditor-tree-folder nested" ${open?'open':''}><summary><span class="fweditor-folder-icon">+</span><b>${esc(kind)}</b><small>${fmt(items.length)}</small></summary><div class="fweditor-tree-children">${rows}${omitted}</div></details>`;
   }).join('');
-  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FW Editor Viewer navigation scopes"><details class="fweditor-tree-folder root" open><summary><span class="fweditor-folder-icon">+</span><b>FWD</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div>`;
+  return `<div class="fweditor-fwd-tree-body" role="tree" aria-label="FormWorks Editor Viewer navigation scopes"><details class="fweditor-tree-folder root" open><summary><span class="fweditor-folder-icon">+</span><b>FWD</b><small>${fmt(total)}</small></summary><div class="fweditor-tree-children">${body}</div></details></div>`;
 }
 function fweditorScopeMessageWindowHtml(scope=currentScope()){
   const stats=messageWindowStats(scope);
@@ -525,14 +526,14 @@ function fweditorScopeMessageWindowHtml(scope=currentScope()){
 }
 function fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options={}){
   const scope=currentScope();
-  const path=options.path||`FW Editor Viewer navigation \\ ${editorScopeKind(scope)} \\ ${scope.name||scope.scopeId} \\ ${title}`;
+  const path=options.path||`FormWorks Editor Viewer navigation \\ ${editorScopeKind(scope)} \\ ${scope.name||scope.scopeId} \\ ${title}`;
   const chips=list(options.chips).map((chip,index)=>`<span class="fweditor-state-chip ${index===0?'primary':''}">${esc(chip)}</span>`).join('');
-  return `<section class="fweditor-config-window fweditor-scope-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(title)}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(path)}</span>${chips}</div><div class="fweditor-config-body">${fweditorScopePageTabsHtml(activePage)}<div class="fweditor-active-page" role="tabpanel">${bodyHtml}</div></div></section>`;
+  return `<section class="fweditor-config-window fweditor-scope-config-window" aria-label="FormWorks Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(title)}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(path)}</span>${chips}</div><div class="fweditor-config-body">${fweditorScopePageTabsHtml(activePage)}<div class="fweditor-active-page" role="tabpanel">${bodyHtml}</div></div></section>`;
 }
 function fweditorScopeRootHtml(activePage,title,bodyHtml,options={}){
   const scope=currentScope();
   const advancedMessages=isAdvancedMode()?`${fweditorMessageSplitterHtml()}${fweditorScopeMessageWindowHtml(scope)}`:'';
-  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" aria-label="FW Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea"><aside class="fweditor-fwd-tree-window" aria-label="FW Editor Viewer navigation"><div class="fweditor-pane-title">FWD Tree</div><div class="fweditor-tree-tools"><div class="fweditor-tree-count"><b>${fmt(model.scopes.length)}</b><span>Scopes</span></div><div class="fweditor-filter-note">Search filters the current Editor window.</div></div>${fweditorScopeTreeHtml(scope.scopeId)}</aside>${fweditorTreeSplitterHtml()}${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
+  return `<section class="${fweditorRootClass('fweditor-root fweditor-scope-root')}" aria-label="FormWorks Editor Viewer scope view">${fweditorMenuStripHtml()}${fweditorViewStripHtml(activePage)}<div class="fweditor-workarea fweditor-scope-workarea">${fweditorScopeConfigurationWindowHtml(activePage,title,bodyHtml,options)}</div>${advancedMessages}</section>`;
 }
 
 function severityIsProblem(severity){return /warn|error|fatal/i.test(text(severity));}
@@ -1514,17 +1515,17 @@ function fweditorObjectNoun(kind){
 }
 function fweditorDefinitionRootPath(kind){
   const map={
-    resources:'FW Editor Viewer navigation \\ Resources',
-    functions:'FW Editor Viewer navigation \\ Resources \\ Functions',
-    'selection-lists':'FW Editor Viewer navigation \\ Resources \\ SelectionLists',
-    tables:'FW Editor Viewer navigation \\ Resources \\ Tables',
-    udfs:'FW Editor Viewer navigation \\ Resources \\ Functions',
-    drivers:'FW Editor Viewer navigation \\ Processes \\ Drivers',
-    'rule-lists':'FW Editor Viewer navigation \\ Rule Lists',
-    'object-graph':'FW Editor Viewer navigation \\ Object Graph',
-    'runtime-impact':'FW Editor Viewer navigation \\ Runtime Impact'
+    resources:'FormWorks Editor Viewer navigation \\ Resources',
+    functions:'FormWorks Editor Viewer navigation \\ Resources \\ Functions',
+    'selection-lists':'FormWorks Editor Viewer navigation \\ Resources \\ SelectionLists',
+    tables:'FormWorks Editor Viewer navigation \\ Resources \\ Tables',
+    udfs:'FormWorks Editor Viewer navigation \\ Resources \\ Functions',
+    drivers:'FormWorks Editor Viewer navigation \\ Processes \\ Drivers',
+    'rule-lists':'FormWorks Editor Viewer navigation \\ Rule Lists',
+    'object-graph':'FormWorks Editor Viewer navigation \\ Object Graph',
+    'runtime-impact':'FormWorks Editor Viewer navigation \\ Runtime Impact'
   };
-  return map[kind]||'FW Editor Viewer navigation \\ Resources';
+  return map[kind]||'FormWorks Editor Viewer navigation \\ Resources';
 }
 function fweditorDefinitionPath(kind,row){
   const type=text(row?.type||fweditorObjectNoun(kind));
@@ -1645,5 +1646,5 @@ function fweditorGlobalMessageWindowHtml(kind,selected,rows,originUi){
 function fweditorGlobalConfigurationWindowHtml(kind,copy,selected,originUi,usageCount,detailHtml){
   const title=fweditorKindTitle(kind);
   const noun=fweditorObjectNoun(kind);
-  return `<section class="fweditor-config-window" aria-label="FW Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div>${fweditorGlobalPropertyTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${fweditorGlobalActivePageHtml(kind,selected,originUi,usageCount,detailHtml)}</div></div></section>`;
+  return `<section class="fweditor-config-window" aria-label="FormWorks Editor Viewer configuration view"><div class="fweditor-window-titlebar"><span>${esc(noun)} - ${esc(text(selected.name||selected.key||''))}</span><span class="fweditor-window-buttons"><i></i><i></i><i></i></span></div><div class="fweditor-config-toolbar"><span class="fweditor-breadcrumb">${esc(fweditorDefinitionPath(kind,selected))}</span><span class="fweditor-state-chip primary">${esc(originUi.badge||'Loaded')}</span><span class="fweditor-state-chip">${fmt(usageCount)} references</span></div><div class="fweditor-config-body"><div class="fweditor-resource-header"><div><div class="fweditor-resource-kicker">${esc(title)}</div><h2>${esc(text(selected.name||selected.key||''))}</h2><p>${esc(copy.body||originUi.caption||'Read-only FormWorks Editor configuration view.')}</p></div><button class="fweditor-command-button" type="button" data-action="open-global-detail" data-global-kind="${esc(kind)}">Details</button></div>${fweditorGlobalPropertyTabsHtml()}<div class="fweditor-active-page" role="tabpanel">${fweditorGlobalActivePageHtml(kind,selected,originUi,usageCount,detailHtml)}</div></div></section>`;
 }

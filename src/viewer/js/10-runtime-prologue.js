@@ -19,7 +19,7 @@ let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
 const viewerDiagnostics = {
-  build: 'v103-fw-editor-viewer',
+  build: 'v104-fw-editor-viewer',
   bootStartedAtUtc: new Date().toISOString(),
   events: [],
   fetches: [],
@@ -279,7 +279,7 @@ function beginFwdApiHydration(reason='manual'){
     }
   }).catch(error=>{
     recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
-    console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
+    console.warn('FormWorks Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
 }
@@ -848,7 +848,7 @@ function $(id){
   return el;
 }
 function optionalElement(id){ return document.getElementById(id); }
-const viewerStateBuild='v103-fw-editor-viewer';
+const viewerStateBuild='v104-fw-editor-viewer';
 const storeKey=`fw-editor-viewer-${viewerStateBuild}`;
 const themeStoreKey=`${storeKey}-theme`;
 const inspectorSections=['summary','parameters','attributes','actions','references','messages','raw'];
@@ -958,20 +958,20 @@ function definitionSearchText(row){
 function safeJson(s,fallback){
   try { return JSON.parse(s); }
   catch (error) {
-    console.warn('FW Editor Viewer: failed to parse JSON state; using fallback.', error);
+    console.warn('FormWorks Editor Viewer: failed to parse JSON state; using fallback.', error);
     return fallback;
   }
 }
 function readStorage(key){
   try { return window.localStorage ? localStorage.getItem(key) : null; }
   catch (error) {
-    console.warn('FW Editor Viewer: localStorage read failed.', error);
+    console.warn('FormWorks Editor Viewer: localStorage read failed.', error);
     return null;
   }
 }
 function writeStorage(key,value){
   try { if (window.localStorage) localStorage.setItem(key,value); }
-  catch (error) { console.warn('FW Editor Viewer: localStorage write failed.', error); }
+  catch (error) { console.warn('FormWorks Editor Viewer: localStorage write failed.', error); }
 }
 function readState(){
   const saved=safeJson(readStorage(storeKey)||'{}',{});
@@ -983,12 +983,14 @@ function readState(){
   return {
     scopeId:saved.scopeId||'',query:'',treeQuery:'',scopeQuery:'',scopeKindFilter:saved.scopeKindFilter||'all',treeFilter:'all',
     selectedType:'scope',selectedId:'',expanded:new Set(),collapsedActionLists:new Set(),
+    selectedEditorObjectKey:text(saved.selectedEditorObjectKey||''),
+    fwdExpanded:new Set(Array.isArray(saved.fwdExpanded)?saved.fwdExpanded:['fwd:root','group:batches','group:documents','group:pages','group:resources']),
     workspaceView:saved.workspaceView&&saved.workspaceView!=='overview'?saved.workspaceView:'structure',
     fieldResolutionFilter:saved.fieldResolutionFilter||'unresolved',
     inventoryFilter:['all','StructuralMatch','AdditionalRule','FlatOnly','direct','inherited'].includes(saved.inventoryFilter)?saved.inventoryFilter:'all',
     messageFilter:normalizeMessageFilter(saved.messageFilter),
     inspectorView:(()=>{const view=savedInspectorView==='config'?'fields':savedInspectorView==='actions'?'status-results':savedInspectorView;return ['general','fields','attributes','status-results','description','references','messages','raw','summary'].includes(view)?view:'general';})(),
-    rulePropertyPage:(()=>{const page=text(saved.rulePropertyPage||savedInspectorView||'general');const normalized=page==='summary'?'general':page==='config'?'fields':page==='actions'?'status-results':page;return ['general','fields','attributes','status-results','description'].includes(normalized)?normalized:'general';})(),
+    rulePropertyPage:(()=>{const page=text(saved.rulePropertyPage||savedInspectorView||'summary');const normalized=page==='general'?'summary':page==='config'?'fields':page==='actions'?'status-results':page;return ['summary','function','fields','attributes','status-results','children','references','raw','diagnostics'].includes(normalized)?normalized:'summary';})(),
     focusNodeId:'',theme:['light','dark'].includes(saved.theme)?saved.theme:'light',density:saved.density==='high'?'high':'standard',modal:'',
     selectedResourceKey:saved.selectedResourceKey||'',
     selectedFunctionName:saved.selectedFunctionName||'',

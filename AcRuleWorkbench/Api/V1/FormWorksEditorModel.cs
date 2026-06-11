@@ -798,7 +798,7 @@ internal static class FormWorksEditorModelBuilder
         model.PageDesigns.AddRange(BuildPageDesigns(snapshot));
         model.RuntimeImpacts.AddRange(BuildRuntimeImpacts(snapshot, model.SelectionListDefinitions));
         model.Diagnostics.AddRange(BuildDiagnostics(model));
-        model.NotProven.Add("The workbench does not write to FWD configuration.");
+        model.NotProven.Add("The viewer does not write to FWD configuration.");
         model.NotProven.Add("Native AC runtime execution and AC Rules Tester outcomes are not simulated.");
         model.NotProven.Add("Native page rendering and FIP dropout/OMR execution are linked evidence; they are not simulated inside the static editor model.");
         return model;
@@ -837,6 +837,30 @@ internal static class FormWorksEditorModelBuilder
         // PageType nodes (configured)
         foreach (string page in Distinct(snapshot.Fwd.Pages))
             AddObject(graph, "PageType", page, "Fwd.Pages", "containsPage");
+
+        foreach (KeyValuePair<string, List<string>> membership in snapshot.Fwd.DocsInBatch)
+        {
+            string batchId = ObjectId("BatchType", membership.Key);
+            EnsureObject(graph, "BatchType", membership.Key, "Fwd.DocsInBatch", "High");
+            foreach (string document in Distinct(membership.Value))
+            {
+                string documentId = ObjectId("DocumentType", document);
+                EnsureObject(graph, "DocumentType", document, "Fwd.DocsInBatch", "High");
+                AddEdge(graph, batchId, documentId, "containsDocument", "Fwd.GetDocsInBatch", "High");
+            }
+        }
+
+        foreach (KeyValuePair<string, List<string>> membership in snapshot.Fwd.PagesInDoc)
+        {
+            string documentId = ObjectId("DocumentType", membership.Key);
+            EnsureObject(graph, "DocumentType", membership.Key, "Fwd.PagesInDoc", "High");
+            foreach (string page in Distinct(membership.Value))
+            {
+                string pageId = ObjectId("PageType", page);
+                EnsureObject(graph, "PageType", page, "Fwd.PagesInDoc", "High");
+                AddEdge(graph, documentId, pageId, "containsPage", "Fwd.GetPagesInDoc", "High");
+            }
+        }
 
 
         foreach (string process in Distinct(snapshot.Fwd.Processes))

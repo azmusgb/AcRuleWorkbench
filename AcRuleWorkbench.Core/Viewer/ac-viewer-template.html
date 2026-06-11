@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="en" data-theme="light" data-ui-build="v103-fw-editor-viewer">
+<html lang="en" data-theme="light" data-ui-build="v104-fw-editor-viewer">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=1280, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="description" content="Read-only FW Editor-style viewer for FWD configuration, rule lists, UDFs, tables, SelectionLists, fields, pages, documents, and resources.">
-<title>FW Editor Viewer - Read-only FWD Configuration</title>
-<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=fw-editor-viewer-v103">
+<title>FormWorks Editor Viewer - Read-only FWD Configuration</title>
+<link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=fw-editor-viewer-v104">
 </head>
 <body class="product-shell-v70 fw-editor-viewer-shell ui-2026 density-standard">
 
@@ -14,7 +14,7 @@
     <div class="fw-boot-placeholder-card">
       <div class="fw-boot-placeholder-mark" aria-hidden="true">FW</div>
       <div class="fw-boot-placeholder-copy">
-        <div class="fw-boot-placeholder-title">Loading FW Editor Viewer</div>
+      <div class="fw-boot-placeholder-title">Loading FormWorks Editor Viewer</div>
         <div class="fw-boot-placeholder-detail" data-fw-boot-detail>Loading FWD snapshot...</div>
       </div>
       <div class="fw-boot-placeholder-bar" aria-hidden="true">
@@ -26,14 +26,11 @@
 
 <div class="app">
   <header class="topbar" role="banner">
-    <button class="btn icon-btn nav-toggle" type="button" data-action="toggle-mobile-nav" aria-label="Open navigation" aria-controls="globalNav" aria-expanded="false">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
-    </button>
-    <div class="brand" aria-label="FW Editor Viewer">
+    <div class="brand" aria-label="FormWorks Editor Viewer">
       <div class="logo" aria-hidden="true">FW</div>
       <div class="brand-copy">
-        <h1>FW Editor Viewer</h1>
-        <div class="brand-sub" id="sourceSubtitle">Read-only FW Editor-style configuration viewer</div>
+        <h1>FormWorks Editor Viewer</h1>
+        <div class="brand-sub" id="sourceSubtitle">Read-only FWEditor / FWD configuration viewer</div>
       </div>
     </div>
 
@@ -49,7 +46,7 @@
       <div class="snapshot-stat"><span>Mode</span><b>Read-only</b></div>
       <div class="snapshot-stat"><span>Status</span><b id="sourceSummaryWarnings">Loading</b></div>
     </div>
-    <div class="top-actions" role="toolbar" aria-label="FW Editor Viewer actions">
+    <div class="top-actions" role="toolbar" aria-label="FormWorks Editor Viewer actions">
       <span class="pill" id="statusPill" role="status" aria-live="polite"><span class="dot warn"></span> Loading</span>
       <button id="themeToggleBtn" class="btn icon-btn" type="button" data-action="toggle-theme" title="Toggle theme" aria-label="Toggle theme" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3a9 9 0 1 0 0 18V3z" fill="currentColor"></path></svg>
@@ -85,13 +82,12 @@
       <div class="main-head">
         <div class="scope-title">
           <div class="scope-heading-stack">
-            <div class="scope-kicker">FW Editor Viewer</div>
+            <div class="scope-kicker">FormWorks Editor Viewer</div>
             <h2 id="scopeTitle">Loading FWD configuration...</h2>
             <div id="scopeCaption" class="caption"></div>
             <div id="crumbs" class="crumbs"></div>
           </div>
           <div class="scope-actions">
-            <button class="btn inspector-mobile" type="button" data-action="show-inspector">Details</button>
           </div>
         </div>
         <div id="tabs" class="tabs" role="tablist" aria-label="Scope views"></div>
@@ -126,7 +122,7 @@
 <section id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle" aria-describedby="helpCaption" tabindex="-1">
   <div class="modal-head">
     <div>
-      <h2 id="helpTitle">FW Editor Viewer help</h2>
+      <h2 id="helpTitle">FormWorks Editor Viewer help</h2>
       <div id="helpCaption" class="caption">Read-only FW Editor-style viewer for FWD configuration, rule lists, UDFs, tables, SelectionLists, fields, pages, documents, and resources.</div>
     </div>
     <button class="btn icon-btn" type="button" data-action="close-modal" aria-label="Close">&times;</button>
@@ -136,6 +132,6 @@
 
 <div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<script defer src="ac-rule-viewer.js?v=fw-editor-viewer-v103"></script>
+<script defer src="ac-rule-viewer.js?v=fw-editor-viewer-v104"></script>
 </body>
 </html>

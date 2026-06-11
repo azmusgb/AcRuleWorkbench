@@ -28,7 +28,6 @@ AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerPayload.cs
 AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerPrivateTree.cs
 AcRuleWorkbench.Core/FormWorksExtractionClient.cs
 AcRuleWorkbench.Core/FormWorksInteropException.cs
-AcRuleWorkbench.Core/FwdConfiguredHierarchyReport.cs
 AcRuleWorkbench.Core/FwdInspectionOptions.cs
 AcRuleWorkbench.Core/FwdInspectionReport.cs
 AcRuleWorkbench.Core/GlobalResourceExportCoordinator.cs

@@ -10,7 +10,7 @@ namespace AcRuleWorkbench.Api.V1.Contracts;
 internal sealed class ApiHelpDto
 {
     [JsonProperty("name")]
-    public string Name { get; set; } = "FW Editor Viewer API v1";
+    public string Name { get; set; } = "FormWorks Editor Viewer API v1";
 
     [JsonProperty("purpose")]
     public string Purpose { get; set; } = "Stable product API for scope, rule, evidence, relationship, search, and diagnostics workflows.";
@@ -212,7 +212,7 @@ internal sealed class LivenessDto
     public bool Live { get; set; }
 
     [JsonProperty("service")]
-    public string Service { get; set; } = "FW Editor Viewer API";
+    public string Service { get; set; } = "FormWorks Editor Viewer API";
 
     [JsonProperty("apiVersion")]
     public string ApiVersion { get; set; } = string.Empty;

@@ -195,7 +195,7 @@ internal sealed partial class WorkbenchApiServer
         string readyHealthUrl = CombineUrl(prefix, "api/v1/health/ready");
 
         Console.WriteLine();
-        Console.WriteLine("== FW Editor Viewer API ==");
+        Console.WriteLine("== FormWorks Editor Viewer API ==");
         WriteConsoleKeyValue("Mode", _options.EnableDebugApi ? "Diagnostic / developer" : "Local production");
         WriteConsoleKeyValue("Listening", prefix);
         WriteConsoleKeyValue("Viewer", viewerUrl);
@@ -283,7 +283,7 @@ internal sealed partial class WorkbenchApiServer
     private void WriteServerFullyReady(string prefix, string snapshotStatus)
     {
         Console.WriteLine();
-        Console.WriteLine("[COMPLETE] FW Editor Viewer startup is complete.");
+        Console.WriteLine("[COMPLETE] FormWorks Editor Viewer startup is complete.");
         WriteConsoleKeyValue("Viewer", CombineUrl(prefix, "viewer"));
         WriteConsoleKeyValue("Status", CombineUrl(prefix, "api/v1/status"));
         WriteConsoleKeyValue("Ready health", CombineUrl(prefix, "api/v1/health/ready"));
@@ -819,7 +819,7 @@ internal sealed partial class WorkbenchApiServer
     {
         return new
         {
-            service = "FW Editor Viewer",
+            service = "FormWorks Editor Viewer",
             mode = _options.EnableDebugApi ? "diagnostic / developer" : "local production",
             defaultFwdPath = SensitiveValueRedactor.Path(_options.DefaultFwdPath, _options.ShouldExposeOperationalDetails),
             debugApiEnabled = _options.EnableDebugApi,
@@ -1696,7 +1696,7 @@ internal sealed partial class WorkbenchApiServer
         {
             schema = "AcRuleWorkbench.WorkbenchStatus",
             schemaVersion = "1.0.0",
-            service = "FW Editor Viewer",
+            service = "FormWorks Editor Viewer",
             utc = DateTime.UtcNow,
             refreshEnabled = _options.AllowMutatingCommands,
             refreshMethod = "POST /api/v1/snapshot/refresh",
@@ -1798,7 +1798,7 @@ internal sealed partial class WorkbenchApiServer
                 return new
                 {
                     ok = true,
-                    message = "FW Editor Viewer refreshed from the current FWD/CFD configuration.",
+                    message = "FormWorks Editor Viewer refreshed from the current FWD/CFD configuration.",
                     startedUtc = started,
                     completedUtc = DateTime.UtcNow,
                     fwd = new { path = SensitiveValueRedactor.Path(fwdPath, _options.ShouldExposeOperationalDetails), exists = fwd != null, lastWriteUtc = fwd?.LastWriteTimeUtc, length = fwd?.Length },
@@ -1857,10 +1857,10 @@ internal sealed partial class WorkbenchApiServer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unable to serve FW Editor Viewer from {Path}", viewerPath);
+            _logger.LogError(ex, "Unable to serve FormWorks Editor Viewer from {Path}", viewerPath);
             _responseWriter.WriteJson(context.Response, new ApiError
             {
-                Error = "Unable to serve FW Editor Viewer.",
+                Error = "Unable to serve FormWorks Editor Viewer.",
                 ExceptionType = SensitiveValueRedactor.ExceptionType(ex, _options.ShouldExposeOperationalDetails),
                 ExceptionMessage = SensitiveValueRedactor.ExceptionMessage(ex, _options.ShouldExposeOperationalDetails)
             }, 500, _options.EnableCors);
@@ -2034,7 +2034,7 @@ internal sealed partial class WorkbenchApiServer
         // Intentionally obvious fallback. If this appears in the browser, the server is
         // running but cannot locate the real viewer stylesheet beside the generated viewer.
         return "body{font-family:Segoe UI,Arial,sans-serif;background:#eef3f8;color:#172033}"
-             + "body:before{content:'FW Editor Viewer CSS asset was not found by the server.';display:block;padding:10px 14px;background:#7c2d12;color:white;font-weight:700}";
+             + "body:before{content:'FormWorks Editor Viewer CSS asset was not found by the server.';display:block;padding:10px 14px;background:#7c2d12;color:white;font-weight:700}";
     }
 
     // Serves viewer JavaScript/JSON sidecar assets so the hosted Workbench UI can fully bootstrap.
