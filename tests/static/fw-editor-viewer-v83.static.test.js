@@ -91,7 +91,7 @@ assert(serverCs.includes('== FW Editor Viewer API =='), 'server banner should us
 assert(!serverCs.includes('== AC Rule Workbench API =='), 'server banner should not use old workbench naming');
 
 
-const startWorkbench = fs.readFileSync(path.join(root, 'scripts', 'start-workbench.ps1'), 'utf8');
+const startWorkbench = fs.readFileSync(path.join(root, 'scripts', 'start-fw-editor-viewer.ps1'), 'utf8');
 const startFwEditorViewer = fs.readFileSync(path.join(root, 'scripts', 'start-fw-editor-viewer.ps1'), 'utf8');
 const buildAndDoctor = fs.readFileSync(path.join(root, 'scripts', 'build-and-doctor.ps1'), 'utf8');
 assert(startWorkbench.includes('$effectiveWaitForReadyBeforeOpen = (-not [bool]$OpenWhenLive) -or [bool]$WaitForReadyBeforeOpen'), 'launcher should default to ready-health wait unless -OpenWhenLive is explicitly used');
@@ -103,6 +103,6 @@ assert(startFwEditorViewer.includes('[int]$ReadyTimeoutSeconds = 600'), 'preferr
 assert(startFwEditorViewer.includes('[switch]$OpenWhenLive'), 'preferred launcher should expose fast-open only as an explicit opt-in');
 assert(startFwEditorViewer.includes("if ($OpenWhenLive) { $forward += '-OpenWhenLive' }"), 'preferred launcher should forward the explicit fast-open opt-in');
 assert(buildAndDoctor.includes('.\\start-fw-editor-viewer.cmd -FwdPath .\\fwd.cfd'), 'build-and-doctor should recommend the FW Editor Viewer launcher, not old workbench commands');
-assert(!buildAndDoctor.includes('.\\run-workbench.cmd'), 'build-and-doctor should not recommend the old workbench launcher as the primary next step');
+assert(!buildAndDoctor.includes('.\\start-fw-editor-viewer.cmd'), 'build-and-doctor should not recommend the old workbench launcher as the primary next step');
 
 console.log('FW Editor Viewer v83 static checks passed.');

@@ -1,53 +1,167 @@
-# Build outputs
+﻿# =============================================================================
+# AC Rule Workbench / FW Editor Viewer
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Visual Studio / IDE local state
+# -----------------------------------------------------------------------------
+.vs/
+.vscode/.ropeproject/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.ncrunch*
+*.DotSettings.user
+
+# -----------------------------------------------------------------------------
+# .NET / MSBuild outputs
+# -----------------------------------------------------------------------------
 [Bb]in/
 [Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
 TestResults/
-*.user
-*.suo
-*.rsuser
-.vs/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+.coverage/
+*.nupkg
+*.snupkg
+packages/
+artifacts/
+publish/
 
-# Logs and diagnostics
+# -----------------------------------------------------------------------------
+# NuGet / build caches
+# -----------------------------------------------------------------------------
+.nuget/
+project.assets.json
+project.nuget.cache
+*.binlog
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+# -----------------------------------------------------------------------------
+# Node / frontend tooling
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.parcel-cache/
+.cache/
+playwright-report/
+test-results/
+coverage-final.json
+
+# -----------------------------------------------------------------------------
+# Generated FW Editor Viewer exports
+# These are regenerated from FWD/CFD input and should not be committed.
+# -----------------------------------------------------------------------------
+ac-rule-viewer-live.html
+ac-rule-viewer.html
+ac-rule-viewer.css
+ac-rule-viewer.js
+ac-rule-viewer.rules.json
+ac-rule-viewer.rel.json
+ac-rule-viewer.tree.json
+ac-rule-viewer.fwd.json
+ac-rule-viewer.bootstrap.json
+ac-rule-viewer.index.json
+ac-rule-viewer.routes.json
+ac-rule-viewer.resources.json
+ac-rule-viewer.functions.json
+ac-rule-viewer.tables.json
+ac-rule-viewer.udfs.json
+ac-rule-viewer.diagnostics.json
+ac-rule-viewer.advanced.*.json
+ac-rule-viewer.*.tmp
+*.viewer-cache.json
+
+# If generated viewer files are emitted in nested folders, ignore them there too.
+**/ac-rule-viewer-live.html
+**/ac-rule-viewer.rules.json
+**/ac-rule-viewer.rel.json
+**/ac-rule-viewer.tree.json
+**/ac-rule-viewer.fwd.json
+**/ac-rule-viewer.bootstrap.json
+**/ac-rule-viewer.advanced.*.json
+
+# -----------------------------------------------------------------------------
+# Local generated runtime helpers
+# -----------------------------------------------------------------------------
+scripts/runtime-path.generated.ps1
+runtime-path.generated.ps1
+*.generated.ps1
+
+# -----------------------------------------------------------------------------
+# Local logs / diagnostics / temporary reports
+# -----------------------------------------------------------------------------
 *.log
 *.trace
-*.dmp
-*.etl
-*_diagnostics_*.zip
-
-# Generated Workbench evidence/viewer outputs
-ac-rule-viewer.flow.json
-ac-rule-viewer.fwd.json
-ac-rule-viewer.rel.json
-ac-rule-viewer.rules.json
-ac-rule-viewer.tree.json
-ac-rule-viewer-live.html
-ac-rule-viewer-live.css
-
-# Local runtime configuration
-scripts/runtime-path.generated.ps1
-appsettings.local.json
-*.local.json
-
-# OS/editor noise
-.DS_Store
-Thumbs.db
 *.tmp
+*.temp
 *.bak
+*.old
+*.orig
+*.pid
+logs/
+log/
+tmp/
+temp/
+diagnostics/
+diagnostic-output/
+dump/
+dumps/
+*.dmp
 
-
-# Native/vendor runtime payloads are local-only unless distributed through an approved runtime package.
-lib/*.dll
-rri_bin/
-!lib/DLL_DEPENDENCIES.txt
-
-# Generated package output
-packages/
+# -----------------------------------------------------------------------------
+# Local archive/package files
+# Do not keep exported packages inside the source repo.
+# -----------------------------------------------------------------------------
 *.zip
 *.7z
 *.rar
+*.tar
+*.tar.gz
 
+# -----------------------------------------------------------------------------
+# Windows / filesystem noise
+# -----------------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
 
-# Prompt/import scratch assets and confidential extracted references
-attached_assets/
-docs/*.pdf
-docs/*.extracted.txt
+# -----------------------------------------------------------------------------
+# Python helper/cache files, if used for analysis scripts
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# -----------------------------------------------------------------------------
+# Local FWD/CFD working inputs
+# Uncomment these only if these files are private/local and should not be tracked.
+# -----------------------------------------------------------------------------
+# *.fwd
+# *.cfd
+# fwd.cfd
+# rri.fwd.*

@@ -797,6 +797,7 @@ function treeRow(n,level){
 }
 function renderNoData(){
   const detail=bootState.detail||'No FWD snapshot files could be loaded.';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','render-no-data',{detail,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null});
   document.body.classList.add('no-scope-selector');
   $('sourceSubtitle').textContent='No snapshot data available';
   $('statusPill').innerHTML='<span class="dot warn"></span><span>FWD load failed</span>';

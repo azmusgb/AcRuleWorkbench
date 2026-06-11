@@ -23,7 +23,7 @@ This package starts from the v60.7 cleaned build and applies the v61 calm layout
 cd C:\dev\AcRuleWorkbench
 .\scripts\setup-dcm-deps.ps1
 .\scripts\build-and-doctor.ps1 -Configuration Debug -Platform x86 -FwdPath .\fwd.cfd
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Open:

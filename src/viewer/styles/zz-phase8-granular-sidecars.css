@@ -1,0 +1,19 @@
+/* Phase 8: granular sidecar status affordances. */
+.lazy-hydration-workspace .badge,
+.product-empty-state .badge {
+  white-space: nowrap;
+}
+
+.phase8-sidecar-note {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.phase8-sidecar-note strong {
+  font-weight: 850;
+}

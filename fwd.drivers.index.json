@@ -1,0 +1,73 @@
+{
+  "schema": "AcRuleViewer.FwdWorkspaceIndex",
+  "schemaVersion": "1.0.0",
+  "workspace": "drivers",
+  "generatedAtUtc": "2026-06-11T21:13:20.785Z",
+  "processes": {
+    "count": 14,
+    "items": [
+      {
+        "name": "AC",
+        "processName": "AC"
+      },
+      {
+        "name": "ClaimsTracker",
+        "processName": "ClaimsTracker"
+      },
+      {
+        "name": "Collator",
+        "processName": "Collator"
+      },
+      {
+        "name": "EDIPickup",
+        "processName": "EDIPickup"
+      },
+      {
+        "name": "FIP",
+        "processName": "FIP"
+      },
+      {
+        "name": "KE",
+        "processName": "KE"
+      },
+      {
+        "name": "OCR",
+        "processName": "OCR"
+      },
+      {
+        "name": "OCRepair",
+        "processName": "OCRepair"
+      },
+      {
+        "name": "OCRepCrit",
+        "processName": "OCRepCrit"
+      },
+      {
+        "name": "OCRepNum",
+        "processName": "OCRepNum"
+      },
+      {
+        "name": "OpexMavroPickup",
+        "processName": "OpexMavroPickup"
+      },
+      {
+        "name": "Render",
+        "processName": "Render"
+      },
+      {
+        "name": "Store",
+        "processName": "Store"
+      },
+      {
+        "name": "TWAINScan",
+        "processName": "TWAINScan"
+      }
+    ]
+  },
+  "counts": {
+    "drivers": 0,
+    "inputDrivers": 0,
+    "outputDrivers": 0,
+    "processes": 14
+  }
+}

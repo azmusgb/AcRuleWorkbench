@@ -108,6 +108,7 @@ function installPaneResizers(){
 }
 function reportUiError(context,error){
   const message=error&&error.message?error.message:String(error||'Unknown error');
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','ui-error',{context,message,stack:error&&error.stack?String(error.stack).slice(0,4000):''});
   console.error(`FW Editor Viewer ${context} failed:`, error);
   const banner=optionalElement('globalErrorBanner');
   if(banner){

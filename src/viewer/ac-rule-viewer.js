@@ -21,9 +21,10 @@
     }
   });
 })();
-
+﻿
 (function(){
 'use strict';
+
 // v62.12 resource-hydration fix: unwraps API data, loads canonical UDF/table endpoints, and displays tables/UDFs without hiding confirmed FWD resources.
 /*
   FormWorks Editor generated viewer.
@@ -40,6 +41,164 @@ let treeData = null;
 let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
+const viewerDiagnostics = {
+  build: 'v103-fw-editor-viewer',
+  bootStartedAtUtc: new Date().toISOString(),
+  events: [],
+  fetches: [],
+  errors: [],
+  latestCounts: {}
+};
+
+function diagnosticCount(value){
+  if(Array.isArray(value))return value.length;
+  if(value&&Array.isArray(value.items))return value.items.length;
+  if(value&&Array.isArray(value.Items))return value.Items.length;
+  if(value&&typeof value.count==='number')return value.count;
+  if(value&&typeof value.Count==='number')return value.Count;
+  return 0;
+}
+function payloadCounts(){
+  const counts={
+    rules: diagnosticCount(rulesData?.Rules||rulesData?.rules),
+    scopes: diagnosticCount(treeData?.Scopes||treeData?.scopes),
+    nodes: diagnosticCount(treeData?.Nodes||treeData?.nodes),
+    edges: diagnosticCount(treeData?.Edges||treeData?.edges),
+    relationships: diagnosticCount(relData?.Relationships||relData?.relationships||relData?.Edges||relData?.edges),
+    fwdResources: diagnosticCount(fwdData?.resources||fwdSidecarData?.resources),
+    fwdRuleLists: diagnosticCount(fwdData?.ruleLists||fwdSidecarData?.ruleLists),
+    fwdUdfs: diagnosticCount(fwdData?.udfs||fwdSidecarData?.udfs),
+    fwdTables: diagnosticCount(fwdData?.tables||fwdSidecarData?.tables),
+    fwdFunctions: diagnosticCount(fwdData?.functions||fwdSidecarData?.functions)
+  };
+  viewerDiagnostics.latestCounts=counts;
+  return counts;
+}
+
+function fwSetBootPlaceholderDetail(detail, state){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  if(state) root.dataset.state = state;
+
+  const detailEl = root.querySelector('[data-fw-boot-detail]');
+  if(detailEl && detail){
+    detailEl.textContent = detail;
+  }
+}
+
+function fwClearBootPlaceholder(){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  root.classList.add('fw-boot-placeholder-done');
+  root.setAttribute('aria-hidden', 'true');
+  root.classList.add('fw-boot-placeholder-done');
+
+  try {
+    root.remove();
+  } catch (_) {
+    if(root.parentNode) root.parentNode.removeChild(root);
+  }
+}
+
+function fwBootPlaceholderDiagnosticBridge(eventName, detail){
+  if(!eventName) return;
+
+  if(eventName === 'boot-start'){
+    fwSetBootPlaceholderDetail('Starting viewer...', 'loading');
+    return;
+  }
+
+  if(eventName === 'load-viewer-data-start'){
+    fwSetBootPlaceholderDetail('Loading FWD snapshot...', 'loading');
+    return;
+  }
+
+  if(eventName === 'fetch'){
+    const key = detail && detail.key ? detail.key : 'viewer data';
+    fwSetBootPlaceholderDetail('Fetching ' + key + '...', 'loading');
+    return;
+  }
+
+  if(eventName === 'static-boot-sidecar-loaded'){
+    fwSetBootPlaceholderDetail('Building rule model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'viewer-data-loaded-before-model'){
+    fwSetBootPlaceholderDetail('Preparing workspace model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'model-built'){
+    fwSetBootPlaceholderDetail('Rendering workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'render-all-start'){
+    fwSetBootPlaceholderDetail('Rendering selected rule workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'boot-complete'){
+    fwClearBootPlaceholder();
+    return;
+  }
+
+  if(eventName === 'boot-failed' || eventName === 'load-viewer-data-failed'){
+    fwSetBootPlaceholderDetail('Viewer failed to load. See browser console diagnostics.', 'error');
+    return;
+  }
+}
+
+(function fwBootPlaceholderSlowTimer(){
+  window.setTimeout(() => {
+    const root = document.getElementById('fwBootPlaceholder');
+    if(root && !root.classList.contains('fw-boot-placeholder-done')){
+      fwSetBootPlaceholderDetail('Still loading viewer data...', 'loading');
+    }
+  }, 5000);
+})();
+
+function recordViewerDiagnostic(level,event,details={}){
+  try { fwBootPlaceholderDiagnosticBridge(event, details); } catch (_) { }
+  const entry={utc:new Date().toISOString(),level,event,details};
+  viewerDiagnostics.events.push(entry);
+  if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
+  if(level==='error')viewerDiagnostics.errors.push(entry);
+  const method=level==='error'?'error':level==='warn'?'warn':'info';
+  try{ console[method](`[FW Viewer] ${event}`,details); }catch{}
+}
+function recordViewerFetch(key,url,status,elapsedMs,extra={}){
+  const entry={utc:new Date().toISOString(),key,url,status,elapsedMs,...extra};
+  viewerDiagnostics.fetches.push(entry);
+  if(viewerDiagnostics.fetches.length>300)viewerDiagnostics.fetches.shift();
+  try{ console.info('[FW Viewer] fetch',entry); }catch{}
+}
+function modelCounts(){
+  if(!model)return {model:false};
+  return {
+    model:true,
+    scopes:diagnosticCount(model.scopes),
+    nodes:diagnosticCount(model.nodes),
+    rules:diagnosticCount(model.nodes?.filter?.(n=>n&&n.isRule)),
+    inventory:diagnosticCount(model.inventory),
+    relationships:diagnosticCount(model.rels),
+    diagnostics:diagnosticCount(model.diags)
+  };
+}
+window.fwViewerDiagnostics=function(){
+  return {
+    href: window.location.href,
+    bootState: typeof bootState==='undefined'?null:{phase:bootState.phase,detail:bootState.detail},
+    payloadCounts: payloadCounts(),
+    modelCounts: modelCounts(),
+    fwdApiHydrationState: typeof fwdApiHydrationState==='undefined'?null:{mode:fwdApiHydrationState.mode,failedEndpoints:[...list(fwdApiHydrationState.failedEndpoints||[])]},
+    granularSidecarState: typeof window.fwViewerGranularState==='function'?window.fwViewerGranularState():null,
+    diagnostics: viewerDiagnostics
+  };
+};
 
 const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
@@ -67,9 +226,11 @@ function applyEmbeddedPayloadIfPresent(){
     rulesData = parsed.rulesData;
     relData = parsed.relData;
     treeData = parsed.treeData;
+    recordViewerDiagnostic('info','embedded-payload-loaded',{counts:payloadCounts()});
     return true;
   }
 
+  recordViewerDiagnostic('info','embedded-payload-not-present',{});
   return false;
 }
 
@@ -86,6 +247,7 @@ function applyEmbeddedFwdDataIfPresent(failedEndpoints=[]){
   applyAdvancedSidecarsToFwdData();
   fwdApiHydrationState.mode='embedded';
   fwdApiHydrationState.failedEndpoints=list(failedEndpoints);
+  recordViewerDiagnostic('info','embedded-fwd-data-applied',{failedEndpoints:list(failedEndpoints),counts:payloadCounts()});
   return true;
 }
 
@@ -95,15 +257,20 @@ function queryFlag(name){
 }
 function truthyQueryFlag(name){return /^(1|true|yes|on)$/i.test(text(queryFlag(name)||''));}
 function falseyQueryFlag(name){return /^(0|false|no|off)$/i.test(text(queryFlag(name)||''));}
+function isFwdApiDisabledByQuery(){return falseyQueryFlag('fwdApi')||falseyQueryFlag('api');}
 function shouldHydrateFwdApiOnBoot(missingStaticFwd=false){
-  if(falseyQueryFlag('fwdApi')||falseyQueryFlag('apiHydrate'))return false;
+  if(isFwdApiDisabledByQuery()||falseyQueryFlag('apiHydrate'))return false;
   if(truthyQueryFlag('apiHydrate')||truthyQueryFlag('hydrate'))return true;
   // Default fast path: use the generated static sidecar/model and avoid endpoint fan-out on every launch.
   // If no static FWD sidecar exists, hydrate after boot so resource views still become available when hosted.
   return !!missingStaticFwd;
 }
 function scheduleFwdApiHydration(reason='idle'){
-  if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  if(fwdApiHydrationPromise){
+    recordViewerDiagnostic('info','fwd-api-hydration-already-scheduled',{reason});
+    return fwdApiHydrationPromise;
+  }
+  recordViewerDiagnostic('info','fwd-api-hydration-scheduled',{reason});
   const run=()=>beginFwdApiHydration(reason);
   if(typeof window.requestIdleCallback==='function'){
     window.requestIdleCallback(run,{timeout:2500});
@@ -114,9 +281,13 @@ function scheduleFwdApiHydration(reason='idle'){
 }
 function beginFwdApiHydration(reason='manual'){
   if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  const started=Date.now();
+  recordViewerDiagnostic('info','fwd-api-hydration-start',{reason});
   fwdApiHydrationPromise=loadFwdApiData().then(()=>{
+    recordViewerDiagnostic('info','fwd-api-hydration-data-loaded',{reason,elapsedMs:Date.now()-started,mode:fwdApiHydrationState.mode,failedEndpoints:list(fwdApiHydrationState.failedEndpoints||[]),counts:payloadCounts()});
     if(typeof model!=='undefined'&&model){
       model=buildModel();
+      recordViewerDiagnostic('info','model-rebuilt-after-api-hydration',{counts:modelCounts()});
       globalDefinitionLookupCache=null;
       globalTableDefinitionsCache=null;
       globalUdfDefinitionsCache=null;
@@ -130,6 +301,7 @@ function beginFwdApiHydration(reason='manual'){
       renderAll();
     }
   }).catch(error=>{
+    recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
     console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
@@ -166,19 +338,33 @@ function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayloa
 
 async function loadHostedApiViewerBootstrap(){
   const protocol=(window.location&&window.location.protocol)||'';
-  if(!/^https?:$/i.test(protocol))return false;
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'api-disabled-by-query'});
+    return false;
+  }
+  if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'non-http-protocol',protocol});
+    return false;
+  }
   const bases=['/api/v1','./api/v1','../api/v1','../../api/v1'];
+  recordViewerDiagnostic('info','hosted-bootstrap-start',{bases,href:window.location.href});
   for(const base of bases){
+    const slash=base.endsWith('/')?'':'/';
+    const url=`${base}${slash}viewer/bootstrap?snapshotMode=live`;
+    const started=Date.now();
     try{
-      const slash=base.endsWith('/')?'':'/';
       const controller=new AbortController();
       const timeoutId=window.setTimeout(()=>controller.abort(),15000);
-      const response=await fetch(`${base}${slash}viewer/bootstrap?snapshotMode=live`,{cache:'no-store',signal:controller.signal});
+      const response=await fetch(url,{cache:'no-store',signal:controller.signal});
       window.clearTimeout(timeoutId);
+      recordViewerFetch('viewer/bootstrap',url,response.status,Date.now()-started,{ok:response.ok});
       if(!response.ok)continue;
       const payload=await response.json();
       const data=payload&&payload.ok===true?payload.data:payload;
-      if(!data||!data.rulesData||!data.treeData)continue;
+      if(!data||!data.rulesData||!data.treeData){
+        recordViewerDiagnostic('warn','hosted-bootstrap-invalid-payload',{base,hasData:!!data,keys:data?Object.keys(data):[]});
+        continue;
+      }
       rulesData=data.rulesData||{Rules:[]};
       relData=data.relData||{Relationships:[]};
       treeData=data.treeData||{Scopes:[],Nodes:[],Edges:[]};
@@ -188,19 +374,251 @@ async function loadHostedApiViewerBootstrap(){
         fwdApiHydrationState.mode='live-bootstrap';
         fwdApiHydrationState.failedEndpoints=[];
       }
+      const hasContent=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+      recordViewerDiagnostic(hasContent?'info':'warn','hosted-bootstrap-loaded',{base,hasContent,mode:data.mode||'unknown',counts:payloadCounts(),bootstrap:data.counts||null});
       scheduleFwdApiHydration('live-bootstrap');
-      return snapshotSidecarsHaveContent(rulesData,treeData,relData);
-    }catch{
-      // Try the next base candidate.
+      return hasContent;
+    }catch(error){
+      recordViewerFetch('viewer/bootstrap',url,'error',Date.now()-started,{message:error&&error.message?error.message:String(error||'Unknown error')});
     }
   }
+  recordViewerDiagnostic('warn','hosted-bootstrap-unavailable',{});
   return false;
 }
 
+
+
+let staticFullSidecarHydrationPromise = null;
+
+function staticViewerSidecarBaseCandidates(){
+  return ['', './', '../', '../../', '../../../', '../../../../', '../../../../../', '/'];
+}
+
+async function fetchStaticViewerJsonWithFallback(file, options = {}){
+  const timeoutMs = Number(options.timeoutMs || 12000);
+  const optional = !!options.optional;
+
+  for(const base of staticViewerSidecarBaseCandidates()){
+    const url = `${base}${file}`;
+    const started = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      window.clearTimeout(timeoutId);
+
+      recordViewerFetch(file, url, response.status, Date.now() - started, { ok: response.ok, source: 'static-sidecar' });
+
+      if(!response.ok) continue;
+
+      const raw = await response.text();
+      return JSON.parse(raw.replace(/^\uFEFF/, ''));
+    }
+    catch(error) {
+      recordViewerFetch(file, url, 'error', Date.now() - started, {
+        source: 'static-sidecar',
+        optional,
+        message: error && error.message ? error.message : String(error || 'Unknown error')
+      });
+    }
+  }
+
+  if(optional) return null;
+  throw new Error(`Failed to load ${file}: file was not reachable from known paths.`);
+}
+
+function rulesDataFromBootSidecar(boot){
+  const nodes = list(first(boot?.nodes, boot?.Nodes, []));
+  const rules = nodes
+    .filter(n => !!first(n.IsRuleNode, n.isRuleNode, n.isRule))
+    .map((n, i) => ({
+      RuleGuid: n.RuleGuid,
+      RuleId: n.RuleId,
+      RuleName: n.RuleName,
+      FunctionName: n.FunctionName,
+      ScopePath: n.ScopePath,
+      ScopeName: n.ScopeName,
+      ScopeType: n.ScopeType,
+      RuleIndex: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      RuleIndexWithinScope: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      ActionListIndex: n.ActionListIndex,
+      ActionNames: n.ActionNames || [],
+      DisabledState: n.DisabledState,
+      DisabledAncestorNodeId: n.DisabledAncestorNodeId,
+      Parameters: {},
+      Sources: ['BootSidecar'],
+      BootOnly: true
+    }));
+
+  return {
+    ProcessName: first(boot?.snapshot?.ProcessName, boot?.ProcessName, ''),
+    RuleCount: first(boot?.counts?.rules, rules.length),
+    Rules: rules,
+    RulesByFunction: boot?.summaries?.rulesByFunction || [],
+    RulesByActionName: boot?.summaries?.rulesByActionName || [],
+    RulesByDisabledState: boot?.summaries?.rulesByDisabledState || [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+}
+
+function fwdSummaryFromBootSidecar(boot){
+  const counts = boot?.counts || {};
+  return {
+    overview: {
+      source: {
+        process: first(boot?.snapshot?.ProcessName, ''),
+        readMode: 'read-only',
+        snapshotStrategy: 'static-boot-sidecar'
+      },
+      counts: {
+        scopes: counts.scopes || 0,
+        structuralRules: counts.ruleNodes || counts.rules || 0,
+        flatInventoryRows: counts.rules || 0,
+        relationships: 0,
+        diagnostics: counts.diagnostics || 0,
+        resources: counts.fwdResources || 0,
+        udfs: counts.fwdUdfs || 0,
+        tables: counts.fwdTables || 0,
+        functions: counts.fwdFunctions || 0
+      }
+    },
+    ruleLists: { count: 0, items: [], lazy: true },
+    functions: { count: counts.fwdFunctions || 0, items: [], lazy: true },
+    tables: { count: counts.fwdTables || 0, items: [], lazy: true },
+    selectionLists: { count: 0, items: [], lazy: true },
+    udfs: { count: counts.fwdUdfs || 0, items: [], lazy: true },
+    resources: { count: counts.fwdResources || 0, items: [], lazy: true }
+  };
+}
+
+async function tryLoadStaticBootSidecar(){
+  if(falseyQueryFlag('bootSidecar')) return false;
+
+  const boot = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.boot.json', { timeoutMs: 5000, optional: true });
+  if(!boot || typeof boot !== 'object') return false;
+
+  const nodes = list(first(boot.nodes, boot.Nodes, []));
+  const scopes = list(first(boot.scopes, boot.Scopes, []));
+  const edges = list(first(boot.edges, boot.Edges, []));
+
+  if(!nodes.length && !scopes.length) return false;
+
+  treeData = {
+    SnapshotId: boot.snapshot?.SnapshotId,
+    GeneratedAtUtc: boot.snapshot?.GeneratedAtUtc,
+    RequireNativeOk: boot.snapshot?.RequireNativeOk,
+    ProcessName: boot.snapshot?.ProcessName,
+    ScopeCount: boot.counts?.scopes || scopes.length,
+    NodeCount: boot.counts?.nodes || nodes.length,
+    RuleNodeCount: boot.counts?.ruleNodes || nodes.filter(n => n.IsRuleNode).length,
+    EdgeCount: boot.counts?.edges || edges.length,
+    DiagnosticCount: boot.counts?.diagnostics || 0,
+    Scopes: scopes,
+    Nodes: nodes,
+    Edges: edges,
+    Diagnostics: [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+
+  rulesData = rulesDataFromBootSidecar(boot);
+  relData = { Relationships: [], Diagnostics: [], Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true } };
+  fwdSidecarData = fwdSummaryFromBootSidecar(boot);
+  fwdData = fwdSidecarData;
+
+  fwdApiHydrationState.mode = 'boot-sidecar';
+  fwdApiHydrationState.failedEndpoints = [];
+
+  recordViewerDiagnostic('info', 'static-boot-sidecar-loaded', { counts: payloadCounts(), bootCounts: boot.counts || null });
+  return true;
+}
+
+function scheduleStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-skipped', {
+    reason,
+    detail: 'Disabled because background full hydration causes full-body rerender flicker.'
+  });
+  return null;
+}
+
+function beginStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  if(staticFullSidecarHydrationPromise) return staticFullSidecarHydrationPromise;
+
+  const started = Date.now();
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-start', { reason });
+
+  staticFullSidecarHydrationPromise = (async () => {
+    const loadedRules = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rules.json', { timeoutMs: 30000 });
+    const loadedRel = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rel.json', { timeoutMs: 30000 });
+    const loadedTree = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.tree.json', { timeoutMs: 30000 });
+    const loadedFwd = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.fwd.json', { timeoutMs: 30000, optional: true });
+
+    rulesData = loadedRules || rulesData;
+    relData = loadedRel || relData;
+    treeData = loadedTree || treeData;
+
+    if(loadedFwd && typeof loadedFwd === 'object'){
+      fwdSidecarData = loadedFwd;
+      fwdData = loadedFwd;
+      applyAdvancedSidecarsToFwdData();
+    }
+
+    fwdApiHydrationState.mode = loadedFwd ? 'static-full-sidecars' : 'static-full-sidecars-no-fwd';
+    fwdApiHydrationState.failedEndpoints = [];
+
+    recordViewerDiagnostic('info', 'static-full-sidecars-loaded', {
+      reason,
+      elapsedMs: Date.now() - started,
+      counts: payloadCounts()
+    });
+
+    if(typeof model !== 'undefined' && model){
+      model = buildModel();
+      recordViewerDiagnostic('info', 'model-rebuilt-after-static-full-sidecars', { counts: modelCounts() });
+
+      globalDefinitionLookupCache = null;
+      globalTableDefinitionsCache = null;
+      globalUdfDefinitionsCache = null;
+      globalFunctionDefinitionsCache = null;
+      globalNavigationCountsCache = null;
+      productCountsCache = null;
+      ruleListPacketDefinitionsCache = null;
+
+      if(typeof ensureUsefulWorkspaceSelection === 'function'){
+        ensureUsefulWorkspaceSelection('static-full-sidecars');
+      }
+
+      renderAll();
+    }
+  })().catch(error => {
+    recordViewerDiagnostic('error', 'static-full-sidecar-hydration-failed', {
+      reason,
+      message: error && error.message ? error.message : String(error || 'Unknown error')
+    });
+  });
+
+  return staticFullSidecarHydrationPromise;
+}
+
 async function loadViewerData(){
+  recordViewerDiagnostic('info','load-viewer-data-start',{href:window.location.href});
+  if(typeof tryLoadGranularIndexMode==='function'){
+    const granularLoaded = await tryLoadGranularIndexMode();
+    if(granularLoaded){
+      recordViewerDiagnostic('info','load-viewer-data-complete',{source:'granular-index',counts:payloadCounts()});
+      return;
+    }
+  }
   if(applyEmbeddedPayloadIfPresent()){
     const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
     if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('embedded-boot');
+    return;
+  }
+
+  const bootSidecarLoaded=await tryLoadStaticBootSidecar();
+  if(bootSidecarLoaded){
+    recordViewerDiagnostic('info','static-full-sidecar-hydration-skipped',{reason:'disabled-to-prevent-full-body-rerender'});
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-boot-sidecar',counts:payloadCounts()});
     return;
   }
 
@@ -208,7 +626,11 @@ async function loadViewerData(){
   // sidecar probing so /viewer does not spam optional ac-rule-viewer.*.json 404s.
   // Standalone static exports still work because we fall back to sidecars below.
   const hostedBootstrap=await loadHostedApiViewerBootstrap();
-  if(hostedBootstrap)return;
+  if(hostedBootstrap){
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'hosted-bootstrap',counts:payloadCounts()});
+    return;
+  }
+  recordViewerDiagnostic('warn','load-viewer-data-falling-back-to-sidecars',{});
 
   const baseCandidates = [
     '',
@@ -227,10 +649,13 @@ async function loadViewerData(){
         const url = `${base}${file}`;
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+        const started=Date.now();
         const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
         window.clearTimeout(timeoutId);
+        recordViewerFetch(file,url,response.status,Date.now()-started,{ok:response.ok,source:'static-sidecar'});
         if(response.ok) return await response.json();
-      } catch {
+      } catch(error) {
+        recordViewerFetch(file,`${base}${file}`,'error',0,{source:'static-sidecar',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Continue trying fallback locations until one responds.
       }
     }
@@ -257,6 +682,7 @@ async function loadViewerData(){
     }
 
     staticSidecarsLoaded=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+    recordViewerDiagnostic(staticSidecarsLoaded?'info':'warn','static-sidecars-loaded',{loaded:staticSidecarsLoaded,counts:payloadCounts()});
 
     if(staticSidecarsLoaded){
       try {
@@ -271,19 +697,32 @@ async function loadViewerData(){
   }
 
   if(!staticSidecarsLoaded){
+    recordViewerDiagnostic('error','viewer-data-unavailable',{reason:'No hosted bootstrap and no static sidecars responded.'});
     throw new Error('No usable viewer sidecar JSON was found, and the hosted live-lazy bootstrap endpoint was unavailable.');
   }
 
   await loadAdvancedStaticFwdSidecars(fetchJsonWithFallback);
   const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
   if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('static-boot');
+  recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-sidecars',counts:payloadCounts(),hasStaticFwd});
 }
 
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the editor viewer server.
 async function loadFwdApiData(){
+  recordViewerDiagnostic('info','fwd-api-load-start',{href:window.location.href});
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{reason:'api-disabled-by-query'});
+    if(!applyEmbeddedFwdDataIfPresent()){
+      fwdData = null;
+      fwdApiHydrationState.mode = 'none';
+      fwdApiHydrationState.failedEndpoints = [];
+    }
+    return;
+  }
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
   const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
   if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{fwdApiParam});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -294,6 +733,7 @@ async function loadFwdApiData(){
 
   const protocol=(window.location&&window.location.protocol)||'';
   if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('warn','fwd-api-load-skipped',{reason:'non-http-protocol',protocol});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -341,19 +781,23 @@ async function loadFwdApiData(){
   ];
   async function fetchApi(path){
     for(const base of baseCandidates){
+      const slash=base.endsWith('/')?'':'/';
+      const separator=path.includes('?')?'&':'?';
+      const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
+      const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
+      const started=Date.now();
       try{
-        const slash=base.endsWith('/')?'':'/';
-        const separator=path.includes('?')?'&':'?';
-        const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
-        const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
         const controller=new AbortController();
         const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
         const response=await fetch(withMode,{cache:'no-store',signal:controller.signal});
         window.clearTimeout(timeoutId);
+        recordViewerFetch(path,withMode,response.status,Date.now()-started,{ok:response.ok,source:'fwd-api'});
         if(!response.ok) continue;
         const payload=await response.json();
-        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data};
-      }catch{
+        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data,status:response.status};
+        recordViewerDiagnostic('warn','fwd-api-invalid-envelope',{path,base,keys:payload?Object.keys(payload):[]});
+      }catch(error){
+        recordViewerFetch(path,withMode,'error',Date.now()-started,{source:'fwd-api',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Keep probing candidate bases.
       }
     }
@@ -389,15 +833,20 @@ async function loadFwdApiData(){
     };
     fwdApiHydrationState.mode='hydrating';
     fwdApiHydrationState.failedEndpoints=list(failed);
+    recordViewerDiagnostic('info','fwd-api-hydrated-partial',{failedEndpoints:list(failed),counts:payloadCounts()});
     return true;
   };
 
-  for(const stage of endpointStages){
-    const settled=await Promise.all(stage.map(async ([key,path])=>({key,result:await fetchApi(path)})));
+  for(let stageIndex=0;stageIndex<endpointStages.length;stageIndex++){
+    const stage=endpointStages[stageIndex];
+    recordViewerDiagnostic('info','fwd-api-stage-start',{stage:stageIndex+1,endpoints:stage.map(x=>x[0])});
+    const stageStarted=Date.now();
+    const settled=await Promise.all(stage.map(async ([key,path])=>({key,path,result:await fetchApi(path)})));
     settled.forEach(entry=>{
       hydrated[entry.key]=entry.result.data;
       if(!entry.result.ok)failed.push(entry.key);
     });
+    recordViewerDiagnostic('info','fwd-api-stage-complete',{stage:stageIndex+1,elapsedMs:Date.now()-stageStarted,ok:settled.filter(x=>x.result.ok).map(x=>x.key),failed:list(failed)});
     applyHydrated();
   }
 
@@ -406,6 +855,7 @@ async function loadFwdApiData(){
       fwdData=null;
       fwdApiHydrationState.mode='none';
       fwdApiHydrationState.failedEndpoints=failed;
+      recordViewerDiagnostic('error','fwd-api-load-no-overview',{failedEndpoints:list(failed)});
     }
     return;
   }
@@ -413,6 +863,7 @@ async function loadFwdApiData(){
   applyHydrated();
   fwdApiHydrationState.mode=failed.length?(embeddedFwd?'partial+embedded':'partial'):'full';
   fwdApiHydrationState.failedEndpoints=failed;
+  recordViewerDiagnostic(failed.length?'warn':'info','fwd-api-load-complete',{mode:fwdApiHydrationState.mode,failedEndpoints:list(failed),counts:payloadCounts()});
 }
 function $(id){
   const el=document.getElementById(id);
@@ -457,7 +908,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
   if(value===null||value===undefined)return value;
   const type=typeof value;
   if(type==='string'){
-    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}… (${fmt(value.length)} chars)`:value;
+    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}â€¦ (${fmt(value.length)} chars)`:value;
   }
   if(type==='number'||type==='boolean')return value;
   if(type==='function')return '[Function]';
@@ -467,7 +918,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
     refs.weak.add(value);
     if(Array.isArray(value)){
       const out=value.slice(0,opts.maxArray).map(item=>boundedPreviewValue(item,opts,depth+1,refs));
-      if(value.length>opts.maxArray){refs.truncated=true;out.push(`… ${fmt(value.length-opts.maxArray)} more item(s)`);}
+      if(value.length>opts.maxArray){refs.truncated=true;out.push(`â€¦ ${fmt(value.length-opts.maxArray)} more item(s)`);}
       return out;
     }
     const out={};
@@ -479,7 +930,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
         out[key]=boundedPreviewValue(value[key],opts,depth+1,refs);
       }
     });
-    if(keys.length>opts.maxKeys){refs.truncated=true;out['…']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
+    if(keys.length>opts.maxKeys){refs.truncated=true;out['â€¦']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
     return out;
   }
   return text(value);
@@ -489,7 +940,7 @@ function summaryForLargeValue(value){
   if(Array.isArray(value))return `[Array(${fmt(value.length)})]`;
   if(typeof value==='object')return `[Object(${fmt(Object.keys(value).length)} keys)]`;
   const s=text(value);
-  return s.length>180?`${s.slice(0,180)}…`:s;
+  return s.length>180?`${s.slice(0,180)}â€¦`:s;
 }
 function previewJson(value,options={}){
   const tracker={weak:new WeakSet(),nodes:0,truncated:false};
@@ -498,7 +949,7 @@ function previewJson(value,options={}){
   try{json=JSON.stringify(preview,null,2);}
   catch(error){json=`"[Preview unavailable: ${text(error&&error.message||error)}]"`;}
   const maxChars=Number(options.maxChars||18000);
-  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\n… (${fmt(json.length-maxChars)} more chars)`;}
+  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\nâ€¦ (${fmt(json.length-maxChars)} more chars)`;}
   return {json,truncated:tracker.truncated};
 }
 function previewJsonHtml(value,options={}){
@@ -598,7 +1049,7 @@ function isDesktopPrimaryDevice(){return window.matchMedia('(min-width: 1280px) 
 function isCompactShellLayout(){
   const w=Math.max(window.innerWidth||0,document.documentElement.clientWidth||0);
   const coarse=window.matchMedia('(pointer: coarse)').matches;
-  return w<1180||coarse;
+  return w<1440||coarse;
 }
 function isAdvancedMode(){
   try{
@@ -710,9 +1161,9 @@ function ensureScrollablePaneFocus(){
 function scrollableElementFromTarget(target){
   let el=target&&target.nodeType===1?target:target?.parentElement;
   while(el&&el!==document.body&&el!==document.documentElement){
-    const style=window.getComputedStyle?window.getComputedStyle(el):null;
-    const overflowY=style?.overflowY||'';
-    const overflowX=style?.overflowX||'';
+    const computedStyle=window.getComputedStyle?window.getComputedStyle(el):null;
+    const overflowY=computedStyle?.overflowY||'';
+    const overflowX=computedStyle?.overflowX||'';
     const scrollY=/(auto|scroll|overlay)/.test(overflowY)&&el.scrollHeight>el.clientHeight+1;
     const scrollX=/(auto|scroll|overlay)/.test(overflowX)&&el.scrollWidth>el.clientWidth+1;
     if(scrollY||scrollX)return el;
@@ -737,6 +1188,756 @@ function wheelFallbackTarget(target){
   if(el?.closest?.('.pane.right'))return optionalElement('inspectorBody');
   return optionalElement('content')||optionalElement('scopeList')||optionalElement('inspectorBody');
 }
+
+
+
+
+
+/*
+  Phase 7: lazy FWD detail hydration.
+
+  Purpose:
+  - Keep boot-sidecar startup fast.
+  - Do not hydrate the full FWD sidecar in the background during initial boot.
+  - Load ac-rule-viewer.fwd.json only when the user opens a workspace that needs full resource/detail data.
+*/
+
+const lazyDetailHydrationState = {
+  fwdStatus: 'none',
+  fwdPromise: null,
+  fwdLoadedAtUtc: '',
+  fwdElapsedMs: 0,
+  fwdError: null,
+  hydratedWorkspaces: new Set(),
+  pendingWorkspace: '',
+  pendingReason: ''
+};
+
+function lazyDetailWorkspaceNames(){
+  return ['rule-lists','udfs','tables','selection-lists','resources','drivers'];
+}
+
+function lazyDetailWorkspaceLabel(view){
+  const normalized = normalizeWorkspaceViewName(view || '');
+  return normalized === 'rule-lists' ? 'Rule Lists'
+    : normalized === 'udfs' ? 'User Defined Functions'
+    : normalized === 'tables' ? 'Tables'
+    : normalized === 'selection-lists' ? 'SelectionLists'
+    : normalized === 'resources' ? 'Resources'
+    : normalized === 'drivers' ? 'Drivers'
+    : 'FWD details';
+}
+
+function lazyDetailCurrentFwd(){
+  return fwdData || fwdSidecarData || (typeof model !== 'undefined' && model ? model.fwd : null) || null;
+}
+
+function lazyDetailItems(container){
+  if(Array.isArray(container)) return container;
+  if(container && Array.isArray(container.items)) return container.items;
+  if(container && Array.isArray(container.Items)) return container.Items;
+  return [];
+}
+
+function lazyDetailHasWorkspaceRows(view){
+  const fwd = lazyDetailCurrentFwd();
+  if(!fwd || typeof fwd !== 'object') return false;
+  const normalized = normalizeWorkspaceViewName(view || '');
+
+  if(normalized === 'rule-lists') return lazyDetailItems(fwd.ruleLists).length > 0;
+  if(normalized === 'udfs') return lazyDetailItems(fwd.udfs).length > 20 || lazyDetailItems(fwd.canonicalUdfs).length > 20;
+  if(normalized === 'tables') return lazyDetailItems(fwd.tables).length > 0 || lazyDetailItems(fwd.selectionLists).length > 0;
+  if(normalized === 'selection-lists') return lazyDetailItems(fwd.selectionLists).length > 0;
+  if(normalized === 'resources') return lazyDetailItems(fwd.resources).length > 0 || lazyDetailItems(fwd.fields).length > 0;
+  if(normalized === 'drivers') return lazyDetailItems(fwd.drivers).length > 0 || lazyDetailItems(fwd.processes).length > 0 || lazyDetailItems(fwd.inputDrivers).length > 0 || lazyDetailItems(fwd.outputDrivers).length > 0;
+  return true;
+}
+
+function lazyDetailNeedsStaticFwd(view){
+  const normalized = normalizeWorkspaceViewName(view || '');
+  if(!lazyDetailWorkspaceNames().includes(normalized)) return false;
+  if(lazyDetailHydrationState.fwdStatus === 'loaded') return false;
+  if(lazyDetailHasWorkspaceRows(normalized)) return false;
+  return true;
+}
+
+function lazyDetailFetchCandidates(fileName){
+  const clean = text(fileName || '').replace(/^\/+/, '');
+  const candidates = [clean, '/' + clean];
+
+  try {
+    const base = new URL(window.location.href);
+    const path = base.pathname || '';
+    const parts = path.split('/').filter(Boolean);
+    if(parts.length){
+      parts.pop();
+      const relativeBase = '/' + parts.join('/');
+      if(relativeBase && relativeBase !== '/') candidates.push(relativeBase + '/' + clean);
+    }
+  } catch {}
+
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+async function lazyDetailFetchJson(fileName){
+  const candidates = lazyDetailFetchCandidates(fileName);
+  const failures = [];
+
+  for(const url of candidates){
+    const started = Date.now();
+    try {
+      const response = await fetch(url, { cache: 'no-store' });
+      const elapsedMs = Date.now() - started;
+      if(typeof recordViewerFetch === 'function') recordViewerFetch(fileName, url, response.status, elapsedMs, { lazy: true });
+      if(!response.ok){
+        failures.push({ url, status: response.status });
+        continue;
+      }
+      return await response.json();
+    } catch(error) {
+      const elapsedMs = Date.now() - started;
+      if(typeof recordViewerFetch === 'function') recordViewerFetch(fileName, url, 0, elapsedMs, { lazy: true, error: error && error.message ? error.message : String(error || 'fetch failed') });
+      failures.push({ url, error: error && error.message ? error.message : String(error || 'fetch failed') });
+    }
+  }
+
+  const message = `Unable to load ${fileName} from ${candidates.join(', ')}`;
+  const error = new Error(message);
+  error.failures = failures;
+  throw error;
+}
+
+function lazyDetailUnwrapPayload(payload){
+  const unwrapped = first(
+    payload && payload.data && payload.data.items ? payload.data : null,
+    payload && payload.Data && payload.Data.Items ? payload.Data : null,
+    payload && payload.data ? payload.data : null,
+    payload && payload.Data ? payload.Data : null,
+    payload
+  );
+  return unwrapped && typeof unwrapped === 'object' ? unwrapped : payload;
+}
+
+function lazyDetailResetCaches(){
+  try { globalDefinitionLookupCache = null; } catch {}
+  try { globalTableDefinitionsCache = null; } catch {}
+  try { globalUdfDefinitionsCache = null; } catch {}
+  try { globalFunctionDefinitionsCache = null; } catch {}
+  try { globalNavigationCountsCache = null; } catch {}
+  try { productCountsCache = null; } catch {}
+  try { ruleListPacketDefinitionsCache = null; } catch {}
+  try { scopeFieldResolutionCache = new Map(); } catch {}
+  try {
+    if(model){
+      model.visibleRowsCache = null;
+      model.treeMatchCache = null;
+    }
+  } catch {}
+}
+
+function lazyDetailApplyStaticFwdPayload(payload, reason){
+  const fwd = lazyDetailUnwrapPayload(payload);
+  if(!fwd || typeof fwd !== 'object'){
+    throw new Error('Static FWD sidecar did not contain an object payload.');
+  }
+
+  fwdSidecarData = fwd;
+  fwdData = fwd;
+
+  try { applyAdvancedSidecarsToFwdData(); } catch {}
+
+  if(typeof fwdApiHydrationState !== 'undefined'){
+    fwdApiHydrationState.mode = 'boot-sidecar+lazy-fwd';
+    fwdApiHydrationState.failedEndpoints = [];
+  }
+
+  if(typeof model !== 'undefined' && model){
+    model = buildModel();
+  }
+
+  lazyDetailResetCaches();
+  lazyDetailHydrationState.fwdStatus = 'loaded';
+  lazyDetailHydrationState.fwdLoadedAtUtc = new Date().toISOString();
+  lazyDetailHydrationState.hydratedWorkspaces.add(reason || 'fwd');
+
+  if(typeof recordViewerDiagnostic === 'function'){
+    recordViewerDiagnostic('info', 'lazy-static-fwd-applied', {
+      reason,
+      counts: typeof payloadCounts === 'function' ? payloadCounts() : null,
+      modelCounts: typeof modelCounts === 'function' ? modelCounts() : null
+    });
+  }
+
+  return fwd;
+}
+
+async function lazyDetailLoadStaticFwdSidecar(reason){
+  if(lazyDetailHydrationState.fwdStatus === 'loaded') return lazyDetailCurrentFwd();
+  if(lazyDetailHydrationState.fwdPromise) return lazyDetailHydrationState.fwdPromise;
+
+  const started = Date.now();
+  lazyDetailHydrationState.fwdStatus = 'loading';
+  lazyDetailHydrationState.fwdError = null;
+  lazyDetailHydrationState.pendingReason = reason || '';
+
+  if(typeof recordViewerDiagnostic === 'function'){
+    recordViewerDiagnostic('info', 'lazy-static-fwd-start', { reason });
+  }
+
+  lazyDetailHydrationState.fwdPromise = lazyDetailFetchJson('ac-rule-viewer.fwd.json')
+    .then(payload => {
+      lazyDetailHydrationState.fwdElapsedMs = Date.now() - started;
+      return lazyDetailApplyStaticFwdPayload(payload, reason);
+    })
+    .catch(error => {
+      lazyDetailHydrationState.fwdStatus = 'failed';
+      lazyDetailHydrationState.fwdError = error && error.message ? error.message : String(error || 'Unknown lazy FWD load failure');
+      if(typeof fwdApiHydrationState !== 'undefined'){
+        fwdApiHydrationState.mode = 'boot-sidecar+lazy-fwd-failed';
+        fwdApiHydrationState.failedEndpoints = ['ac-rule-viewer.fwd.json'];
+      }
+      if(typeof recordViewerDiagnostic === 'function'){
+        recordViewerDiagnostic('error', 'lazy-static-fwd-failed', { reason, message: lazyDetailHydrationState.fwdError, failures: error && error.failures ? error.failures : [] });
+      }
+      throw error;
+    })
+    .finally(() => {
+      lazyDetailHydrationState.fwdPromise = null;
+      lazyDetailHydrationState.pendingWorkspace = '';
+      lazyDetailHydrationState.pendingReason = '';
+    });
+
+  return lazyDetailHydrationState.fwdPromise;
+}
+
+function lazyDetailLoadingHtml(view, reason){
+  const label = lazyDetailWorkspaceLabel(view);
+  return `<section class="product-workspace product-catalog lazy-hydration-workspace" aria-label="Loading ${esc(label)}"><div class="product-empty-state product-empty-state-actionable lazy-hydration-card"><div class="empty-status-row"><span class="badge blue">Lazy hydration</span><span class="badge green">Boot-sidecar retained</span></div><h3>Loading ${esc(label)} details</h3><p>The viewer is fetching <code>ac-rule-viewer.fwd.json</code> on demand. The fast boot model stays intact; only the selected detail workspace is being hydrated.</p><div class="lazy-hydration-progress" aria-hidden="true"><span></span></div><p class="caption">Reason: ${esc(reason || 'workspace opened')}.</p></div></section>`;
+}
+
+function renderLazyDetailLoading(view, reason){
+  const host = optionalElement('content');
+  if(host) host.innerHTML = lazyDetailLoadingHtml(view, reason);
+  const title = optionalElement('scopeTitle');
+  if(title) title.textContent = `Loading ${lazyDetailWorkspaceLabel(view)}`;
+  const caption = optionalElement('scopeCaption');
+  if(caption) caption.innerHTML = '<span class="scope-caption-note">Loading the static FWD detail sidecar for this workspace.</span>';
+}
+
+function maybeHydrateWorkspaceOnDemand(view, action){
+  const normalized = normalizeWorkspaceViewName(view || '');
+  if(!lazyDetailNeedsStaticFwd(normalized)) return false;
+
+  lazyDetailHydrationState.pendingWorkspace = normalized;
+  lazyDetailHydrationState.pendingReason = action || 'workspace-open';
+  renderLazyDetailLoading(normalized, action || 'workspace-open');
+
+  lazyDetailLoadStaticFwdSidecar(normalized)
+    .then(() => {
+      lazyDetailHydrationState.hydratedWorkspaces.add(normalized);
+      if(state.workspaceView !== normalized) return;
+      lazyDetailResetCaches();
+      if(typeof ensureUsefulWorkspaceSelection === 'function') ensureUsefulWorkspaceSelection('lazy-detail-hydration');
+      renderAll();
+      try { toast(`${lazyDetailWorkspaceLabel(normalized)} details loaded`); } catch {}
+    })
+    .catch(error => {
+      if(state.workspaceView !== normalized) return;
+      if(typeof reportUiError === 'function') reportUiError('lazy detail hydration', error);
+      renderAll();
+    });
+
+  return true;
+}
+
+window.fwViewerLazyHydrationState = function(){
+  return {
+    fwdStatus: lazyDetailHydrationState.fwdStatus,
+    fwdLoadedAtUtc: lazyDetailHydrationState.fwdLoadedAtUtc,
+    fwdElapsedMs: lazyDetailHydrationState.fwdElapsedMs,
+    fwdError: lazyDetailHydrationState.fwdError,
+    pendingWorkspace: lazyDetailHydrationState.pendingWorkspace,
+    pendingReason: lazyDetailHydrationState.pendingReason,
+    hydratedWorkspaces: [...lazyDetailHydrationState.hydratedWorkspaces]
+  };
+};
+/*
+  Phase 8: granular sidecar loading.
+
+  This module is intentionally additive and fallback-safe:
+  - If ac-rule-viewer.manifest.json/ac-rule-viewer.index.json are absent, the existing boot-sidecar path continues.
+  - If a granular FWD workspace index is absent, Phase 7 lazy ac-rule-viewer.fwd.json loading continues.
+  - If a scope sidecar fails, the viewer keeps the currently loaded preview and reports the failure.
+*/
+
+const granularSidecarState = {
+  enabled: false,
+  manifest: null,
+  index: null,
+  defaultScopeId: '',
+  loadedScopes: new Set(),
+  loadingScopes: new Map(),
+  loadedFwdWorkspaces: new Set(),
+  loadingFwdWorkspaces: new Map(),
+  errors: []
+};
+
+function granularQueryFlag(name){
+  try { return new URLSearchParams(window.location.search).get(name); } catch { return null; }
+}
+
+function granularFalseyFlag(name){
+  return /^(0|false|no|off)$/i.test(text(granularQueryFlag(name) || ''));
+}
+
+function granularList(value){
+  if(!value) return [];
+  if(Array.isArray(value)) return value;
+  if(Array.isArray(value.items)) return value.items;
+  if(Array.isArray(value.Items)) return value.Items;
+  return [];
+}
+
+function granularFirst(){
+  for(let i=0;i<arguments.length;i++){
+    if(arguments[i]!==undefined&&arguments[i]!==null) return arguments[i];
+  }
+  return undefined;
+}
+
+function granularText(value){
+  return value===undefined||value===null?'':String(value);
+}
+
+function granularSafeKey(value){
+  return granularText(value||'unknown')
+    .replace(/^[.\\/]+/,'')
+    .replace(/[\\/]+/g,'_')
+    .replace(/[^A-Za-z0-9._-]+/g,'_')
+    .replace(/_+/g,'_')
+    .replace(/^_+|_+$/g,'')
+    .slice(0,180)||'unknown';
+}
+
+function granularItemId(item){
+  return granularText(granularFirst(item&&item.NodeId,item&&item.nodeId,item&&item.Id,item&&item.id,item&&item.RuleGuid,item&&item.ruleGuid,item&&item.Guid,item&&item.guid,item&&item.Key,item&&item.key,item&&item.Name,item&&item.name));
+}
+
+function granularNodeScope(node){
+  return granularText(granularFirst(node&&node.ScopePath,node&&node.scopePath,node&&node.ScopeId,node&&node.scopeId,node&&node.ScopeKey,node&&node.scopeKey,node&&node.RuleListScope,node&&node.ruleListScope));
+}
+
+function granularRuleScope(rule){
+  return granularText(granularFirst(rule&&rule.ScopePath,rule&&rule.scopePath,rule&&rule.ScopeId,rule&&rule.scopeId,rule&&rule.RuleListScope,rule&&rule.ruleListScope));
+}
+
+function granularRuleGuid(rule){
+  return granularText(granularFirst(rule&&rule.RuleGuid,rule&&rule.ruleGuid,rule&&rule.Guid,rule&&rule.guid));
+}
+
+function granularNodeGuid(node){
+  return granularText(granularFirst(node&&node.RuleGuid,node&&node.ruleGuid,node&&node.Guid,node&&node.guid));
+}
+
+function granularFetchCandidates(fileName){
+  const clean=granularText(fileName||'').replace(/^\/+/, '');
+  const candidates=[clean,'/'+clean];
+  try{
+    const url=new URL(window.location.href);
+    const parts=(url.pathname||'').split('/').filter(Boolean);
+    if(parts.length){
+      parts.pop();
+      const base='/'+parts.join('/');
+      if(base&&base!=='/') candidates.push(base+'/'+clean);
+    }
+  }catch{}
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+async function granularFetchJson(fileName, options={}){
+  const candidates=granularFetchCandidates(fileName);
+  const failures=[];
+  for(const url of candidates){
+    const started=Date.now();
+    try{
+      const response=await fetch(url,{cache:'no-store'});
+      const elapsed=Date.now()-started;
+      if(typeof recordViewerFetch==='function')recordViewerFetch(fileName,url,response.status,elapsed,{phase8:true,...options});
+      if(!response.ok){
+        failures.push({url,status:response.status});
+        continue;
+      }
+      return await response.json();
+    }catch(error){
+      const elapsed=Date.now()-started;
+      if(typeof recordViewerFetch==='function')recordViewerFetch(fileName,url,0,elapsed,{phase8:true,message:error&&error.message?error.message:String(error||'fetch failed'),...options});
+      failures.push({url,error:error&&error.message?error.message:String(error||'fetch failed')});
+    }
+  }
+  const err=new Error('Unable to load '+fileName+' from '+candidates.join(', '));
+  err.failures=failures;
+  throw err;
+}
+
+function granularRecord(level,event,details={}){
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic(level,event,details);
+}
+
+function granularResetCaches(){
+  try{globalDefinitionLookupCache=null;}catch{}
+  try{globalTableDefinitionsCache=null;}catch{}
+  try{globalUdfDefinitionsCache=null;}catch{}
+  try{globalFunctionDefinitionsCache=null;}catch{}
+  try{globalNavigationCountsCache=null;}catch{}
+  try{productCountsCache=null;}catch{}
+  try{ruleListPacketDefinitionsCache=null;}catch{}
+  try{scopeFieldResolutionCache=new Map();}catch{}
+  try{if(model){model.visibleRowsCache=null;model.treeMatchCache=null;}}catch{}
+}
+
+function granularApplyIndexPayload(manifest,index){
+  const preview=index&&index.bootPreview;
+  if(!preview||!preview.rulesData||!preview.treeData){
+    throw new Error('Granular index did not contain a usable bootPreview payload.');
+  }
+
+  rulesData=preview.rulesData;
+  treeData=preview.treeData;
+  relData=preview.relData||{Relationships:[]};
+
+  granularSidecarState.enabled=true;
+  granularSidecarState.manifest=manifest;
+  granularSidecarState.index=index;
+  granularSidecarState.defaultScopeId=granularText(preview.scopeId||index.defaultScopeId||'');
+  if(granularSidecarState.defaultScopeId){
+    granularSidecarState.loadedScopes.add(granularSidecarState.defaultScopeId+':preview');
+    try{state.scopeId=granularSidecarState.defaultScopeId;}catch{}
+  }
+
+  if(typeof fwdApiHydrationState!=='undefined'){
+    fwdApiHydrationState.mode='granular-index';
+    fwdApiHydrationState.failedEndpoints=[];
+  }
+
+  granularRecord('info','granular-index-applied',{
+    defaultScopeId:granularSidecarState.defaultScopeId,
+    counts:typeof payloadCounts==='function'?payloadCounts():null,
+    previewLimit:index.previewLimit||0
+  });
+}
+
+async function tryLoadGranularIndexMode(){
+  if(granularFalseyFlag('granular')||granularFalseyFlag('phase8'))return false;
+  try{
+    granularRecord('info','granular-index-start',{});
+    const manifest=await granularFetchJson('ac-rule-viewer.manifest.json',{kind:'manifest'});
+    if(!manifest||manifest.mode!=='granular-sidecars'){
+      granularRecord('warn','granular-manifest-ignored',{mode:manifest&&manifest.mode});
+      return false;
+    }
+    const indexFile=(manifest.files&&manifest.files.index)||'ac-rule-viewer.index.json';
+    const index=await granularFetchJson(indexFile,{kind:'index'});
+    granularApplyIndexPayload(manifest,index);
+    return true;
+  }catch(error){
+    granularSidecarState.errors.push({event:'granular-index-failed',message:error&&error.message?error.message:String(error||'Unknown error')});
+    granularRecord('warn','granular-index-unavailable',{message:error&&error.message?error.message:String(error||'Unknown error'),failures:error&&error.failures?error.failures:[]});
+    return false;
+  }
+}
+
+function granularScopeEntry(scopeId){
+  const id=granularText(scopeId||'');
+  const manifestScopes=granularList(granularSidecarState.manifest&&granularSidecarState.manifest.scopes);
+  const indexScopes=granularList(granularSidecarState.index&&granularSidecarState.index.scopes);
+  return [...manifestScopes,...indexScopes].find(s=>granularText(s.scopeId)===id)||null;
+}
+
+function granularScopeFile(scopeId){
+  const entry=granularScopeEntry(scopeId);
+  if(entry&&entry.file)return entry.file;
+  return 'rules.scope.'+granularSafeKey(scopeId)+'.tree.json';
+}
+
+function granularScopeFullyLoaded(scopeId){
+  return granularSidecarState.loadedScopes.has(granularText(scopeId));
+}
+
+function granularArrayWithoutScope(items,scopeId,kind){
+  const id=granularText(scopeId||'');
+  if(!id)return granularList(items);
+  if(kind==='node')return granularList(items).filter(item=>granularNodeScope(item)!==id);
+  if(kind==='rule')return granularList(items).filter(item=>granularRuleScope(item)!==id);
+  if(kind==='diag')return granularList(items).filter(item=>{
+    const direct=granularText(granularFirst(item&&item.ScopePath,item&&item.scopePath,item&&item.ScopeId,item&&item.scopeId));
+    return direct!==id;
+  });
+  if(kind==='rel')return granularList(items).filter(item=>{
+    const direct=granularText(granularFirst(item&&item.ScopePath,item&&item.scopePath,item&&item.ScopeId,item&&item.scopeId));
+    return direct!==id;
+  });
+  return granularList(items);
+}
+
+function granularMergeByKey(existing,incoming,keyFn){
+  const map=new Map();
+  for(const item of granularList(existing)){
+    const key=keyFn(item)||JSON.stringify(item);
+    if(!map.has(key))map.set(key,item);
+  }
+  for(const item of granularList(incoming)){
+    const key=keyFn(item)||JSON.stringify(item);
+    map.set(key,item);
+  }
+  return [...map.values()];
+}
+
+function granularApplyScopeSidecar(payload,scopeId){
+  const sidecar=payload&&payload.data&&typeof payload.data==='object'?payload.data:payload;
+  if(!sidecar||typeof sidecar!=='object')throw new Error('Scope sidecar was not an object.');
+  const id=granularText(sidecar.scopeId||scopeId||'');
+  const incomingTree=sidecar.treeData||sidecar.tree||{};
+  const incomingRules=sidecar.rulesData||sidecar.rules||{};
+  const incomingRel=sidecar.relData||sidecar.relationshipsData||{};
+
+  const currentTree=treeData||{};
+  const currentRules=rulesData||{};
+  const currentRel=relData||{};
+
+  const existingScopes=granularList(granularFirst(currentTree.Scopes,currentTree.scopes));
+  const incomingScopes=granularList(granularFirst(incomingTree.Scopes,incomingTree.scopes));
+  const existingNodes=granularArrayWithoutScope(granularFirst(currentTree.Nodes,currentTree.nodes),id,'node');
+  const existingEdges=granularArrayWithoutScope(granularFirst(currentTree.Edges,currentTree.edges),id,'node');
+  const existingDiags=granularArrayWithoutScope(granularFirst(currentTree.Diagnostics,currentTree.diagnostics),id,'diag');
+  const existingRules=granularArrayWithoutScope(granularFirst(currentRules.Rules,currentRules.rules),id,'rule');
+  const existingRels=granularArrayWithoutScope(granularFirst(currentRel.Relationships,currentRel.relationships,currentRel.Edges,currentRel.edges),id,'rel');
+
+  treeData={
+    ...currentTree,
+    Scopes:granularMergeByKey(existingScopes,incomingScopes,s=>granularText(granularFirst(s&&s.ScopePath,s&&s.scopePath,s&&s.ScopeId,s&&s.scopeId,s&&s.Key,s&&s.key,s&&s.Name,s&&s.name))),
+    Nodes:[...existingNodes,...granularList(granularFirst(incomingTree.Nodes,incomingTree.nodes))],
+    Edges:[...existingEdges,...granularList(granularFirst(incomingTree.Edges,incomingTree.edges))],
+    Diagnostics:[...existingDiags,...granularList(granularFirst(incomingTree.Diagnostics,incomingTree.diagnostics))]
+  };
+  rulesData={
+    ...currentRules,
+    Rules:[...existingRules,...granularList(granularFirst(incomingRules.Rules,incomingRules.rules))]
+  };
+  relData={
+    ...currentRel,
+    Relationships:[...existingRels,...granularList(granularFirst(incomingRel.Relationships,incomingRel.relationships,incomingRel.Edges,incomingRel.edges))]
+  };
+
+  granularSidecarState.loadedScopes.add(id);
+  granularResetCaches();
+  if(typeof model!=='undefined'&&model)model=buildModel();
+  try{seedExpanded(id);}catch{}
+
+  granularRecord('info','granular-scope-applied',{
+    scopeId:id,
+    counts:sidecar.counts||{},
+    payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,
+    modelCounts:typeof modelCounts==='function'?modelCounts():null
+  });
+}
+
+async function granularLoadScope(scopeId,reason='scope-open'){
+  const id=granularText(scopeId||'');
+  if(!granularSidecarState.enabled||!id)return false;
+  if(granularScopeFullyLoaded(id))return true;
+  if(granularSidecarState.loadingScopes.has(id))return granularSidecarState.loadingScopes.get(id);
+
+  const file=granularScopeFile(id);
+  const promise=granularFetchJson(file,{kind:'scope',scopeId:id,reason})
+    .then(payload=>{
+      granularApplyScopeSidecar(payload,id);
+      return true;
+    })
+    .catch(error=>{
+      granularSidecarState.errors.push({event:'granular-scope-load-failed',scopeId:id,message:error&&error.message?error.message:String(error||'Unknown scope load failure')});
+      granularRecord('error','granular-scope-load-failed',{scopeId:id,file,message:error&&error.message?error.message:String(error||'Unknown scope load failure'),failures:error&&error.failures?error.failures:[]});
+      return false;
+    })
+    .finally(()=>granularSidecarState.loadingScopes.delete(id));
+
+  granularSidecarState.loadingScopes.set(id,promise);
+  granularRecord('info','granular-scope-load-start',{scopeId:id,file,reason});
+  return promise;
+}
+
+function granularScopeLoadingHtml(scopeId){
+  const entry=granularScopeEntry(scopeId)||{};
+  const label=entry.name||scopeId||'scope';
+  return `<section class="product-workspace product-catalog lazy-hydration-workspace" aria-label="Loading ${esc(label)}"><div class="product-empty-state product-empty-state-actionable lazy-hydration-card"><div class="empty-status-row"><span class="badge blue">Granular sidecar</span><span class="badge green">Index mode</span></div><h3>Loading ${esc(label)} rule tree</h3><p>The viewer has painted the lightweight startup index. It is now loading the selected Page/Document/UDF rule sidecar.</p><div class="lazy-hydration-progress" aria-hidden="true"><span></span></div></div></section>`;
+}
+
+function granularRenderScopeLoading(scopeId){
+  const host=optionalElement('content');
+  if(host)host.innerHTML=granularScopeLoadingHtml(scopeId);
+  const title=optionalElement('scopeTitle');
+  if(title)title.textContent='Loading scope';
+  const caption=optionalElement('scopeCaption');
+  if(caption)caption.textContent='Loading the granular rule tree sidecar for this scope.';
+}
+
+function maybeHydrateScopeOnDemand(scopeId,reason='scope-open'){
+  const id=granularText(scopeId||'');
+  if(!granularSidecarState.enabled||!id)return false;
+  if(granularScopeFullyLoaded(id))return false;
+  granularRenderScopeLoading(id);
+  granularLoadScope(id,reason).then(ok=>{
+    if(state.scopeId!==id)return;
+    if(ok){
+      try{seedExpanded(id);}catch{}
+    }
+    renderAll();
+  });
+  return true;
+}
+
+function granularFwdWorkspaceFile(view){
+  const normalized=normalizeWorkspaceViewName(view||'');
+  const fromManifest=granularSidecarState.manifest&&granularSidecarState.manifest.fwdWorkspaceIndexes&&granularSidecarState.manifest.fwdWorkspaceIndexes[normalized];
+  if(fromManifest)return fromManifest;
+  const map={
+    'rule-lists':'fwd.rule-lists.index.json',
+    'udfs':'fwd.udfs.index.json',
+    'functions':'fwd.functions.index.json',
+    'tables':'fwd.tables.index.json',
+    'selection-lists':'fwd.selection-lists.index.json',
+    'resources':'fwd.resources.index.json',
+    'drivers':'fwd.drivers.index.json'
+  };
+  return map[normalized]||'';
+}
+
+function granularWorkspaceNeedsFwd(view){
+  const normalized=normalizeWorkspaceViewName(view||'');
+  return ['rule-lists','udfs','functions','tables','selection-lists','resources','drivers'].includes(normalized);
+}
+
+function granularMergeFwdPayload(payload,workspace){
+  const incoming=payload&&payload.data&&typeof payload.data==='object'?payload.data:payload;
+  if(!incoming||typeof incoming!=='object')throw new Error('FWD workspace sidecar was not an object.');
+  const current=fwdData||fwdSidecarData||{};
+  const next={...current};
+  for(const [key,value] of Object.entries(incoming)){
+    if(['schema','schemaVersion','workspace','generatedAtUtc','counts'].includes(key))continue;
+    if(Array.isArray(value)||value&&Array.isArray(value.items)||value&&Array.isArray(value.Items)){
+      next[key]=value;
+    }else if(value&&typeof value==='object'){
+      next[key]={...(next[key]&&typeof next[key]==='object'?next[key]:{}),...value};
+    }else if(value!==undefined){
+      next[key]=value;
+    }
+  }
+  fwdSidecarData=next;
+  fwdData=next;
+  try{applyAdvancedSidecarsToFwdData();}catch{}
+  if(typeof fwdApiHydrationState!=='undefined'){
+    fwdApiHydrationState.mode='granular-index+lazy-fwd';
+    fwdApiHydrationState.failedEndpoints=[];
+  }
+  granularSidecarState.loadedFwdWorkspaces.add(normalizeWorkspaceViewName(workspace||incoming.workspace||''));
+  try{
+    if(typeof lazyDetailHydrationState!=='undefined'){
+      lazyDetailHydrationState.fwdStatus='granular';
+      lazyDetailHydrationState.fwdLoadedAtUtc=new Date().toISOString();
+      lazyDetailHydrationState.hydratedWorkspaces.add(workspace||incoming.workspace||'fwd');
+    }
+  }catch{}
+  granularResetCaches();
+  if(typeof model!=='undefined'&&model)model=buildModel();
+  granularRecord('info','granular-fwd-workspace-applied',{workspace,counts:incoming.counts||{},payloadCounts:typeof payloadCounts==='function'?payloadCounts():null});
+}
+
+async function granularLoadFwdWorkspace(view,reason='workspace-open'){
+  const normalized=normalizeWorkspaceViewName(view||'');
+  if(!granularSidecarState.enabled||!granularWorkspaceNeedsFwd(normalized))return false;
+  if(granularSidecarState.loadedFwdWorkspaces.has(normalized))return true;
+  if(granularSidecarState.loadingFwdWorkspaces.has(normalized))return granularSidecarState.loadingFwdWorkspaces.get(normalized);
+  const file=granularFwdWorkspaceFile(normalized);
+  if(!file)return false;
+  const promise=granularFetchJson(file,{kind:'fwd-workspace',workspace:normalized,reason})
+    .then(payload=>{granularMergeFwdPayload(payload,normalized);return true;})
+    .catch(error=>{
+      granularSidecarState.errors.push({event:'granular-fwd-workspace-failed',workspace:normalized,message:error&&error.message?error.message:String(error||'Unknown FWD workspace load failure')});
+      granularRecord('warn','granular-fwd-workspace-unavailable',{workspace:normalized,file,message:error&&error.message?error.message:String(error||'Unknown FWD workspace load failure'),failures:error&&error.failures?error.failures:[]});
+      return false;
+    })
+    .finally(()=>granularSidecarState.loadingFwdWorkspaces.delete(normalized));
+  granularSidecarState.loadingFwdWorkspaces.set(normalized,promise);
+  granularRecord('info','granular-fwd-workspace-start',{workspace:normalized,file,reason});
+  return promise;
+}
+
+function granularInstallRuntimeHooks(){
+  if(typeof selectScope==='function'&&!selectScope.__phase8Granular){
+    const originalSelectScope=selectScope;
+    selectScope=function(id){
+      if(!id)return;
+      if(granularSidecarState.enabled&&!granularScopeFullyLoaded(id)){
+        state.scopeId=id;
+        if(isGlobalDefinitionView())state.workspaceView='structure';
+        try{noteRecentScope(id);}catch{}
+        state.selectedType='scope';
+        state.selectedId='';
+        state.focusNodeId='';
+        try{state.collapsedActionLists.clear();}catch{}
+        document.body.classList.remove('inspector-open');
+        try{markOnboardingComplete();}catch{}
+        try{announceContentStatus('Loading scope: '+id);}catch{}
+        if(maybeHydrateScopeOnDemand(id,'scope-select'))return;
+      }
+      return originalSelectScope(id);
+    };
+    selectScope.__phase8Granular=true;
+  }
+
+  if(typeof maybeHydrateWorkspaceOnDemand==='function'&&!maybeHydrateWorkspaceOnDemand.__phase8Granular){
+    const originalMaybeHydrateWorkspaceOnDemand=maybeHydrateWorkspaceOnDemand;
+    maybeHydrateWorkspaceOnDemand=function(view,action){
+      const normalized=normalizeWorkspaceViewName(view||'');
+      if(granularSidecarState.enabled&&granularWorkspaceNeedsFwd(normalized)&&!granularSidecarState.loadedFwdWorkspaces.has(normalized)){
+        const file=granularFwdWorkspaceFile(normalized);
+        if(file){
+          try{renderLazyDetailLoading(normalized,action||'granular-fwd-workspace');}catch{}
+          granularLoadFwdWorkspace(normalized,action||'workspace-open').then(ok=>{
+            if(state.workspaceView!==normalized)return;
+            if(ok){
+              if(typeof ensureUsefulWorkspaceSelection==='function')ensureUsefulWorkspaceSelection('granular-fwd-workspace');
+              renderAll();
+              try{toast('Loaded '+normalized+' index');}catch{}
+            }else if(typeof originalMaybeHydrateWorkspaceOnDemand==='function'){
+              originalMaybeHydrateWorkspaceOnDemand(normalized,action);
+            }else{
+              renderAll();
+            }
+          });
+          return true;
+        }
+      }
+      return originalMaybeHydrateWorkspaceOnDemand(view,action);
+    };
+    maybeHydrateWorkspaceOnDemand.__phase8Granular=true;
+  }
+}
+
+granularInstallRuntimeHooks();
+
+window.fwViewerGranularState=function(){
+  return {
+    enabled:granularSidecarState.enabled,
+    defaultScopeId:granularSidecarState.defaultScopeId,
+    loadedScopes:[...granularSidecarState.loadedScopes],
+    loadingScopes:[...granularSidecarState.loadingScopes.keys()],
+    loadedFwdWorkspaces:[...granularSidecarState.loadedFwdWorkspaces],
+    loadingFwdWorkspaces:[...granularSidecarState.loadingFwdWorkspaces.keys()],
+    manifestMode:granularSidecarState.manifest&&granularSidecarState.manifest.mode,
+    errors:granularSidecarState.errors.slice(-10)
+  };
+};
+
 function wireDesktopScrollPanFallback(){
   if(wireDesktopScrollPanFallback.installed)return;
   wireDesktopScrollPanFallback.installed=true;
@@ -846,6 +2047,7 @@ function installPaneResizers(){
 }
 function reportUiError(context,error){
   const message=error&&error.message?error.message:String(error||'Unknown error');
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','ui-error',{context,message,stack:error&&error.stack?String(error.stack).slice(0,4000):''});
   console.error(`FW Editor Viewer ${context} failed:`, error);
   const banner=optionalElement('globalErrorBanner');
   if(banner){
@@ -1097,6 +2299,7 @@ function fwdHydrationSummary(){
 function setBootPhase(phase,detail=''){
   bootState.phase=phase;
   bootState.detail=detail||'';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic(phase==='failed'?'error':'info','boot-phase',{phase,detail:bootState.detail});
   document.body.setAttribute('aria-busy',phase==='loading'?'true':'false');
   optionalElement('content')?.setAttribute('aria-busy',phase==='loading'?'true':'false');
 }
@@ -3388,6 +4591,7 @@ function treeRow(n,level){
 }
 function renderNoData(){
   const detail=bootState.detail||'No FWD snapshot files could be loaded.';
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('error','render-no-data',{detail,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null});
   document.body.classList.add('no-scope-selector');
   $('sourceSubtitle').textContent='No snapshot data available';
   $('statusPill').innerHTML='<span class="dot warn"></span><span>FWD load failed</span>';
@@ -4359,7 +5563,7 @@ function productHealthLabel(hydration,warnings){
   if(Number(warnings||0)>0)return ['warn','Configuration warnings',`${fmt(warnings)} warnings are available in Load Status.`];
   return ['ok','Ready for review','Snapshot loaded cleanly with no reader warnings.'];
 }
-function renderAll(){return withUiGuard('render',()=>{normalizeWorkspaceViewForScope();ensureUsefulWorkspaceSelection('render');setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();ensureRenderedContentFallback('empty workspace render');renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();});}
+function renderAll(){return withUiGuard('render',()=>{if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('info','render-all-start',{workspaceView:state.workspaceView,scopeId:state.scopeId,modelCounts:typeof modelCounts==='function'?modelCounts():null});normalizeWorkspaceViewForScope();ensureUsefulWorkspaceSelection('render');setEditorModeClasses();if(isEditorMode()){document.body.classList.remove('inspector-open');}else{applyPaneLayout();}syncInspectorVisibility();saveState();renderTop();renderGlobalNavigation();renderScopes();renderMainHead();renderContent();ensureRenderedContentFallback('empty workspace render');renderDiagnosticsDock();renderInspector();renderSearchPopover();syncOnboardingChecklist();syncActionAvailability();if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('info','render-all-complete',{workspaceView:state.workspaceView,scopeId:state.scopeId,contentChars:(optionalElement('content')?.textContent||'').length});});}
 function renderTop(){
   document.body.classList.toggle('no-scope-selector',!state.scopeId||!currentScope());
   const banner=optionalElement('globalErrorBanner');
@@ -4721,7 +5925,7 @@ function handleRulePropertyTabKeyboard(e){
   window.setTimeout(()=>document.querySelector(`[data-rule-property-tab="${cssEscape(next.dataset.rulePropertyTab)}"]`)?.focus(),0);
   return true;
 }
-function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='toggle-editor-message'){e.preventDefault();state.editorMessageExpanded=!state.editorMessageExpanded;state.editorMessageHeight=state.editorMessageExpanded?Math.max(normalizedEditorMessageHeight(),240):104;renderContent();saveState();return;}if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act.startsWith('view-')&&validWorkspaceViews().includes(normalizeWorkspaceViewName(act.replace(/^view-/,'')))){e.preventDefault();state.workspaceView=normalizeWorkspaceViewName(act.replace(/^view-/,''));document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();executeCommand(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const rulePropertyTab=e.target.closest('[data-rule-property-tab]')?.dataset.rulePropertyTab;if(rulePropertyTab){e.preventDefault();setRulePropertyPage(rulePropertyTab);return;}
+function wire(){document.addEventListener('click',e=>{if(!isSearchUiTarget(e.target))closeSearchPopover();const act=e.target.closest('[data-action]')?.dataset.action;if(act){if(act==='toggle-editor-message'){e.preventDefault();state.editorMessageExpanded=!state.editorMessageExpanded;state.editorMessageHeight=state.editorMessageExpanded?Math.max(normalizedEditorMessageHeight(),240):104;renderContent();saveState();return;}if(act==='select-process'){e.preventDefault();selectProcessContext(e.target.closest('[data-process-name]')?.dataset.processName);return;}if(act.startsWith('view-')&&validWorkspaceViews().includes(normalizeWorkspaceViewName(act.replace(/^view-/,'')))){e.preventDefault();state.workspaceView=normalizeWorkspaceViewName(act.replace(/^view-/,''));document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');if(isGlobalDefinitionView()){document.body.classList.remove('inspector-open');applyPaneLayout();}if(typeof maybeHydrateWorkspaceOnDemand==='function'&&maybeHydrateWorkspaceOnDemand(state.workspaceView,act))return;renderAll();return;}if(act==='nav-documents'||act==='nav-pages'||act==='nav-batches'||act==='nav-processes'){e.preventDefault();document.body.classList.remove('mobile-nav-open');const navBtn=document.querySelector('[data-action="toggle-mobile-nav"]');if(navBtn)navBtn.setAttribute('aria-expanded','false');applyEditorNavPreset(act.replace(/^nav-/,''));saveState();return;}e.preventDefault();executeCommand(act);return;}const sr=e.target.closest('[data-search-index]')?.dataset.searchIndex;if(sr!==undefined){const results=$('searchPopover')?._results||[];jumpToSearchResult(results[Number(sr)]);return;}const rulePropertyTab=e.target.closest('[data-rule-property-tab]')?.dataset.rulePropertyTab;if(rulePropertyTab){e.preventDefault();setRulePropertyPage(rulePropertyTab);return;}
 const inspectorTab=e.target.closest('[data-inspector-tab]')?.dataset.inspectorTab;if(inspectorTab){state.inspectorView=inspectorTab;renderInspector();saveState();return;}const editorEl=e.target.closest('[data-editor-kind][data-editor-key]');if(editorEl){e.preventDefault();if(openGlobalDefinition(editorEl.dataset.editorKind,editorEl.dataset.editorKey))return;}const defEl=e.target.closest('[data-def-kind][data-def-key]');if(defEl){e.preventDefault();if(openGlobalDefinition(defEl.dataset.defKind,defEl.dataset.defKey))return;}const udfTab=e.target.closest('[data-udf-tab]')?.dataset.udfTab;if(udfTab){e.preventDefault();state.udfEditorTab=udfTab;renderContent();saveState();return;}const udfFilter=e.target.closest('[data-udf-filter]')?.dataset.udfFilter;if(udfFilter){state.udfFilter=udfFilter;state.selectedUdfName='';renderAll();return;}const fieldFilter=e.target.closest('[data-field-filter]')?.dataset.fieldFilter;if(fieldFilter){state.fieldResolutionFilter=fieldFilter;renderContent();renderDiagnosticsDock();saveState();return;}const sf=e.target.closest('[data-scope-filter]')?.dataset.scopeFilter;if(sf){state.scopeKindFilter=sf;saveState();renderScopes();return;}const sc=e.target.closest('[data-scope]')?.dataset.scope;if(sc){selectScope(sc);return;}const tog=e.target.closest('[data-toggle-node]')?.dataset.toggleNode;if(tog){const nodeId=String(tog);if(state.expanded.has(nodeId)){state.expanded.delete(nodeId);}else{state.expanded.add(nodeId);collapseActionListsForNode(nodeId);}renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const br=e.target.closest('[data-toggle-action-list]')?.dataset.toggleActionList;if(br){state.collapsedActionLists.has(br)?state.collapsedActionLists.delete(br):state.collapsedActionLists.add(br);renderContent();renderViewbar();renderDiagnosticsDock();renderInspector();return;}const actionList=e.target.closest('[data-action-list]')?.dataset.actionList;if(actionList){selectActionList(actionList);return;}const nodeEl=e.target.closest('[data-node]');const node=nodeEl?.dataset.node;if(node){selectNodeInScope(node,nodeEl?.dataset.nodeScope||'');return;}const inv=e.target.closest('[data-inventory]')?.dataset.inventory;if(inv){state.selectedType='inventory';state.selectedId=inv;document.body.classList.add('inspector-open');renderAll();return;}const rel=e.target.closest('[data-rel]')?.dataset.rel;if(rel){state.selectedType='rel';state.selectedId=rel;document.body.classList.add('inspector-open');renderAll();return;}const diag=e.target.closest('[data-diag]')?.dataset.diag;if(diag){state.selectedType='diag';state.selectedId=diag;document.body.classList.add('inspector-open');renderAll();return;}});
   document.addEventListener('input',e=>{if(e.target.id==='scopeSearch'){closeSearchPopover();state.scopeQuery=e.target.value;renderScopes();}else if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch'){if(searchDebounceTimer)window.clearTimeout(searchDebounceTimer);const sourceId=e.target.id;searchDebounceTimer=window.setTimeout(()=>applyQueryInput(e.target.value,sourceId),120);}});
   document.addEventListener('search',e=>{if(e.target.id==='globalSearch'||e.target.id==='viewSearch'||e.target.id==='editorSearch')applyQueryInput(e.target.value,e.target.id);});
@@ -5216,6 +6420,14 @@ function workspaceContentScore(view){
   if(!model)return 0;
   const normalized=normalizeWorkspaceViewName(view);
   if(normalized==='structure')return list(model.nodes).length+list(model.inventory).length+list(model.scopes).reduce((sum,scope)=>sum+scopeRuleContentScore(scope),0);
+  if(normalized==='field-resolution'){
+    // Field Resolution is a scope-local workspace. It must be considered valid
+    // even when the current filter produces zero rows, otherwise
+    // ensureUsefulWorkspaceSelection() immediately falls back to structure.
+    const scopedRules = typeof scopedRuleNodes === 'function' ? scopedRuleNodes().length : 0;
+    const scopedNodeCount = typeof scopedNodes === 'function' ? scopedNodes().length : 0;
+    return Math.max(scopedRules, scopedNodeCount, 1);
+  }
   if(normalized==='rule-lists')return buildRuleListPacketDefinitions().length;
   if(normalized==='udfs')return buildUdfDefinitions().length;
   if(normalized==='functions')return buildGlobalFunctionDefinitions().length;
@@ -5303,6 +6515,7 @@ function ensureRenderedContentFallback(reason='render'){
   const hasHtml=host.innerHTML&&host.innerHTML.trim().length>0;
   const hasText=host.textContent&&host.textContent.trim().length>0;
   if(hasHtml||hasText)return;
+  if(typeof recordViewerDiagnostic==='function')recordViewerDiagnostic('warn','empty-content-fallback',{reason,payloadCounts:typeof payloadCounts==='function'?payloadCounts():null,modelCounts:typeof modelCounts==='function'?modelCounts():null,workspaceView:state.workspaceView,scopeId:state.scopeId});
   host.innerHTML=viewerWorkspaceFallbackHtml(reason);
   const title=optionalElement('scopeTitle');
   if(title)title.textContent='FWD configuration ready';
@@ -5334,10 +6547,13 @@ function noAcRuleListWorkspaceHtml(scope){
 }
 
 async function init(){
+  recordViewerDiagnostic('info','boot-start',{href:window.location.href,userAgent:navigator.userAgent});
   renderBootLoading();
   try {
     await loadViewerData();
+    recordViewerDiagnostic('info','viewer-data-loaded-before-model',{payloadCounts:payloadCounts()});
     model=buildModel();
+    recordViewerDiagnostic('info','model-built',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});
     globalDefinitionLookupCache=null;
     globalTableDefinitionsCache=null;
     globalUdfDefinitionsCache=null;
@@ -5350,7 +6566,7 @@ async function init(){
     return;
   }
 
-  return withUiGuard('boot',()=>{if(!model.scopes.length){renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();});
+  return withUiGuard('boot',()=>{if(!model.scopes.length){recordViewerDiagnostic('error','boot-no-scopes',{modelCounts:modelCounts(),payloadCounts:payloadCounts()});renderNoData();return;}restoreSnapshotState();applyInitialWorkspaceSelection();applyPaneLayout();ensurePaneResizers();ensureScrollablePaneFocus();wireDesktopScrollPanFallback();installDesktopPaneMovement();seedExpanded(state.scopeId);installPaneResizers();wire();wireEditorPaneResizers();wireGuidanceHints();wireOnboardingChecklist();wireTableSelection();wireUdfSelection();wireGlobalDefinitionSelection();wireEditorPropertyPages();renderAll();recordViewerDiagnostic('info','boot-complete',{modelCounts:modelCounts(),state:{workspaceView:state.workspaceView,scopeId:state.scopeId,selectedType:state.selectedType,selectedId:state.selectedId}});});
 }
 
 init();

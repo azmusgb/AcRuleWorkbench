@@ -36,7 +36,7 @@ This package applies the production boundary, API, viewer, diagnostics, script, 
 
 ## Script changes
 
-- Updated `start-workbench.ps1` and `start-api.ps1` for production defaults.
+- Updated `start-fw-editor-viewer.ps1` and `start-api.ps1` for production defaults.
 - Added `run-diagnostic.ps1` for explicit debug/harness mode.
 - Added `collect-diagnostics.ps1` to produce a diagnostics bundle.
 - Expanded `test-api-v1.ps1` for include-expansion and debug-disabled checks.

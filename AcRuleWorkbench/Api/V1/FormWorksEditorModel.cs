@@ -84,6 +84,9 @@ internal sealed class FwdObjectEdgeModel
     [JsonProperty("kind")]
     public string Kind { get; set; } = string.Empty;
 
+    [JsonProperty("ruleListPath")]
+    public string RuleListPath { get; set; } = string.Empty;
+
     [JsonProperty("source")]
     public string Source { get; set; } = string.Empty;
 
@@ -101,6 +104,9 @@ internal sealed class EditorRuleListModel
 
     [JsonProperty("kind")]
     public string Kind { get; set; } = string.Empty;
+
+    [JsonProperty("ruleListPath")]
+    public string RuleListPath { get; set; } = string.Empty;
 
     [JsonProperty("source")]
     public string Source { get; set; } = "AcTreeReport.Scope";
@@ -798,27 +804,48 @@ internal static class FormWorksEditorModelBuilder
         return model;
     }
 
+    private static string NormalizeFieldOwnerKind(string? scopeType)
+    {
+        string scope = scopeType?.Trim() ?? string.Empty;
+        if (scope.Length == 0) return "Scope";
+        if (scope.Equals("Page", StringComparison.OrdinalIgnoreCase)) return "PageType";
+        if (scope.Equals("Document", StringComparison.OrdinalIgnoreCase)) return "DocumentType";
+        if (scope.Equals("Batch", StringComparison.OrdinalIgnoreCase)) return "BatchType";
+        return scope;
+    }
+
     private static FwdObjectGraphModel BuildObjectGraph(WorkbenchSnapshot snapshot)
     {
         var graph = new FwdObjectGraphModel();
         AddNode(graph, "fwd:" + SafeId(snapshot.FwdPath), "FwdRoot", snapshot.FwdPath, "FwdInspectionReport", "High");
 
-        foreach (string document in Distinct(snapshot.Fwd.Documents))
-            AddObject(graph, "Document", document, "Fwd.Documents", "containsDocument");
+        // Editor hierarchy fidelity: BatchType -> DocumentType -> PageType -> PageVariant -> Field -> Process -> AC -> RuleLists
+        // Notes:
+        // - Current snapshot.Fwd lists represent configured surfaces.
+        // - Concrete ownership (which documents are in which batches, which pages in which documents) is not explicitly persisted by every snapshot field.
+        //   We therefore attach hierarchy edges using best-available evidence from extracted scope identifiers and existing relationship projections where available.
+        // - All edges remain read-only projections; missing/ambiguous ownership is surfaced via graph diagnostics.
 
-        foreach (string page in Distinct(snapshot.Fwd.Pages))
-            AddObject(graph, "Page", page, "Fwd.Pages", "containsPage");
-
+        // BatchType nodes (configured)
         foreach (string batch in Distinct(snapshot.Fwd.Batches))
-            AddObject(graph, "Batch", batch, "Fwd.Batches", "containsBatch");
+            AddObject(graph, "BatchType", batch, "Fwd.Batches", "containsBatch");
+
+        // DocumentType nodes (configured)
+        foreach (string document in Distinct(snapshot.Fwd.Documents))
+            AddObject(graph, "DocumentType", document, "Fwd.Documents", "containsDocument");
+
+        // PageType nodes (configured)
+        foreach (string page in Distinct(snapshot.Fwd.Pages))
+            AddObject(graph, "PageType", page, "Fwd.Pages", "containsPage");
+
 
         foreach (string process in Distinct(snapshot.Fwd.Processes))
             AddObject(graph, "Process", process, "Fwd.Processes", "containsProcess");
 
         foreach (PageVariantBucket bucket in snapshot.Fwd.PageVariants)
         {
-            string pageId = ObjectId("Page", bucket.Page);
-            EnsureObject(graph, "Page", bucket.Page, "Fwd.PageVariants", "Medium");
+            string pageId = ObjectId("PageType", bucket.Page);
+            EnsureObject(graph, "PageType", bucket.Page, "Fwd.PageVariants", "Medium");
             foreach (string variant in Distinct(bucket.Variants))
             {
                 string id = ObjectId("PageVariant", bucket.Page + "/" + variant);
@@ -827,9 +854,10 @@ internal static class FormWorksEditorModelBuilder
             }
         }
 
+
         foreach (FieldBucket bucket in snapshot.Fwd.Fields)
         {
-            string ownerKind = string.IsNullOrWhiteSpace(bucket.ScopeType) ? "Scope" : bucket.ScopeType;
+            string ownerKind = NormalizeFieldOwnerKind(bucket.ScopeType);
             string ownerId = ObjectId(ownerKind, bucket.ScopeName);
             EnsureObject(graph, ownerKind, bucket.ScopeName, "Fwd.Fields", "Medium");
             foreach (FieldSummary field in bucket.Fields)
@@ -892,6 +920,7 @@ internal static class FormWorksEditorModelBuilder
                 RuleListId = scope.ScopeId,
                 Name = scope.Name,
                 Kind = scope.Kind,
+                RuleListPath = scope.ScopeId,
                 StructuralRuleCount = scope.StructuralRuleCount,
                 FlatInventoryCount = scope.FlatInventoryCount
             };

@@ -36,7 +36,7 @@ Then rebuild/start from repo root:
   -Platform x86 `
   -FwdPath .\fwd.cfd
 
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath .\fwd.cfd `
   -Port 8787 `
   -KillExisting

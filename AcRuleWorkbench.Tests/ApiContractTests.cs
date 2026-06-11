@@ -339,7 +339,7 @@ public sealed class ApiContractTests
         JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
         Assert.IsTrue(body.Value<bool>("ok"));
         Assert.AreEqual("AcWorkbench.FwdOverview", body.Value<string>("schema"));
-        Assert.AreEqual("C:\\default.cfd", body["data"]?["source"]?["path"]?.Value<string>());
+        Assert.AreEqual("[redacted]\\default.cfd", body["data"]?["source"]?["path"]?.Value<string>());
     }
 
     [TestMethod]
@@ -699,6 +699,110 @@ public sealed class ApiContractTests
         Assert.AreEqual("RouteNotFound", (string)body.Error.Code);
     }
 
+
+    [TestMethod]
+    public void RouteCatalog_DoesNotExpose_Ambiguous_Rule_Or_RuleList_Routes()
+    {
+        var duplicatedPaths = ApiV1Routes.All
+            .GroupBy(r => r.Method + " " + r.Path, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToList();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), duplicatedPaths);
+        Assert.IsTrue(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rule-lists/by-key/{key}"));
+        Assert.IsTrue(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rule-lists/by-scope/{scopeId}"));
+        Assert.IsTrue(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rules/by-key/{key}"));
+        Assert.IsTrue(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rules/by-node/{nodeId}"));
+        Assert.IsFalse(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rule-lists/{key}"));
+        Assert.IsFalse(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rule-lists/{scopeId}"));
+        Assert.IsFalse(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rules/{key}"));
+        Assert.IsFalse(ApiV1Routes.All.Any(r => r.Path == "/api/v1/rules/{nodeId}"));
+    }
+
+    [TestMethod]
+    public void Phase6RuleListKey_RoundTrips_SpecialCharacters()
+    {
+        string key = Phase6RuleListKeys.EncodePage("Dental:ADA / Primary");
+
+        bool ok = Phase6RuleListKeys.TryParse(key, out Phase6RuleListOwner owner, out string? displayName, out string? error);
+
+        Assert.IsTrue(ok, error);
+        Assert.AreEqual("page", owner.OwnerType);
+        Assert.AreEqual("Dental:ADA / Primary", owner.OwnerDisplayName);
+        Assert.AreEqual("Dental:ADA / Primary", displayName);
+    }
+
+    [TestMethod]
+    public void Phase6RuleKey_Accepts_CanonicalNodeId_RoundTrip()
+    {
+        string key = Phase6RuleKeys.MakeForStructuralNode("page", "DentalADA", "node-000414");
+
+        bool ok = Phase6RuleKeys.TryParse(key, out Phase6RuleKey parsed, out string? error);
+
+        Assert.IsTrue(ok, error);
+        Assert.AreEqual("page", parsed.ScopeType);
+        Assert.AreEqual("DentalADA", parsed.ScopeDisplayName);
+        Assert.AreEqual(414, parsed.RawNodeId);
+        Assert.AreEqual("node-000414", parsed.NodeId);
+    }
+
+    [TestMethod]
+    public void Dispatch_Phase6RuleListKey_Returns_MinimalRuleListDto()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = @"C:\default.cfd" });
+        string key = Phase6RuleListKeys.EncodePage("DentalADA");
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/rule-lists/by-key/" + WebUtility.UrlEncode(key));
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/rule-lists/by-key/" + WebUtility.UrlEncode(key), request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.RuleListDto", body.Value<string>("schema"));
+        Assert.AreEqual(key, body["data"]?["key"]?.Value<string>());
+        JArray ruleKeys = (JArray)(body["data"]?["ruleKeysInOrder"] ?? new JArray());
+        Assert.IsTrue(ruleKeys.Any(k => string.Equals(k.Value<string>(), "rule:page:DentalADA:AC:node:node-000414", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(((JArray)(body["data"]?["rules"] ?? new JArray())).Count >= 3);
+    }
+
+    [TestMethod]
+    public void Dispatch_Phase6RuleKey_Returns_MinimalRuleDto()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = @"C:\default.cfd" });
+        string key = Phase6RuleKeys.MakeForStructuralNode("page", "DentalADA", "node-000414");
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/rules/by-key/" + WebUtility.UrlEncode(key));
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/rules/by-key/" + WebUtility.UrlEncode(key), request);
+
+        Assert.AreEqual(200, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsTrue(body.Value<bool>("ok"));
+        Assert.AreEqual("AcWorkbench.RuleDto", body.Value<string>("schema"));
+        Assert.AreEqual(key, body["data"]?["key"]?.Value<string>());
+        Assert.AreEqual("Fix no splitting", body["data"]?["name"]?.Value<string>());
+        Assert.AreEqual("Formatf", body["data"]?["functionName"]?.Value<string>());
+        Assert.AreEqual(6, body["data"]?["ordinal"]?.Value<int>());
+        Assert.AreEqual(Phase6RuleListKeys.EncodePage("DentalADA"), body["data"]?["parentRuleListKey"]?.Value<string>());
+    }
+
+    [TestMethod]
+    public void Dispatch_Phase6RuleListKey_Invalid_Returns_StructuredError()
+    {
+        var service = new WorkbenchApiService(new RuleGuidStubClient(), new WorkbenchApiServerOptions { DefaultFwdPath = @"C:\default.cfd" });
+        using var requestHandle = HttpListenerRequestFactory.Create("GET", "http://localhost/api/v1/rule-lists/by-key/ruleList:bad:DentalADA:AC");
+        HttpListenerRequest request = requestHandle.Request;
+
+        var result = service.Dispatch("api/v1/rule-lists/by-key/ruleList:bad:DentalADA:AC", request);
+
+        Assert.AreEqual(400, result.StatusCode);
+        JObject body = JObject.Parse(JsonConvert.SerializeObject(result.Body));
+        Assert.IsFalse(body.Value<bool>("ok"));
+        Assert.AreEqual("rule_list_key_invalid", body["error"]?["code"]?.Value<string>());
+    }
+
     private sealed class StubClient : IFormWorksExtractionClient
     {
         public ProbeReport Probe() => new ProbeReport();
@@ -711,7 +815,7 @@ public sealed class ApiContractTests
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcTreeReport BuildAcTree(AcTreeOptions options) => new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcViewerReport ExportAcViewer(AcViewerOptions options) => new AcViewerReport { FwdPath = options.Path ?? string.Empty, OutputPath = "viewer.html" };
     }
@@ -810,7 +914,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         }
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -937,7 +1041,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -974,7 +1078,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -1062,7 +1166,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {
@@ -1172,7 +1276,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
 
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcTreeReport BuildAcTree(AcTreeOptions options) => new AcTreeReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcViewerReport ExportAcViewer(AcViewerOptions options) => new AcViewerReport { FwdPath = options.Path ?? string.Empty, OutputPath = "viewer.html" };
     }
@@ -1225,7 +1329,7 @@ public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDi
         public AcRelationshipReport TraceAcRelationships(AcTraceOptions options) => new AcRelationshipReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcIndexReport BuildAcIndex(AcRuleOptions options) => new AcIndexReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
         public AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options) => new AcDisabledReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
-public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
+        public AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options) => new AcDiagnosticsReport { FwdPath = options.Path ?? string.Empty, ProcessName = options.ProcessName ?? "AC" };
 
         public AcTreeReport BuildAcTree(AcTreeOptions options)
         {

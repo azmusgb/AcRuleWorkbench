@@ -148,7 +148,7 @@ Run on a Windows machine with the FormWorks/DCM runtime installed:
 ```powershell
 .\scripts\clean-workspace.ps1
 .\scripts\build-and-doctor.ps1
-.\scripts\start-workbench.ps1 -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath C:\rri\ddce\configs\Server\R1\fwd\fwd.cfd -Port 8787 -KillExisting
 .\scripts\test-api-v1.ps1 -BaseUrl http://127.0.0.1:8787
 .\scripts\test-code-quality.ps1
 ```

@@ -21,7 +21,8 @@ public interface IFormWorksExtractionClient
     AcIndexReport BuildAcIndex(AcRuleOptions options);
 
     AcDisabledReport AnalyzeDisabledRules(AcDisabledOptions options);
-AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options);
+
+    AcDiagnosticsReport BuildAcDiagnostics(AcRuleOptions options);
 
     AcTreeReport BuildAcTree(AcTreeOptions options);
 

@@ -5,7 +5,7 @@ Use this only for local engineering analysis. Diagnostic details support reader 
 1. Start diagnostic mode:
 
    ```powershell
-   .\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -EnableDebugApi -AllowPathQuery
+   .\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -EnableDebugApi -AllowPathQuery
    ```
 
 2. Capture current status:

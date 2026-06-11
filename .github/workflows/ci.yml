@@ -22,7 +22,16 @@ jobs:
           cache: npm
 
       - name: Install Node dependencies
-        run: npm ci
+        run: npm install
+
+      - name: Restore .NET solution
+        run: dotnet restore .\AcRuleWorkbench.sln
+
+      - name: Build .NET solution
+        run: dotnet build .\AcRuleWorkbench.sln -c Debug -p:Platform=x86 -p:PlatformTarget=x86 --no-restore -v:minimal
+
+      - name: Test .NET solution
+        run: dotnet test .\AcRuleWorkbench.sln -c Debug -p:Platform=x86 -p:PlatformTarget=x86 --no-build --no-restore -v:minimal
 
       - name: Viewer static tests
         run: npm test

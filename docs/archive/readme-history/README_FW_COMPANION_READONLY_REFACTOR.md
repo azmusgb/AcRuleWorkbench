@@ -64,7 +64,7 @@ From the repo root:
 
 ```powershell
 .\scripts\build-and-doctor.ps1 -FwdPath .\fwd.cfd
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Then verify:

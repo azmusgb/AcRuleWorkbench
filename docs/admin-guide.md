@@ -13,7 +13,7 @@ Recommended local startup:
 PowerShell equivalent:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting
 ```
 
 Default posture:
@@ -94,7 +94,7 @@ Use `-SkipViewerRefresh` only when the existing generated viewer and sidecars ar
 Debug routes are disabled by default and are not product contracts. Enable them only for local engineering analysis.
 
 ```powershell
-.\scripts\start-workbench.ps1 `
+.\scripts\start-fw-editor-viewer.ps1 `
   -FwdPath .\fwd.cfd `
   -Port 8787 `
   -KillExisting `

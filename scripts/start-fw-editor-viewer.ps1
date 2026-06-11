@@ -1,3 +1,4 @@
+
 [CmdletBinding()]
 param(
     [string]$FwdPath = "",
@@ -22,6 +23,11 @@ param(
     [switch]$NoOpenWhenReady,
     [switch]$WaitForReadyBeforeOpen,
     [switch]$OpenWhenLive,
+
+    [ValidateSet("LocalFast", "LiveLazy", "SnapshotWarmup")]
+    [string]$ViewerMode = "LocalFast",
+
+    [switch]$LiveLazy,
     [switch]$SnapshotWarmup,
     [switch]$NoLiveLazy,
     [switch]$CopyNativeToOutput,
@@ -52,6 +58,8 @@ param(
 
     [string[]]$ExtraArgs = @()
 )
+
+
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
@@ -301,7 +309,26 @@ $nativeLibDir = Get-WbNativeLibDirectory -Root $repoRoot
 $effectiveCopyNativeToOutput = ([bool]$CopyNativeToOutput) -or ((-not [bool]$NoCopyNativeToOutput) -and (Test-Path -LiteralPath $nativeLibDir -PathType Container))
 $requestedPort = $Port
 $effectiveWaitForReadyBeforeOpen = (-not [bool]$OpenWhenLive) -or [bool]$WaitForReadyBeforeOpen
-$liveLazyEnabled = (-not [bool]$SnapshotWarmup) -and (-not [bool]$NoLiveLazy)
+
+# Viewer mode policy:
+# - LocalFast is the default because it matches the old fast path: generated static sidecars
+#   are reused when current, and regenerated only when missing/stale or explicitly forced.
+# - LiveLazy remains available for testing hosted API hydration without startup full export.
+# - SnapshotWarmup remains available for API snapshot warm-up diagnostics.
+$effectiveViewerMode = $ViewerMode
+if ($SnapshotWarmup) {
+    $effectiveViewerMode = "SnapshotWarmup"
+}
+elseif ($LiveLazy) {
+    $effectiveViewerMode = "LiveLazy"
+}
+elseif ($NoLiveLazy) {
+    $effectiveViewerMode = "LocalFast"
+}
+
+$liveLazyEnabled = [string]::Equals($effectiveViewerMode, "LiveLazy", [System.StringComparison]::OrdinalIgnoreCase)
+$snapshotWarmupEnabled = [string]::Equals($effectiveViewerMode, "SnapshotWarmup", [System.StringComparison]::OrdinalIgnoreCase)
+$localFastEnabled = [string]::Equals($effectiveViewerMode, "LocalFast", [System.StringComparison]::OrdinalIgnoreCase)
 
 Initialize-WbProgress -TotalSteps $(if ($CheckWorkingTree) { 8 } else { 7 })
 
@@ -310,7 +337,7 @@ if ($Profile -eq "full-evidence") {
 }
 
 if ($ForceViewerRefresh -and $liveLazyEnabled) {
-    Write-WbWarn "-ForceViewerRefresh still performs a full static export before startup. Live-lazy only removes the API startup full-snapshot warm-up."
+    Write-WbWarn "-ForceViewerRefresh performs a full static export before startup, but -ViewerMode LiveLazy will still run the hosted live-lazy API after export. Use -ViewerMode LocalFast for the old static-sidecar path."
 }
 
 Write-WbSection "Resolve launch plan"
@@ -329,8 +356,9 @@ Write-WbKeyValue "Platform" $Platform
 Write-WbKeyValue "Profile" $Profile
 Write-WbKeyValue "Detached" ([bool]$Detached)
 Write-WbKeyValue "Open wait mode" $(if ($effectiveWaitForReadyBeforeOpen) { "ready" } else { "live (fast-open)" })
-Write-WbKeyValue "API model" $(if ($liveLazyEnabled) { "live-lazy (no startup full snapshot)" } elseif ($SnapshotWarmup) { "startup snapshot warm-up" } else { "cached snapshot on demand" })
-Write-WbKeyValue "Viewer refresh" $(if ($ForceViewerRefresh) { "force static export" } elseif ($SkipViewerRefresh) { "skip" } elseif ($liveLazyEnabled) { "hosted live API shell" } else { "auto static export" })
+Write-WbKeyValue "Viewer mode" $effectiveViewerMode
+Write-WbKeyValue "API model" $(if ($liveLazyEnabled) { "live-lazy (hosted API hydration)" } elseif ($snapshotWarmupEnabled) { "startup snapshot warm-up" } else { "local-fast static sidecars + cached API" })
+Write-WbKeyValue "Viewer refresh" $(if ($ForceViewerRefresh) { "force static export" } elseif ($SkipViewerRefresh) { "skip" } elseif ($liveLazyEnabled) { "hosted live API shell" } else { "auto static export/reuse" })
 Write-WbKeyValue "Native DLL copy" $effectiveCopyNativeToOutput
 Write-WbKeyValue "Dry run" ([bool]$DryRun)
 
@@ -426,7 +454,7 @@ if ($null -eq $workbenchExe) {
 $viewerShellPath = Join-Path $repoRoot "ac-rule-viewer.html"
 $generatedViewerOutputPath = Join-Path $repoRoot "ac-rule-viewer-live.html"
 $useStaticExportViewer = ([bool]$ForceViewerRefresh) -or (-not [bool]$liveLazyEnabled)
-$viewerOutputPath = if ($useStaticExportViewer) { $generatedViewerOutputPath } else { $viewerShellPath }
+$viewerOutputPath = $viewerShellPath
 $exeDir = Split-Path -Parent $workbenchExe.FullName
 
 if (-not $SkipRuntimeValidation) {
@@ -449,10 +477,10 @@ if ($useStaticExportViewer) {
             throw "-SkipViewerRefresh was specified, but required static viewer artifacts are missing: $($viewerStatus.Missing -join ', '). Rerun without -SkipViewerRefresh to generate them."
         }
 
-        Write-WbOk "Skipping static viewer refresh. Existing generated viewer artifacts found."
+        Write-WbOk "Local-fast mode selected. Skipping static viewer refresh because existing generated viewer artifacts were found."
     }
     elseif (-not $ForceViewerRefresh -and $viewerStatus.IsCurrent) {
-        Write-WbOk "Generated static viewer artifacts are current; regeneration skipped. Use -ForceViewerRefresh to rebuild."
+        Write-WbOk "Local-fast mode selected. Generated static viewer artifacts are current; regeneration skipped. Use -ForceViewerRefresh to rebuild."
     }
     else {
         if ($ForceViewerRefresh) {
@@ -466,7 +494,8 @@ if ($useStaticExportViewer) {
         }
 
         Write-WbProgress "Generating standalone static viewer before API startup: $generatedViewerOutputPath"
-        Write-WbInfo "Large FWD/CFD files can take a while. Normal live-lazy starts skip this step; use -ForceViewerRefresh only when you need complete sidecar JSON/exported HTML."
+        Write-WbInfo "Local-fast mode reuses this static export on later starts when the generated artifacts are current."
+        Write-WbInfo "Large FWD/CFD files can take a while only when static artifacts are missing/stale or -ForceViewerRefresh is used."
         Write-WbInfo "Expected sidecars: ac-rule-viewer.rules.json, ac-rule-viewer.rel.json, ac-rule-viewer.tree.json, and ac-rule-viewer.fwd.json."
 
         $viewerArgs = @(
@@ -508,7 +537,50 @@ else {
     Write-WbInfo "Open the hosted route /viewer. Do not open ac-rule-viewer.html through node server unless you generated complete sidecar JSON with -ForceViewerRefresh and serve with node server.js --allow-generated-sidecars."
 }
 
+
+if ($useStaticExportViewer) {
+    $bootSidecarBuilder = Join-Path $scriptDir "build-viewer-boot-sidecar.js"
+    if (Test-Path -LiteralPath $bootSidecarBuilder -PathType Leaf) {
+        Push-Location $repoRoot
+        try {
+            & node $bootSidecarBuilder
+            if ($LASTEXITCODE -ne 0) {
+                Write-WbWarn "Boot sidecar builder returned exit code $LASTEXITCODE. Viewer will fall back to full sidecars."
+            }
+            else {
+                Write-WbOk "Boot sidecar generated for fast shell startup."
+            }
+        }
+        catch {
+            Write-WbWarn "Boot sidecar builder failed. Viewer will fall back to full sidecars. $($_.Exception.Message)"
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    else {
+        Write-WbWarn "Boot sidecar builder not found: $bootSidecarBuilder"
+    }
+}
+
 Sync-WbViewerSourceAssets -RepoRoot $repoRoot -ViewerOutputPath $viewerOutputPath
+
+
+# Phase 8: build granular viewer sidecars from the generated static viewer JSON.
+$phase8GranularSidecarBuilder = Join-Path $repoRoot "scripts\build-viewer-granular-sidecars.js"
+if (Test-Path -LiteralPath $phase8GranularSidecarBuilder -PathType Leaf) {
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCommand) {
+        Write-WbProgress "Build granular viewer sidecars"
+        & node $phase8GranularSidecarBuilder $repoRoot $repoRoot
+        if ($LASTEXITCODE -ne 0) {
+            Write-WbWarning "Granular sidecar generation failed; viewer will fall back to boot/fwd sidecars. Exit code: $LASTEXITCODE"
+        }
+    }
+    else {
+        Write-WbWarning "Node.js was not found; granular sidecars were not generated. Viewer will fall back to boot/fwd sidecars."
+    }
+}
 
 $appArgs = @(
     "api",
@@ -538,7 +610,7 @@ if ($DisableSnapshotCache) {
 if ($liveLazyEnabled) {
     $appArgs += "--live-lazy"
 }
-elseif ($SnapshotWarmup) {
+elseif ($snapshotWarmupEnabled) {
     $appArgs += "--snapshot-warmup"
 }
 else {
@@ -569,7 +641,8 @@ Write-WbSection "Start local API and viewer"
 Write-WbKeyValue "Executable" $workbenchExe.FullName
 Write-WbKeyValue "Working dir" $exeDir
 Write-WbKeyValue "Profile" $Profile
-Write-WbKeyValue "API model" $(if ($liveLazyEnabled) { "live-lazy" } elseif ($SnapshotWarmup) { "startup snapshot warm-up" } else { "snapshot on demand" })
+Write-WbKeyValue "Viewer mode" $effectiveViewerMode
+Write-WbKeyValue "API model" $(if ($liveLazyEnabled) { "live-lazy" } elseif ($snapshotWarmupEnabled) { "startup snapshot warm-up" } else { "local-fast static sidecars + snapshot on demand" })
 Write-WbKeyValue "Live health" $liveHealthUrl
 Write-WbKeyValue "Ready health" $readyHealthUrl
 Write-WbKeyValue "Status" $statusUrl

@@ -1,0 +1,22 @@
+{
+  "schema": "AcRuleViewer.RuleScopeIndex",
+  "schemaVersion": "1.0.0",
+  "kind": "other",
+  "scopes": [
+    {
+      "scopeId": "AC/System",
+      "scopeKey": "AC_System",
+      "name": "System",
+      "kind": "other",
+      "file": "rules.scope.AC_System.tree.json",
+      "counts": {
+        "rules": 0,
+        "nodes": 0,
+        "edges": 0,
+        "diagnostics": 25,
+        "relationships": 0
+      },
+      "estimatedBytes": 39142
+    }
+  ]
+}

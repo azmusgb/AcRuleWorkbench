@@ -217,7 +217,7 @@
       "domInlineStyleMutations": 0
     },
     {
-      "path": "scripts/generate-workbench-dev-spec.js",
+      "path": "scripts/sync-viewer-assets.ps1",
       "lines": 46,
       "generatedInlineStyleAttributes": 0,
       "domInlineStyleMutations": 0

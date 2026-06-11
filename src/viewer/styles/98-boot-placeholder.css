@@ -1,0 +1,120 @@
+﻿
+/* PATCH: immediate boot placeholder so the viewer body never appears blank during startup. */
+.fw-boot-placeholder {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(37, 99, 235, 0.10), transparent 32%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+  color: #0f172a;
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition: none;
+}
+
+.fw-boot-placeholder.fw-boot-placeholder-done {
+  display: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fw-boot-placeholder-card {
+  width: min(520px, 92vw);
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 70px rgba(15, 23, 42, 0.16);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+
+.fw-boot-placeholder-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.fw-boot-placeholder-title {
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.fw-boot-placeholder-detail {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.fw-boot-placeholder-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e2e8f0;
+  margin-top: 8px;
+}
+
+.fw-boot-placeholder-bar span {
+  display: block;
+  height: 100%;
+  width: 42%;
+  border-radius: inherit;
+  background: #2563eb;
+  animation: fwBootPlaceholderBar 1.1s ease-in-out infinite;
+}
+
+.fw-boot-placeholder[data-state="error"] .fw-boot-placeholder-mark,
+.fw-boot-placeholder[data-state="error"] .fw-boot-placeholder-bar span {
+  background: #b91c1c;
+}
+
+@keyframes fwBootPlaceholderBar {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(260%); }
+}
+
+@media (prefers-color-scheme: dark) {
+  .fw-boot-placeholder {
+    background:
+      radial-gradient(circle at 20% 12%, rgba(96, 165, 250, 0.18), transparent 32%),
+      linear-gradient(180deg, #020617 0%, #0f172a 100%);
+    color: #e5e7eb;
+  }
+
+  .fw-boot-placeholder-card {
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(51, 65, 85, 0.95);
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.38);
+  }
+
+  .fw-boot-placeholder-mark {
+    background: #e5e7eb;
+    color: #020617;
+  }
+
+  .fw-boot-placeholder-detail {
+    color: #94a3b8;
+  }
+
+  .fw-boot-placeholder-bar {
+    background: #1e293b;
+  }
+}
+
+
+

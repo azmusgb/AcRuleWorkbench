@@ -578,7 +578,7 @@ Key scripts:
 |---|---|
 | `scripts/setup-dcm-deps.ps1` | Prepare DCM/FormWorks dependencies. |
 | `scripts/build-and-doctor.ps1` | Build plus native/runtime checks. |
-| `scripts/start-workbench.ps1` | Generate/serve viewer and API. |
+| `scripts/start-fw-editor-viewer.ps1` | Generate/serve viewer and API. |
 | `scripts/start-api.ps1` | Start API server. |
 | `scripts/validate-api-live.ps1` | Live endpoint validation. |
 | `scripts/test-api-v1.ps1` | API v1 checks. |

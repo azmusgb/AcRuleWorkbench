@@ -32,7 +32,7 @@ v99-fw-editor-viewer
 
 - version-neutral static test: `tests/static/fw-editor-viewer.static.test.js`
 - full canonical startup engine: `scripts/start-fw-editor-viewer.ps1`
-- deprecated compatibility wrapper: `scripts/start-workbench.ps1`
+- deprecated compatibility wrapper: `scripts/start-fw-editor-viewer.ps1`
 - `fweditor-global-mode` now applies only to global resource workspaces
 - forbidden CSS checks prevent hiding `.main-head` and `#content` in resource views
 - UDF filtering uses precomputed `searchBlob` rather than render-time `JSON.stringify`

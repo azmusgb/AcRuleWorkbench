@@ -7,13 +7,13 @@ This guide covers common local startup, viewer, and API issues. It preserves the
 Try another port:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8788
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8788
 ```
 
 or stop a normal existing listener:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
 If System PID 4 owns the port, use auto-port selection or specify another port. Do not try to kill System.
@@ -61,7 +61,7 @@ Invoke-RestMethod http://127.0.0.1:8787/api/v1/health/ready
 2. Force a viewer refresh:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -ForceViewerRefresh
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting -ForceViewerRefresh
 ```
 
 3. Open with cache busting:
@@ -75,7 +75,7 @@ http://127.0.0.1:8787/viewer?nocache=v71-product-reset
 Expected. Debug routes are disabled by default. Enable only for engineering diagnostics:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -EnableDebugApi -AllowPathQuery -OpenHarness
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -EnableDebugApi -AllowPathQuery -OpenHarness
 ```
 
 Use `/api/v1` routes for normal validation.

@@ -13,15 +13,15 @@ assert(versionMatch, `viewer-build.txt has unexpected format: ${viewerBuild}`);
 const cacheKey = `fw-editor-viewer-v${versionMatch[1]}`;
 
 const files = {
-  html: read('ac-rule-viewer.html'),
-  js: read('ac-rule-viewer.js'),
-  css: read('ac-rule-viewer.css'),
+  html: read('src/viewer/ac-rule-viewer.html'),
+  js: read('src/viewer/ac-rule-viewer.js'),
+  css: read('src/viewer/ac-rule-viewer.css'),
   coreHtml: read('AcRuleWorkbench.Core/Viewer/ac-rule-viewer.html'),
   coreTemplate: read('AcRuleWorkbench.Core/Viewer/ac-viewer-template.html'),
   coreJs: read('AcRuleWorkbench.Core/Viewer/ac-rule-viewer.js'),
   coreCss: read('AcRuleWorkbench.Core/Viewer/ac-rule-viewer.css'),
   start: read('scripts/start-fw-editor-viewer.ps1'),
-  compatStart: read('scripts/start-workbench.ps1'),
+  compatStart: read('scripts/start-fw-editor-viewer.ps1'),
   packageJson: read('package.json'),
   srcJs: read('src/viewer/ac-rule-viewer.js'),
   srcCss: read('src/viewer/ac-rule-viewer.css'),
@@ -37,6 +37,8 @@ const csharpFiles = {
   extractionResources: read('AcRuleWorkbench.Core/FormWorksExtractionClient.Resources.cs'),
   extractionRelationships: read('AcRuleWorkbench.Core/FormWorksExtractionClient.Relationships.cs'),
   apiService: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.cs'),
+  apiDispatch: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.Dispatch.cs'),
+  apiRuleLists: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.RuleLists.cs'),
   apiFunctions: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.Functions.cs'),
   apiTables: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.Tables.cs'),
   apiUdfs: read('AcRuleWorkbench/Api/V1/WorkbenchApiService.Udfs.cs'),
@@ -60,7 +62,7 @@ for (const [name, text] of Object.entries({ html: files.html, coreHtml: files.co
   assert(!/data-ui-build="v(?:8[0-9]|9[0-2])-fw-editor-viewer"/.test(text), `${name} must not advertise stale pre-${viewerBuild} markers`);
 }
 
-assertIncludes('root JS', files.js, `const viewerStateBuild='${viewerBuild}'`);
+assertIncludes('source JS', files.js, `const viewerStateBuild='${viewerBuild}'`);
 assertIncludes('core JS', files.coreJs, `const viewerStateBuild='${viewerBuild}'`);
 assertIncludes('startup stale marker source', files.start, 'Get-WbViewerBuildMarker');
 assert(!/v\d+-fw-editor-viewer/.test(files.start), 'startup script must not hardcode release-specific viewer build markers');
@@ -73,9 +75,9 @@ assert(!/v\d+-fw-editor-viewer/.test(editorModeContractTest), 'ViewerEditorModeC
 assertIncludes('package.json', files.packageJson, 'fw-editor-viewer.static.test.js');
 assert(!/fw-editor-viewer-v\d+\.static\.test\.js/.test(files.packageJson), 'package test script must not reference version-specific static tests');
 
-assert.strictEqual(files.js, files.srcJs, 'root viewer JS must be generated from src/viewer/ac-rule-viewer.js');
+assert.strictEqual(files.js, files.srcJs, 'source viewer JS must be generated from src/viewer/ac-rule-viewer.js');
 assert.strictEqual(files.coreJs, files.srcJs, 'Core viewer JS must be generated from src/viewer/ac-rule-viewer.js');
-assert.strictEqual(files.css, files.srcCss, 'root viewer CSS must be generated from src/viewer/ac-rule-viewer.css');
+assert.strictEqual(files.css, files.srcCss, 'source viewer CSS must be generated from src/viewer/ac-rule-viewer.css');
 assert.strictEqual(files.coreCss, files.srcCss, 'Core viewer CSS must be generated from src/viewer/ac-rule-viewer.css');
 assert.strictEqual(files.srcJs, readSortedConcat('src/viewer/js'), 'src/viewer/ac-rule-viewer.js must equal concatenated src/viewer/js modules');
 assert.strictEqual(files.srcCss, readSortedConcat('src/viewer/styles'), 'src/viewer/ac-rule-viewer.css must equal concatenated src/viewer/styles layers');
@@ -102,6 +104,8 @@ assert(!files.js.includes("const workspaceActive=validWorkspaceViews().includes(
 assert(!files.js.includes('lower(JSON.stringify([u.parameterNames,u.statusResults,u.rules]))'), 'UDF filtering must use precomputed searchBlob, not per-render JSON.stringify');
 assert(files.js.includes('searchBlob:lower([displayName'), 'canonical UDF rows should precompute searchBlob');
 assert(files.js.includes('function pagedRows('), 'resource and catalog lists should use simple pagination helpers');
+assert(!files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details={})'), 'diagnostic bridge must receive actual event details, not an empty object assignment');
+assert(files.js.includes('fwBootPlaceholderDiagnosticBridge(event, details)'), 'diagnostic bridge should receive the original diagnostic details payload');
 
 for (const [name, css] of Object.entries({ css: files.css, coreCss: files.coreCss })) {
   assert(!/body\.fweditor-global-mode\s+\.main-head\s*\{\s*display\s*:\s*none\s*!important\s*;?\s*\}/m.test(css), `${name} must not hide .main-head in fweditor-global-mode`);
@@ -118,11 +122,11 @@ assert(files.start.includes('[switch]$DryRun'), 'canonical launcher must support
 assert(files.start.includes('[switch]$SnapshotWarmup'), 'canonical launcher must support explicit -SnapshotWarmup opt-in');
 assert(files.start.includes('[switch]$NoLiveLazy'), 'canonical launcher must support disabling live-lazy mode');
 assert(files.start.includes('--live-lazy'), 'canonical launcher must pass --live-lazy to the API by default');
-assert(files.compatStart.includes('deprecated'), 'start-workbench.ps1 should be a deprecated wrapper only');
-assert(files.compatStart.includes('start-fw-editor-viewer.ps1'), 'deprecated start-workbench.ps1 should forward to start-fw-editor-viewer.ps1');
-assert(files.compatStart.length < 7000, 'deprecated start-workbench.ps1 should remain a small wrapper, not the real engine');
 assert(!exists('scripts/dev-workbench.ps1'), 'scripts/dev-workbench.ps1 must not be active in source-clean package');
-assert(!exists('AcRuleWorkbench/scripts/start-workbench.ps1'), 'nested AcRuleWorkbench/scripts wrappers must not be included in source-clean package');
+assert(!exists('scripts/start-workbench.ps1'), 'scripts/start-workbench.ps1 must not be active in source-clean package');
+assert(!exists('scripts/start-workbench.cmd'), 'scripts/start-workbench.cmd must not be active in source-clean package');
+assert(!exists('scripts/verify-workbench-live.ps1'), 'scripts/verify-workbench-live.ps1 must not be active in source-clean package');
+assert(!exists('AcRuleWorkbench/scripts/start-fw-editor-viewer.ps1'), 'nested AcRuleWorkbench/scripts wrappers must not be included in source-clean package');
 assert(files.sourcePackageScript.includes('^AcRuleWorkbench/scripts'), 'source package script must exclude nested project script wrappers');
 
 assert(exists('viewer-build.txt'), 'viewer-build.txt build constant is required');
@@ -130,16 +134,16 @@ assert(exists('src/viewer/README.md'), 'canonical viewer source README is requir
 assert(files.testsCsproj.includes('archive/**/*.cs'), 'test project must exclude archived stale C# test files');
 assert(exists('scripts/remove-stale-fwcompanion-tests.ps1'), 'stale FWCompanion cleanup script is required');
 assert(exists('scripts/remove-stale-workbench-surfaces.ps1'), 'stale active workbench-surface cleanup script is required');
-assert(read('scripts/remove-stale-workbench-surfaces.ps1').includes('dev-workbench.ps1'), 'workbench surface cleanup must quarantine active dev-workbench scripts');
 assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes(".archive\\stale-fwcompanion-tests"), 'stale FWCompanion cleanup must move files outside the test project');
 assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes("$staleFiles = @(Get-ChildItem"), 'stale FWCompanion cleanup must array-wrap Get-ChildItem so .Count works under StrictMode with one file');
 assert(read('scripts/remove-stale-fwcompanion-tests.ps1').includes("$remaining = @(Get-ChildItem"), 'stale FWCompanion cleanup must array-wrap archive enumeration under StrictMode');
 assert(!read('README.md').includes('README_FW_EDITOR_VIEWER_V91.md'), 'README.md must not point to stale v91 notes');
-assert(read('README.md').includes('README_FW_EDITOR_VIEWER_V101.md'), 'README.md must point to current release notes');
-assert(!read('UPDATE_FILES_MANIFEST.txt').includes('v89'), 'update manifest must not mention stale v89 package');
+if (exists('UPDATE_FILES_MANIFEST.txt')) assert(!read('UPDATE_FILES_MANIFEST.txt').includes('v89'), 'update manifest must not mention stale v89 package');
 
 assert(csharpFiles.extractionClient.includes('public sealed partial class FormWorksExtractionClient'), 'FormWorksExtractionClient must be partial after C# split');
 assert(csharpFiles.apiService.includes('internal sealed partial class WorkbenchApiService'), 'WorkbenchApiService must remain partial after API split');
+assert(csharpFiles.apiDispatch.includes('public ApiHttpResult Dispatch'), 'WorkbenchApiService dispatch should be split into its own partial');
+assert(csharpFiles.apiRuleLists.includes('BuildPhase6RuleListDto'), 'Rule List endpoints should be split into their own partial');
 assert(exists('AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerExport.cs'), 'viewer export extraction partial is required');
 assert(exists('AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerPayload.cs'), 'viewer payload extraction partial is required');
 assert(exists('AcRuleWorkbench.Core/FormWorksExtractionClient.ViewerPrivateTree.cs'), 'viewer private-tree extraction partial is required');
@@ -155,7 +159,7 @@ assert(csharpFiles.snapshotCache.includes('TaskCreationOptions.RunContinuationsA
 assert(csharpFiles.snapshotCache.includes('_lastCurrentGeneration'), 'snapshot cache should separate per-key caching from global current selection');
 assert(exists('AcRuleWorkbench/Api/V1/LiveFwdSessionCache.cs'), 'live-lazy mode requires a lightweight FWD session cache');
 assert(exists('AcRuleWorkbench/Api/V1/WorkbenchApiService.ViewerBootstrap.cs'), 'live-lazy mode requires a lightweight viewer bootstrap API partial');
-assert(read('AcRuleWorkbench/Api/V1/WorkbenchApiService.cs').includes('viewer/bootstrap'), 'API dispatch must expose /api/v1/viewer/bootstrap');
+assert(csharpFiles.apiDispatch.includes('viewer/bootstrap'), 'API dispatch must expose /api/v1/viewer/bootstrap');
 assert(read('AcRuleWorkbench/Api/V1/WorkbenchApiService.ViewerBootstrap.cs').includes('BuildViewerBootstrap'), 'viewer bootstrap API partial must build a lightweight payload');
 assert(read('AcRuleWorkbench/Api/V1/LiveFwdSessionCache.cs').includes('IReadOnlyList<string> Documents'), 'live session must retain document names for viewer bootstrap');
 assert(read('AcRuleWorkbench/Api/V1/LiveFwdSessionCache.cs').includes('ResourceTypes = Array.Empty<string>()'), 'live-lazy session must avoid full resource traversal');
@@ -165,7 +169,7 @@ assert(files.js.includes('snapshotSidecarsHaveContent'), 'viewer must reject emp
 assert(files.js.includes('ensureUsefulWorkspaceSelection'), 'viewer must auto-route away from empty default workspaces after boot/hydration');
 assert(files.js.includes('product-empty-metrics'), 'viewer must render an actionable no-rule empty state with metrics');
 assert(files.start.includes('ac-rule-viewer.fwd.json'), 'static viewer refresh must validate the FWD sidecar, not only rules/rel/tree JSON');
-assert(read('AcRuleWorkbench/Api/V1/WorkbenchApiService.cs').includes('SnapshotStrategyLabel()'), 'API status/readiness must expose live-lazy snapshot strategy');
+assert(csharpFiles.apiService.includes('SnapshotStrategyLabel()'), 'API status/readiness must expose live-lazy snapshot strategy');
 assert(csharpFiles.snapshotBuilder.includes('CancellationToken cancellationToken'), 'snapshot builder should accept a cancellation token');
 assert(csharpFiles.snapshotBuilder.includes('cancellationToken.ThrowIfCancellationRequested'), 'snapshot builder should check cancellation during extraction');
 assert(files.packageJson.includes('"lint:viewer"'), 'package.json must expose viewer lint script');

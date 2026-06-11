@@ -1,6 +1,7 @@
-
+﻿
 (function(){
 'use strict';
+
 // v62.12 resource-hydration fix: unwraps API data, loads canonical UDF/table endpoints, and displays tables/UDFs without hiding confirmed FWD resources.
 /*
   FormWorks Editor generated viewer.
@@ -17,6 +18,164 @@ let treeData = null;
 let fwdData = null;
 let fwdSidecarData = null;
 const advancedSidecarState = { loaded:false, objectGraph:null, runtimeImpact:null };
+const viewerDiagnostics = {
+  build: 'v103-fw-editor-viewer',
+  bootStartedAtUtc: new Date().toISOString(),
+  events: [],
+  fetches: [],
+  errors: [],
+  latestCounts: {}
+};
+
+function diagnosticCount(value){
+  if(Array.isArray(value))return value.length;
+  if(value&&Array.isArray(value.items))return value.items.length;
+  if(value&&Array.isArray(value.Items))return value.Items.length;
+  if(value&&typeof value.count==='number')return value.count;
+  if(value&&typeof value.Count==='number')return value.Count;
+  return 0;
+}
+function payloadCounts(){
+  const counts={
+    rules: diagnosticCount(rulesData?.Rules||rulesData?.rules),
+    scopes: diagnosticCount(treeData?.Scopes||treeData?.scopes),
+    nodes: diagnosticCount(treeData?.Nodes||treeData?.nodes),
+    edges: diagnosticCount(treeData?.Edges||treeData?.edges),
+    relationships: diagnosticCount(relData?.Relationships||relData?.relationships||relData?.Edges||relData?.edges),
+    fwdResources: diagnosticCount(fwdData?.resources||fwdSidecarData?.resources),
+    fwdRuleLists: diagnosticCount(fwdData?.ruleLists||fwdSidecarData?.ruleLists),
+    fwdUdfs: diagnosticCount(fwdData?.udfs||fwdSidecarData?.udfs),
+    fwdTables: diagnosticCount(fwdData?.tables||fwdSidecarData?.tables),
+    fwdFunctions: diagnosticCount(fwdData?.functions||fwdSidecarData?.functions)
+  };
+  viewerDiagnostics.latestCounts=counts;
+  return counts;
+}
+
+function fwSetBootPlaceholderDetail(detail, state){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  if(state) root.dataset.state = state;
+
+  const detailEl = root.querySelector('[data-fw-boot-detail]');
+  if(detailEl && detail){
+    detailEl.textContent = detail;
+  }
+}
+
+function fwClearBootPlaceholder(){
+  const root = document.getElementById('fwBootPlaceholder');
+  if(!root) return;
+
+  root.classList.add('fw-boot-placeholder-done');
+  root.setAttribute('aria-hidden', 'true');
+  root.classList.add('fw-boot-placeholder-done');
+
+  try {
+    root.remove();
+  } catch (_) {
+    if(root.parentNode) root.parentNode.removeChild(root);
+  }
+}
+
+function fwBootPlaceholderDiagnosticBridge(eventName, detail){
+  if(!eventName) return;
+
+  if(eventName === 'boot-start'){
+    fwSetBootPlaceholderDetail('Starting viewer...', 'loading');
+    return;
+  }
+
+  if(eventName === 'load-viewer-data-start'){
+    fwSetBootPlaceholderDetail('Loading FWD snapshot...', 'loading');
+    return;
+  }
+
+  if(eventName === 'fetch'){
+    const key = detail && detail.key ? detail.key : 'viewer data';
+    fwSetBootPlaceholderDetail('Fetching ' + key + '...', 'loading');
+    return;
+  }
+
+  if(eventName === 'static-boot-sidecar-loaded'){
+    fwSetBootPlaceholderDetail('Building rule model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'viewer-data-loaded-before-model'){
+    fwSetBootPlaceholderDetail('Preparing workspace model...', 'loading');
+    return;
+  }
+
+  if(eventName === 'model-built'){
+    fwSetBootPlaceholderDetail('Rendering workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'render-all-start'){
+    fwSetBootPlaceholderDetail('Rendering selected rule workspace...', 'loading');
+    return;
+  }
+
+  if(eventName === 'boot-complete'){
+    fwClearBootPlaceholder();
+    return;
+  }
+
+  if(eventName === 'boot-failed' || eventName === 'load-viewer-data-failed'){
+    fwSetBootPlaceholderDetail('Viewer failed to load. See browser console diagnostics.', 'error');
+    return;
+  }
+}
+
+(function fwBootPlaceholderSlowTimer(){
+  window.setTimeout(() => {
+    const root = document.getElementById('fwBootPlaceholder');
+    if(root && !root.classList.contains('fw-boot-placeholder-done')){
+      fwSetBootPlaceholderDetail('Still loading viewer data...', 'loading');
+    }
+  }, 5000);
+})();
+
+function recordViewerDiagnostic(level,event,details={}){
+  try { fwBootPlaceholderDiagnosticBridge(event, details); } catch (_) { }
+  const entry={utc:new Date().toISOString(),level,event,details};
+  viewerDiagnostics.events.push(entry);
+  if(viewerDiagnostics.events.length>250)viewerDiagnostics.events.shift();
+  if(level==='error')viewerDiagnostics.errors.push(entry);
+  const method=level==='error'?'error':level==='warn'?'warn':'info';
+  try{ console[method](`[FW Viewer] ${event}`,details); }catch{}
+}
+function recordViewerFetch(key,url,status,elapsedMs,extra={}){
+  const entry={utc:new Date().toISOString(),key,url,status,elapsedMs,...extra};
+  viewerDiagnostics.fetches.push(entry);
+  if(viewerDiagnostics.fetches.length>300)viewerDiagnostics.fetches.shift();
+  try{ console.info('[FW Viewer] fetch',entry); }catch{}
+}
+function modelCounts(){
+  if(!model)return {model:false};
+  return {
+    model:true,
+    scopes:diagnosticCount(model.scopes),
+    nodes:diagnosticCount(model.nodes),
+    rules:diagnosticCount(model.nodes?.filter?.(n=>n&&n.isRule)),
+    inventory:diagnosticCount(model.inventory),
+    relationships:diagnosticCount(model.rels),
+    diagnostics:diagnosticCount(model.diags)
+  };
+}
+window.fwViewerDiagnostics=function(){
+  return {
+    href: window.location.href,
+    bootState: typeof bootState==='undefined'?null:{phase:bootState.phase,detail:bootState.detail},
+    payloadCounts: payloadCounts(),
+    modelCounts: modelCounts(),
+    fwdApiHydrationState: typeof fwdApiHydrationState==='undefined'?null:{mode:fwdApiHydrationState.mode,failedEndpoints:[...list(fwdApiHydrationState.failedEndpoints||[])]},
+    granularSidecarState: typeof window.fwViewerGranularState==='function'?window.fwViewerGranularState():null,
+    diagnostics: viewerDiagnostics
+  };
+};
 
 const embeddedPayload = (typeof window !== 'undefined' && window.AC_RULE_VIEWER_PAYLOADS) ? window.AC_RULE_VIEWER_PAYLOADS : {
   rulesData: "__RULES_JSON__",
@@ -44,9 +203,11 @@ function applyEmbeddedPayloadIfPresent(){
     rulesData = parsed.rulesData;
     relData = parsed.relData;
     treeData = parsed.treeData;
+    recordViewerDiagnostic('info','embedded-payload-loaded',{counts:payloadCounts()});
     return true;
   }
 
+  recordViewerDiagnostic('info','embedded-payload-not-present',{});
   return false;
 }
 
@@ -63,6 +224,7 @@ function applyEmbeddedFwdDataIfPresent(failedEndpoints=[]){
   applyAdvancedSidecarsToFwdData();
   fwdApiHydrationState.mode='embedded';
   fwdApiHydrationState.failedEndpoints=list(failedEndpoints);
+  recordViewerDiagnostic('info','embedded-fwd-data-applied',{failedEndpoints:list(failedEndpoints),counts:payloadCounts()});
   return true;
 }
 
@@ -72,15 +234,20 @@ function queryFlag(name){
 }
 function truthyQueryFlag(name){return /^(1|true|yes|on)$/i.test(text(queryFlag(name)||''));}
 function falseyQueryFlag(name){return /^(0|false|no|off)$/i.test(text(queryFlag(name)||''));}
+function isFwdApiDisabledByQuery(){return falseyQueryFlag('fwdApi')||falseyQueryFlag('api');}
 function shouldHydrateFwdApiOnBoot(missingStaticFwd=false){
-  if(falseyQueryFlag('fwdApi')||falseyQueryFlag('apiHydrate'))return false;
+  if(isFwdApiDisabledByQuery()||falseyQueryFlag('apiHydrate'))return false;
   if(truthyQueryFlag('apiHydrate')||truthyQueryFlag('hydrate'))return true;
   // Default fast path: use the generated static sidecar/model and avoid endpoint fan-out on every launch.
   // If no static FWD sidecar exists, hydrate after boot so resource views still become available when hosted.
   return !!missingStaticFwd;
 }
 function scheduleFwdApiHydration(reason='idle'){
-  if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  if(fwdApiHydrationPromise){
+    recordViewerDiagnostic('info','fwd-api-hydration-already-scheduled',{reason});
+    return fwdApiHydrationPromise;
+  }
+  recordViewerDiagnostic('info','fwd-api-hydration-scheduled',{reason});
   const run=()=>beginFwdApiHydration(reason);
   if(typeof window.requestIdleCallback==='function'){
     window.requestIdleCallback(run,{timeout:2500});
@@ -91,9 +258,13 @@ function scheduleFwdApiHydration(reason='idle'){
 }
 function beginFwdApiHydration(reason='manual'){
   if(fwdApiHydrationPromise)return fwdApiHydrationPromise;
+  const started=Date.now();
+  recordViewerDiagnostic('info','fwd-api-hydration-start',{reason});
   fwdApiHydrationPromise=loadFwdApiData().then(()=>{
+    recordViewerDiagnostic('info','fwd-api-hydration-data-loaded',{reason,elapsedMs:Date.now()-started,mode:fwdApiHydrationState.mode,failedEndpoints:list(fwdApiHydrationState.failedEndpoints||[]),counts:payloadCounts()});
     if(typeof model!=='undefined'&&model){
       model=buildModel();
+      recordViewerDiagnostic('info','model-rebuilt-after-api-hydration',{counts:modelCounts()});
       globalDefinitionLookupCache=null;
       globalTableDefinitionsCache=null;
       globalUdfDefinitionsCache=null;
@@ -107,6 +278,7 @@ function beginFwdApiHydration(reason='manual'){
       renderAll();
     }
   }).catch(error=>{
+    recordViewerDiagnostic('error','fwd-api-hydration-failed',{reason,message:error&&error.message?error.message:String(error||'Unknown error')});
     console.warn('FW Editor Viewer: background FWD API hydration failed.',error);
   });
   return fwdApiHydrationPromise;
@@ -143,19 +315,33 @@ function snapshotSidecarsHaveContent(rulesPayload,treePayload,relationshipPayloa
 
 async function loadHostedApiViewerBootstrap(){
   const protocol=(window.location&&window.location.protocol)||'';
-  if(!/^https?:$/i.test(protocol))return false;
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'api-disabled-by-query'});
+    return false;
+  }
+  if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('info','hosted-bootstrap-skipped',{reason:'non-http-protocol',protocol});
+    return false;
+  }
   const bases=['/api/v1','./api/v1','../api/v1','../../api/v1'];
+  recordViewerDiagnostic('info','hosted-bootstrap-start',{bases,href:window.location.href});
   for(const base of bases){
+    const slash=base.endsWith('/')?'':'/';
+    const url=`${base}${slash}viewer/bootstrap?snapshotMode=live`;
+    const started=Date.now();
     try{
-      const slash=base.endsWith('/')?'':'/';
       const controller=new AbortController();
       const timeoutId=window.setTimeout(()=>controller.abort(),15000);
-      const response=await fetch(`${base}${slash}viewer/bootstrap?snapshotMode=live`,{cache:'no-store',signal:controller.signal});
+      const response=await fetch(url,{cache:'no-store',signal:controller.signal});
       window.clearTimeout(timeoutId);
+      recordViewerFetch('viewer/bootstrap',url,response.status,Date.now()-started,{ok:response.ok});
       if(!response.ok)continue;
       const payload=await response.json();
       const data=payload&&payload.ok===true?payload.data:payload;
-      if(!data||!data.rulesData||!data.treeData)continue;
+      if(!data||!data.rulesData||!data.treeData){
+        recordViewerDiagnostic('warn','hosted-bootstrap-invalid-payload',{base,hasData:!!data,keys:data?Object.keys(data):[]});
+        continue;
+      }
       rulesData=data.rulesData||{Rules:[]};
       relData=data.relData||{Relationships:[]};
       treeData=data.treeData||{Scopes:[],Nodes:[],Edges:[]};
@@ -165,19 +351,251 @@ async function loadHostedApiViewerBootstrap(){
         fwdApiHydrationState.mode='live-bootstrap';
         fwdApiHydrationState.failedEndpoints=[];
       }
+      const hasContent=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+      recordViewerDiagnostic(hasContent?'info':'warn','hosted-bootstrap-loaded',{base,hasContent,mode:data.mode||'unknown',counts:payloadCounts(),bootstrap:data.counts||null});
       scheduleFwdApiHydration('live-bootstrap');
-      return snapshotSidecarsHaveContent(rulesData,treeData,relData);
-    }catch{
-      // Try the next base candidate.
+      return hasContent;
+    }catch(error){
+      recordViewerFetch('viewer/bootstrap',url,'error',Date.now()-started,{message:error&&error.message?error.message:String(error||'Unknown error')});
     }
   }
+  recordViewerDiagnostic('warn','hosted-bootstrap-unavailable',{});
   return false;
 }
 
+
+
+let staticFullSidecarHydrationPromise = null;
+
+function staticViewerSidecarBaseCandidates(){
+  return ['', './', '../', '../../', '../../../', '../../../../', '../../../../../', '/'];
+}
+
+async function fetchStaticViewerJsonWithFallback(file, options = {}){
+  const timeoutMs = Number(options.timeoutMs || 12000);
+  const optional = !!options.optional;
+
+  for(const base of staticViewerSidecarBaseCandidates()){
+    const url = `${base}${file}`;
+    const started = Date.now();
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+      const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
+      window.clearTimeout(timeoutId);
+
+      recordViewerFetch(file, url, response.status, Date.now() - started, { ok: response.ok, source: 'static-sidecar' });
+
+      if(!response.ok) continue;
+
+      const raw = await response.text();
+      return JSON.parse(raw.replace(/^\uFEFF/, ''));
+    }
+    catch(error) {
+      recordViewerFetch(file, url, 'error', Date.now() - started, {
+        source: 'static-sidecar',
+        optional,
+        message: error && error.message ? error.message : String(error || 'Unknown error')
+      });
+    }
+  }
+
+  if(optional) return null;
+  throw new Error(`Failed to load ${file}: file was not reachable from known paths.`);
+}
+
+function rulesDataFromBootSidecar(boot){
+  const nodes = list(first(boot?.nodes, boot?.Nodes, []));
+  const rules = nodes
+    .filter(n => !!first(n.IsRuleNode, n.isRuleNode, n.isRule))
+    .map((n, i) => ({
+      RuleGuid: n.RuleGuid,
+      RuleId: n.RuleId,
+      RuleName: n.RuleName,
+      FunctionName: n.FunctionName,
+      ScopePath: n.ScopePath,
+      ScopeName: n.ScopeName,
+      ScopeType: n.ScopeType,
+      RuleIndex: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      RuleIndexWithinScope: first(n.RuleIndexWithinScope, n.RuleIndex, i),
+      ActionListIndex: n.ActionListIndex,
+      ActionNames: n.ActionNames || [],
+      DisabledState: n.DisabledState,
+      DisabledAncestorNodeId: n.DisabledAncestorNodeId,
+      Parameters: {},
+      Sources: ['BootSidecar'],
+      BootOnly: true
+    }));
+
+  return {
+    ProcessName: first(boot?.snapshot?.ProcessName, boot?.ProcessName, ''),
+    RuleCount: first(boot?.counts?.rules, rules.length),
+    Rules: rules,
+    RulesByFunction: boot?.summaries?.rulesByFunction || [],
+    RulesByActionName: boot?.summaries?.rulesByActionName || [],
+    RulesByDisabledState: boot?.summaries?.rulesByDisabledState || [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+}
+
+function fwdSummaryFromBootSidecar(boot){
+  const counts = boot?.counts || {};
+  return {
+    overview: {
+      source: {
+        process: first(boot?.snapshot?.ProcessName, ''),
+        readMode: 'read-only',
+        snapshotStrategy: 'static-boot-sidecar'
+      },
+      counts: {
+        scopes: counts.scopes || 0,
+        structuralRules: counts.ruleNodes || counts.rules || 0,
+        flatInventoryRows: counts.rules || 0,
+        relationships: 0,
+        diagnostics: counts.diagnostics || 0,
+        resources: counts.fwdResources || 0,
+        udfs: counts.fwdUdfs || 0,
+        tables: counts.fwdTables || 0,
+        functions: counts.fwdFunctions || 0
+      }
+    },
+    ruleLists: { count: 0, items: [], lazy: true },
+    functions: { count: counts.fwdFunctions || 0, items: [], lazy: true },
+    tables: { count: counts.fwdTables || 0, items: [], lazy: true },
+    selectionLists: { count: 0, items: [], lazy: true },
+    udfs: { count: counts.fwdUdfs || 0, items: [], lazy: true },
+    resources: { count: counts.fwdResources || 0, items: [], lazy: true }
+  };
+}
+
+async function tryLoadStaticBootSidecar(){
+  if(falseyQueryFlag('bootSidecar')) return false;
+
+  const boot = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.boot.json', { timeoutMs: 5000, optional: true });
+  if(!boot || typeof boot !== 'object') return false;
+
+  const nodes = list(first(boot.nodes, boot.Nodes, []));
+  const scopes = list(first(boot.scopes, boot.Scopes, []));
+  const edges = list(first(boot.edges, boot.Edges, []));
+
+  if(!nodes.length && !scopes.length) return false;
+
+  treeData = {
+    SnapshotId: boot.snapshot?.SnapshotId,
+    GeneratedAtUtc: boot.snapshot?.GeneratedAtUtc,
+    RequireNativeOk: boot.snapshot?.RequireNativeOk,
+    ProcessName: boot.snapshot?.ProcessName,
+    ScopeCount: boot.counts?.scopes || scopes.length,
+    NodeCount: boot.counts?.nodes || nodes.length,
+    RuleNodeCount: boot.counts?.ruleNodes || nodes.filter(n => n.IsRuleNode).length,
+    EdgeCount: boot.counts?.edges || edges.length,
+    DiagnosticCount: boot.counts?.diagnostics || 0,
+    Scopes: scopes,
+    Nodes: nodes,
+    Edges: edges,
+    Diagnostics: [],
+    Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true }
+  };
+
+  rulesData = rulesDataFromBootSidecar(boot);
+  relData = { Relationships: [], Diagnostics: [], Bootstrap: { mode: 'static-boot-sidecar', fullDetailsHydrateAfterPaint: true } };
+  fwdSidecarData = fwdSummaryFromBootSidecar(boot);
+  fwdData = fwdSidecarData;
+
+  fwdApiHydrationState.mode = 'boot-sidecar';
+  fwdApiHydrationState.failedEndpoints = [];
+
+  recordViewerDiagnostic('info', 'static-boot-sidecar-loaded', { counts: payloadCounts(), bootCounts: boot.counts || null });
+  return true;
+}
+
+function scheduleStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-skipped', {
+    reason,
+    detail: 'Disabled because background full hydration causes full-body rerender flicker.'
+  });
+  return null;
+}
+
+function beginStaticFullSidecarHydration(reason = 'boot-sidecar'){
+  if(staticFullSidecarHydrationPromise) return staticFullSidecarHydrationPromise;
+
+  const started = Date.now();
+  recordViewerDiagnostic('info', 'static-full-sidecar-hydration-start', { reason });
+
+  staticFullSidecarHydrationPromise = (async () => {
+    const loadedRules = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rules.json', { timeoutMs: 30000 });
+    const loadedRel = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.rel.json', { timeoutMs: 30000 });
+    const loadedTree = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.tree.json', { timeoutMs: 30000 });
+    const loadedFwd = await fetchStaticViewerJsonWithFallback('ac-rule-viewer.fwd.json', { timeoutMs: 30000, optional: true });
+
+    rulesData = loadedRules || rulesData;
+    relData = loadedRel || relData;
+    treeData = loadedTree || treeData;
+
+    if(loadedFwd && typeof loadedFwd === 'object'){
+      fwdSidecarData = loadedFwd;
+      fwdData = loadedFwd;
+      applyAdvancedSidecarsToFwdData();
+    }
+
+    fwdApiHydrationState.mode = loadedFwd ? 'static-full-sidecars' : 'static-full-sidecars-no-fwd';
+    fwdApiHydrationState.failedEndpoints = [];
+
+    recordViewerDiagnostic('info', 'static-full-sidecars-loaded', {
+      reason,
+      elapsedMs: Date.now() - started,
+      counts: payloadCounts()
+    });
+
+    if(typeof model !== 'undefined' && model){
+      model = buildModel();
+      recordViewerDiagnostic('info', 'model-rebuilt-after-static-full-sidecars', { counts: modelCounts() });
+
+      globalDefinitionLookupCache = null;
+      globalTableDefinitionsCache = null;
+      globalUdfDefinitionsCache = null;
+      globalFunctionDefinitionsCache = null;
+      globalNavigationCountsCache = null;
+      productCountsCache = null;
+      ruleListPacketDefinitionsCache = null;
+
+      if(typeof ensureUsefulWorkspaceSelection === 'function'){
+        ensureUsefulWorkspaceSelection('static-full-sidecars');
+      }
+
+      renderAll();
+    }
+  })().catch(error => {
+    recordViewerDiagnostic('error', 'static-full-sidecar-hydration-failed', {
+      reason,
+      message: error && error.message ? error.message : String(error || 'Unknown error')
+    });
+  });
+
+  return staticFullSidecarHydrationPromise;
+}
+
 async function loadViewerData(){
+  recordViewerDiagnostic('info','load-viewer-data-start',{href:window.location.href});
+  if(typeof tryLoadGranularIndexMode==='function'){
+    const granularLoaded = await tryLoadGranularIndexMode();
+    if(granularLoaded){
+      recordViewerDiagnostic('info','load-viewer-data-complete',{source:'granular-index',counts:payloadCounts()});
+      return;
+    }
+  }
   if(applyEmbeddedPayloadIfPresent()){
     const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
     if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('embedded-boot');
+    return;
+  }
+
+  const bootSidecarLoaded=await tryLoadStaticBootSidecar();
+  if(bootSidecarLoaded){
+    recordViewerDiagnostic('info','static-full-sidecar-hydration-skipped',{reason:'disabled-to-prevent-full-body-rerender'});
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-boot-sidecar',counts:payloadCounts()});
     return;
   }
 
@@ -185,7 +603,11 @@ async function loadViewerData(){
   // sidecar probing so /viewer does not spam optional ac-rule-viewer.*.json 404s.
   // Standalone static exports still work because we fall back to sidecars below.
   const hostedBootstrap=await loadHostedApiViewerBootstrap();
-  if(hostedBootstrap)return;
+  if(hostedBootstrap){
+    recordViewerDiagnostic('info','load-viewer-data-complete',{source:'hosted-bootstrap',counts:payloadCounts()});
+    return;
+  }
+  recordViewerDiagnostic('warn','load-viewer-data-falling-back-to-sidecars',{});
 
   const baseCandidates = [
     '',
@@ -204,10 +626,13 @@ async function loadViewerData(){
         const url = `${base}${file}`;
         const controller = new AbortController();
         const timeoutId = window.setTimeout(() => controller.abort(), 12000);
+        const started=Date.now();
         const response = await fetch(url, { cache: 'no-store', signal: controller.signal });
         window.clearTimeout(timeoutId);
+        recordViewerFetch(file,url,response.status,Date.now()-started,{ok:response.ok,source:'static-sidecar'});
         if(response.ok) return await response.json();
-      } catch {
+      } catch(error) {
+        recordViewerFetch(file,`${base}${file}`,'error',0,{source:'static-sidecar',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Continue trying fallback locations until one responds.
       }
     }
@@ -234,6 +659,7 @@ async function loadViewerData(){
     }
 
     staticSidecarsLoaded=snapshotSidecarsHaveContent(rulesData,treeData,relData);
+    recordViewerDiagnostic(staticSidecarsLoaded?'info':'warn','static-sidecars-loaded',{loaded:staticSidecarsLoaded,counts:payloadCounts()});
 
     if(staticSidecarsLoaded){
       try {
@@ -248,19 +674,32 @@ async function loadViewerData(){
   }
 
   if(!staticSidecarsLoaded){
+    recordViewerDiagnostic('error','viewer-data-unavailable',{reason:'No hosted bootstrap and no static sidecars responded.'});
     throw new Error('No usable viewer sidecar JSON was found, and the hosted live-lazy bootstrap endpoint was unavailable.');
   }
 
   await loadAdvancedStaticFwdSidecars(fetchJsonWithFallback);
   const hasStaticFwd=applyEmbeddedFwdDataIfPresent();
   if(shouldHydrateFwdApiOnBoot(!hasStaticFwd))scheduleFwdApiHydration('static-boot');
+  recordViewerDiagnostic('info','load-viewer-data-complete',{source:'static-sidecars',counts:payloadCounts(),hasStaticFwd});
 }
 
 // Attempt to hydrate defined FWD object surfaces from API v1 when viewer is hosted with the editor viewer server.
 async function loadFwdApiData(){
+  recordViewerDiagnostic('info','fwd-api-load-start',{href:window.location.href});
+  if(isFwdApiDisabledByQuery()){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{reason:'api-disabled-by-query'});
+    if(!applyEmbeddedFwdDataIfPresent()){
+      fwdData = null;
+      fwdApiHydrationState.mode = 'none';
+      fwdApiHydrationState.failedEndpoints = [];
+    }
+    return;
+  }
     // Respect explicit defined opt-out in query string to avoid unnecessary API probing and console 404 noise.
   const fwdApiParam = new URLSearchParams(window.location.search).get('fwdApi');
   if(fwdApiParam && /^(off|false|0|no)$/i.test(fwdApiParam)){
+    recordViewerDiagnostic('warn','fwd-api-load-disabled-by-query',{fwdApiParam});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -271,6 +710,7 @@ async function loadFwdApiData(){
 
   const protocol=(window.location&&window.location.protocol)||'';
   if(!/^https?:$/i.test(protocol)){
+    recordViewerDiagnostic('warn','fwd-api-load-skipped',{reason:'non-http-protocol',protocol});
     if(!applyEmbeddedFwdDataIfPresent()){
       fwdData = null;
       fwdApiHydrationState.mode = 'none';
@@ -318,19 +758,23 @@ async function loadFwdApiData(){
   ];
   async function fetchApi(path){
     for(const base of baseCandidates){
+      const slash=base.endsWith('/')?'':'/';
+      const separator=path.includes('?')?'&':'?';
+      const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
+      const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
+      const started=Date.now();
       try{
-        const slash=base.endsWith('/')?'':'/';
-        const separator=path.includes('?')?'&':'?';
-        const liveRefreshParam=snapshotMode==='live'?`&liveMinRefreshSeconds=${liveMinRefreshSeconds}`:'';
-        const withMode=`${base}${slash}${path}${separator}snapshotMode=${snapshotMode}${liveRefreshParam}`;
         const controller=new AbortController();
         const timeoutId=window.setTimeout(()=>controller.abort(),timeoutMs);
         const response=await fetch(withMode,{cache:'no-store',signal:controller.signal});
         window.clearTimeout(timeoutId);
+        recordViewerFetch(path,withMode,response.status,Date.now()-started,{ok:response.ok,source:'fwd-api'});
         if(!response.ok) continue;
         const payload=await response.json();
-        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data};
-      }catch{
+        if(payload&&payload.ok===true&&payload.data!==undefined) return {ok:true,data:payload.data,status:response.status};
+        recordViewerDiagnostic('warn','fwd-api-invalid-envelope',{path,base,keys:payload?Object.keys(payload):[]});
+      }catch(error){
+        recordViewerFetch(path,withMode,'error',Date.now()-started,{source:'fwd-api',message:error&&error.message?error.message:String(error||'Unknown error')});
         // Keep probing candidate bases.
       }
     }
@@ -366,15 +810,20 @@ async function loadFwdApiData(){
     };
     fwdApiHydrationState.mode='hydrating';
     fwdApiHydrationState.failedEndpoints=list(failed);
+    recordViewerDiagnostic('info','fwd-api-hydrated-partial',{failedEndpoints:list(failed),counts:payloadCounts()});
     return true;
   };
 
-  for(const stage of endpointStages){
-    const settled=await Promise.all(stage.map(async ([key,path])=>({key,result:await fetchApi(path)})));
+  for(let stageIndex=0;stageIndex<endpointStages.length;stageIndex++){
+    const stage=endpointStages[stageIndex];
+    recordViewerDiagnostic('info','fwd-api-stage-start',{stage:stageIndex+1,endpoints:stage.map(x=>x[0])});
+    const stageStarted=Date.now();
+    const settled=await Promise.all(stage.map(async ([key,path])=>({key,path,result:await fetchApi(path)})));
     settled.forEach(entry=>{
       hydrated[entry.key]=entry.result.data;
       if(!entry.result.ok)failed.push(entry.key);
     });
+    recordViewerDiagnostic('info','fwd-api-stage-complete',{stage:stageIndex+1,elapsedMs:Date.now()-stageStarted,ok:settled.filter(x=>x.result.ok).map(x=>x.key),failed:list(failed)});
     applyHydrated();
   }
 
@@ -383,6 +832,7 @@ async function loadFwdApiData(){
       fwdData=null;
       fwdApiHydrationState.mode='none';
       fwdApiHydrationState.failedEndpoints=failed;
+      recordViewerDiagnostic('error','fwd-api-load-no-overview',{failedEndpoints:list(failed)});
     }
     return;
   }
@@ -390,6 +840,7 @@ async function loadFwdApiData(){
   applyHydrated();
   fwdApiHydrationState.mode=failed.length?(embeddedFwd?'partial+embedded':'partial'):'full';
   fwdApiHydrationState.failedEndpoints=failed;
+  recordViewerDiagnostic(failed.length?'warn':'info','fwd-api-load-complete',{mode:fwdApiHydrationState.mode,failedEndpoints:list(failed),counts:payloadCounts()});
 }
 function $(id){
   const el=document.getElementById(id);
@@ -434,7 +885,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
   if(value===null||value===undefined)return value;
   const type=typeof value;
   if(type==='string'){
-    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}… (${fmt(value.length)} chars)`:value;
+    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}â€¦ (${fmt(value.length)} chars)`:value;
   }
   if(type==='number'||type==='boolean')return value;
   if(type==='function')return '[Function]';
@@ -444,7 +895,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
     refs.weak.add(value);
     if(Array.isArray(value)){
       const out=value.slice(0,opts.maxArray).map(item=>boundedPreviewValue(item,opts,depth+1,refs));
-      if(value.length>opts.maxArray){refs.truncated=true;out.push(`… ${fmt(value.length-opts.maxArray)} more item(s)`);}
+      if(value.length>opts.maxArray){refs.truncated=true;out.push(`â€¦ ${fmt(value.length-opts.maxArray)} more item(s)`);}
       return out;
     }
     const out={};
@@ -456,7 +907,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
         out[key]=boundedPreviewValue(value[key],opts,depth+1,refs);
       }
     });
-    if(keys.length>opts.maxKeys){refs.truncated=true;out['…']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
+    if(keys.length>opts.maxKeys){refs.truncated=true;out['â€¦']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
     return out;
   }
   return text(value);
@@ -466,7 +917,7 @@ function summaryForLargeValue(value){
   if(Array.isArray(value))return `[Array(${fmt(value.length)})]`;
   if(typeof value==='object')return `[Object(${fmt(Object.keys(value).length)} keys)]`;
   const s=text(value);
-  return s.length>180?`${s.slice(0,180)}…`:s;
+  return s.length>180?`${s.slice(0,180)}â€¦`:s;
 }
 function previewJson(value,options={}){
   const tracker={weak:new WeakSet(),nodes:0,truncated:false};
@@ -475,7 +926,7 @@ function previewJson(value,options={}){
   try{json=JSON.stringify(preview,null,2);}
   catch(error){json=`"[Preview unavailable: ${text(error&&error.message||error)}]"`;}
   const maxChars=Number(options.maxChars||18000);
-  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\n… (${fmt(json.length-maxChars)} more chars)`;}
+  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\nâ€¦ (${fmt(json.length-maxChars)} more chars)`;}
   return {json,truncated:tracker.truncated};
 }
 function previewJsonHtml(value,options={}){
@@ -575,7 +1026,7 @@ function isDesktopPrimaryDevice(){return window.matchMedia('(min-width: 1280px) 
 function isCompactShellLayout(){
   const w=Math.max(window.innerWidth||0,document.documentElement.clientWidth||0);
   const coarse=window.matchMedia('(pointer: coarse)').matches;
-  return w<1180||coarse;
+  return w<1440||coarse;
 }
 function isAdvancedMode(){
   try{
@@ -687,9 +1138,9 @@ function ensureScrollablePaneFocus(){
 function scrollableElementFromTarget(target){
   let el=target&&target.nodeType===1?target:target?.parentElement;
   while(el&&el!==document.body&&el!==document.documentElement){
-    const style=window.getComputedStyle?window.getComputedStyle(el):null;
-    const overflowY=style?.overflowY||'';
-    const overflowX=style?.overflowX||'';
+    const computedStyle=window.getComputedStyle?window.getComputedStyle(el):null;
+    const overflowY=computedStyle?.overflowY||'';
+    const overflowX=computedStyle?.overflowX||'';
     const scrollY=/(auto|scroll|overlay)/.test(overflowY)&&el.scrollHeight>el.clientHeight+1;
     const scrollX=/(auto|scroll|overlay)/.test(overflowX)&&el.scrollWidth>el.clientWidth+1;
     if(scrollY||scrollX)return el;
@@ -714,3 +1165,8 @@ function wheelFallbackTarget(target){
   if(el?.closest?.('.pane.right'))return optionalElement('inspectorBody');
   return optionalElement('content')||optionalElement('scopeList')||optionalElement('inspectorBody');
 }
+
+
+
+
+

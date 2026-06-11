@@ -1,0 +1,6 @@
+{
+  "schema": "AcRuleViewer.RuleScopeIndex",
+  "schemaVersion": "1.0.0",
+  "kind": "udf",
+  "scopes": []
+}

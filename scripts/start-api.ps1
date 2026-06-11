@@ -51,10 +51,10 @@ if (-not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
 else {
     $scriptRoot = Split-Path -Parent $PSCommandPath
 }
-$startWorkbench = Join-Path $scriptRoot "start-workbench.ps1"
+$startWorkbench = Join-Path $scriptRoot "start-fw-editor-viewer.ps1"
 
 if (-not (Test-Path -LiteralPath $startWorkbench -PathType Leaf)) {
-    throw "start-workbench.ps1 not found: $startWorkbench"
+    throw "start-fw-editor-viewer.ps1 not found: $startWorkbench"
 }
 
 $argsForStart = @(
@@ -90,6 +90,6 @@ if ($SkipRuntimeValidation) { $argsForStart += "-SkipRuntimeValidation" }
 if ($CheckWorkingTree) { $argsForStart += "-CheckWorkingTree" }
 if ($ExtraArgs.Count -gt 0) { $argsForStart += @("-ExtraArgs") + $ExtraArgs }
 
-Write-Host "start-api.ps1 delegates to start-workbench.ps1. Prefer start-fw-editor-viewer.ps1 for normal FW Editor Viewer launches." -ForegroundColor DarkGray
+Write-Host "start-api.ps1 delegates to start-fw-editor-viewer.ps1. Prefer start-fw-editor-viewer.ps1 for normal FW Editor Viewer launches." -ForegroundColor DarkGray
 & $startWorkbench @argsForStart
 exit $LASTEXITCODE

@@ -5,7 +5,7 @@ export default [
       ecmaVersion: 2022,
       sourceType: "script",
       globals: {
-        window: "readonly", document: "readonly", console: "readonly", fetch: "readonly", AbortController: "readonly", URLSearchParams: "readonly", URL: "readonly", Blob: "readonly", navigator: "readonly", localStorage: "readonly", setTimeout: "readonly", clearTimeout: "readonly", confirm: "readonly", alert: "readonly"
+        window: "readonly", document: "readonly", console: "readonly", fetch: "readonly", AbortController: "readonly", URLSearchParams: "readonly", URL: "readonly", Blob: "readonly", navigator: "readonly", localStorage: "readonly", setTimeout: "readonly", clearTimeout: "readonly", requestAnimationFrame: "readonly", confirm: "readonly", alert: "readonly"
       }
     },
     rules: {

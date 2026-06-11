@@ -38,61 +38,6 @@ internal sealed partial class WorkbenchApiService
         _liveSessionCache = liveSessionCache ?? new LiveFwdSessionCache(client);
     }
 
-    public ApiHttpResult Dispatch(string route, HttpListenerRequest request)
-    {
-        string tail = route.StartsWith("api/v1", StringComparison.OrdinalIgnoreCase)
-            ? route.Substring("api/v1".Length).Trim('/')
-            : route.Trim('/');
-
-        try
-        {
-            if (string.IsNullOrWhiteSpace(tail) || tail == "help") return Ok(request, "AcWorkbench.ApiHelp", BuildHelp(request));
-            if (tail == "openapi.json") return RequireMethod(request, "GET") ?? OpenApi(request);
-            if (tail == "routes") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.RouteCatalog", BuildRouteCatalog(request));
-            if (tail == "capabilities") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Capabilities", BuildCapabilities(request));
-            if (tail == "health/live") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Liveness", BuildLiveness());
-            if (tail == "health/ready") return RequireMethod(request, "GET") ?? BuildReadiness(request);
-            if (tail == "status") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Status", BuildStatus(request));
-            if (tail == "viewer/bootstrap") return RequireMethod(request, "GET") ?? BuildViewerBootstrap(request);
-            if (tail == "snapshot")
-            {
-                ApiHttpResult? methodError = RequireMethod(request, "GET");
-                if (methodError != null) return methodError;
-
-                WorkbenchSnapshot snapshot = GetSnapshot(request);
-                return Ok(request, "AcWorkbench.Snapshot", BuildSnapshotResponse(snapshot), snapshotOverride: snapshot);
-            }
-            if (tail == "snapshot/warmup") return RequireMethod(request, "GET") ?? Warmup(request);
-            if (tail == "snapshot/refresh") return Refresh(request);
-            if (tail == "editor-model") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.EditorModel", BuildEditorModel(GetSnapshot(request), request));
-            if (tail == "scopes") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.ScopeList", BuildScopeList(GetSnapshot(request), request));
-            if (tail.StartsWith("scopes/", StringComparison.OrdinalIgnoreCase)) return DispatchScope(tail, request);
-            if (tail.StartsWith("rules/", StringComparison.OrdinalIgnoreCase)) return DispatchRule(tail, request);
-            if (tail == "rule-lists" || tail.StartsWith("rule-lists/", StringComparison.OrdinalIgnoreCase)) return DispatchRuleLists(tail, request);
-            if (tail == "fwd" || tail.StartsWith("fwd/", StringComparison.OrdinalIgnoreCase)) return DispatchFwd(tail, request);
-            if (tail == "diagnostics") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Diagnostics", BuildGlobalDiagnostics(GetSnapshot(request)));
-            if (tail == "search") return RequireMethod(request, "GET") ?? Ok(request, "AcWorkbench.Search", BuildSearch(GetSnapshot(request), request));
-
-            return Fail(request, "RouteNotFound", "API route was not found.", 404, "/api/v1/" + tail);
-        }
-        catch (ApiContractException ex)
-        {
-            return Fail(request, ex.Code, ex.Message, ex.StatusCode, ex.Detail, ex.Target, ex.Resolution);
-        }
-        catch (ApiV1Exception ex)
-        {
-            return Fail(request, ex.Code, ex.Message, ex.StatusCode, ex.Detail);
-        }
-        catch (FormWorksInteropException ex)
-        {
-            return Fail(request, "DllInteropFailure", ex.Message, 400, SensitiveValueRedactor.ExceptionMessage(ex.InnerException, _options.ShouldExposeOperationalDetails), null, "Verify x86 process bitness, native DCM DLL paths, WibuKey/licensing state, and FWD path access.");
-        }
-        catch (Exception ex)
-        {
-            return Fail(request, "UnhandledServerError", "Unhandled API v1 server error.", 500, _options.ShouldExposeOperationalDetails ? ex.GetType().Name + ": " + ex.Message : SensitiveValueRedactor.Redacted);
-        }
-    }
-
     private ApiHttpResult? RequireMethod(HttpListenerRequest request, string method)
     {
         if (string.Equals(request.HttpMethod, method, StringComparison.OrdinalIgnoreCase))
@@ -249,9 +194,9 @@ internal sealed partial class WorkbenchApiService
                 "RefreshDisabled",
                 "Snapshot refresh is disabled for this server process.",
                 409,
-                "Restart the server with --allow-refresh, or use scripts/start-workbench.ps1.",
+                "Restart the server with --allow-refresh, or use scripts/start-fw-editor-viewer.ps1.",
                 null,
-                "Restart with --allow-refresh or use scripts/start-workbench.ps1 when server-side refresh is intended.");
+                "Restart with --allow-refresh or use scripts/start-fw-editor-viewer.ps1 when server-side refresh is intended.");
         }
 
         WorkbenchSnapshot snapshot = _cache.Rebuild(GetFwdPath(request), GetProcess(request), GetBool(request, "requireNativeOk", false));
@@ -661,6 +606,16 @@ internal sealed partial class WorkbenchApiService
             : new HashSet<string>(include!.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()), StringComparer.OrdinalIgnoreCase);
 
         bool includeAll = sections.Count == 0;
+        Console.WriteLine("[API] editor-model include=" + (string.IsNullOrWhiteSpace(include) ? "<all>" : include)
+            + " snapshot=" + snapshot.SnapshotId
+            + " objectNodes=" + snapshot.EditorModel.ObjectGraph.Nodes.Count
+            + " objectEdges=" + snapshot.EditorModel.ObjectGraph.Edges.Count
+            + " ruleLists=" + snapshot.EditorModel.RuleLists.Count
+            + " ruleConfigs=" + snapshot.EditorModel.RuleLists.Sum(r => r.RuleConfigurations.Count)
+            + " udfs=" + snapshot.EditorModel.UdfDefinitions.Count
+            + " selectionLists=" + snapshot.EditorModel.SelectionListDefinitions.Count
+            + " pageDesigns=" + snapshot.EditorModel.PageDesigns.Count
+            + " runtimeImpacts=" + snapshot.EditorModel.RuntimeImpacts.Count);
         return new
         {
             snapshotId = snapshot.SnapshotId,
@@ -687,53 +642,6 @@ internal sealed partial class WorkbenchApiService
             runtimeImpacts = includeAll || sections.Contains("runtimeImpacts") || sections.Contains("runtime") ? snapshot.EditorModel.RuntimeImpacts : null,
             diagnostics = snapshot.EditorModel.Diagnostics,
             notProven = snapshot.EditorModel.NotProven
-        };
-    }
-
-    private ApiHttpResult DispatchRuleLists(string tail, HttpListenerRequest request)
-    {
-        ApiHttpResult? method = RequireMethod(request, "GET");
-        if (method != null) return method;
-
-        WorkbenchSnapshot snapshot = GetSnapshot(request);
-        string[] parts = tail.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length == 1)
-            return Ok(request, "AcWorkbench.RuleLists", BuildRuleLists(snapshot, request));
-
-        string scopeId = DecodeJoined(parts, 1, parts.Length - 1);
-        EditorRuleListModel? ruleList = snapshot.EditorModel.RuleLists.FirstOrDefault(r => RuleCorrelation.Eq(r.RuleListId, scopeId));
-        if (ruleList == null)
-            return Fail(request, "RuleListNotFound", "Rule List was not found.", 404, scopeId);
-
-        return Ok(request, "AcWorkbench.RuleListDetail", ruleList);
-    }
-
-    private object BuildRuleLists(WorkbenchSnapshot snapshot, HttpListenerRequest request)
-    {
-        string? q = Get(request, "q");
-        string? kind = Get(request, "kind");
-        var items = snapshot.EditorModel.RuleLists
-            .Where(r => string.IsNullOrWhiteSpace(kind) || RuleCorrelation.Eq(r.Kind, kind))
-            .Where(r => string.IsNullOrWhiteSpace(q) || RuleCorrelation.Contains(r.Name, q) || RuleCorrelation.Contains(r.RuleListId, q))
-            .OrderBy(r => r.RuleListId, StringComparer.OrdinalIgnoreCase)
-            .Select(r => new
-            {
-                r.RuleListId,
-                r.Name,
-                r.Kind,
-                r.StructuralRuleCount,
-                r.FlatInventoryCount,
-                ruleConfigurationCount = r.RuleConfigurations.Count,
-                diagnostics = r.Diagnostics,
-                links = new { self = "/api/v1/rule-lists/" + UrlEncode(r.RuleListId) }
-            })
-            .ToList();
-
-        return new
-        {
-            count = items.Count,
-            items,
-            caveat = "Rule Lists are read-only static projections; use selected rule packets for per-rule evidence drill-through."
         };
     }
 
@@ -1035,12 +943,38 @@ internal sealed partial class WorkbenchApiService
         if (method != null) return method;
 
         string[] parts = tail.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2) return Fail(request, "InvalidRequest", "Rule node id is required.", 400);
+        if (parts.Length < 2) return Fail(request, "InvalidRequest", "Rule key or node id is required.", 400);
 
-        string nodeId = UrlDecode(parts[1]);
-        string action = parts.Length > 2 ? parts[2] : string.Empty;
+        string last = parts[parts.Length - 1];
+        bool hasAction = IsRuleAction(last);
+        string action = hasAction ? last : string.Empty;
+        string reference = DecodeJoined(parts, 1, hasAction ? parts.Length - 2 : parts.Length - 1);
         WorkbenchSnapshot snapshot = GetSnapshot(request);
 
+        if (reference.StartsWith("rule:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Phase6RuleKeys.TryParse(reference, out Phase6RuleKey phase6Key, out string? keyError))
+            {
+                return Fail(request, "rule_key_invalid", keyError ?? "Malformed Phase-6 rule key.", 400, reference, "Validate key format.");
+            }
+
+            if (!TryResolvePhase6Rule(snapshot, phase6Key, out RuleModel? phase6Rule, out EditorRuleListModel? parentRuleList))
+            {
+                return Fail(request, "rule_entry_parse_failed", "Rule could not be resolved from the Phase-6 key.", 404, reference, "Inspect the parent rule list and structural node id.");
+            }
+
+            RuleModel resolvedPhase6Rule = phase6Rule!;
+            if (string.IsNullOrWhiteSpace(action))
+                return Ok(request, "AcWorkbench.RuleDto", BuildPhase6RuleDto(snapshot, phase6Key, resolvedPhase6Rule, reference, parentRuleList));
+            if (action == "editor-model" || action == "configuration")
+                return Ok(request, "AcWorkbench.SelectedRulePacket", BuildSelectedRulePacket(snapshot, resolvedPhase6Rule));
+            if (action == "subtree")
+                return Ok(request, "AcWorkbench.RuleSubtree", BuildRuleSubtree(snapshot, resolvedPhase6Rule, request));
+
+            return Fail(request, "RouteNotFound", "Rule route was not found.", 404, "/api/v1/" + tail);
+        }
+
+        string nodeId = reference;
         if (!TryResolveRule(snapshot, nodeId, out RuleModel? rule, out string? ambiguityDetail))
         {
             if (!string.IsNullOrWhiteSpace(ambiguityDetail))
@@ -1055,6 +989,13 @@ internal sealed partial class WorkbenchApiService
         if (action == "subtree") return Ok(request, "AcWorkbench.RuleSubtree", BuildRuleSubtree(snapshot, resolvedRule, request));
 
         return Fail(request, "RouteNotFound", "Rule route was not found.", 404, "/api/v1/" + tail);
+    }
+
+    private static bool IsRuleAction(string value)
+    {
+        return value.Equals("editor-model", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("configuration", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("subtree", StringComparison.OrdinalIgnoreCase);
     }
 
     // Exposes canonical FWD object surfaces (documents/pages/batches/processes/resources/variants/fields)

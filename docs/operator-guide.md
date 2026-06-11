@@ -27,7 +27,7 @@ http://127.0.0.1:8787/viewer?nocache=v71-product-reset
 PowerShell equivalent:
 
 ```powershell
-.\scripts\start-workbench.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
+.\scripts\start-fw-editor-viewer.ps1 -FwdPath .\fwd.cfd -Port 8787 -KillExisting
 ```
 
 ## Primary inspection workflow

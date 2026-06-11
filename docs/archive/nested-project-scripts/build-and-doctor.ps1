@@ -288,4 +288,4 @@ Write-Ok 'x86 net48 output layout is valid.'
 Write-Ok 'Build/output doctor completed.'
 Write-Host ''
 Write-Host 'Next:' -ForegroundColor Cyan
-Write-Host '.\scripts\start-workbench.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting'
+Write-Host '.\scripts\start-fw-editor-viewer.ps1 -FwdPath C:\dev\AcRuleWorkbench\fwd.cfd -Port 8787 -KillExisting'
