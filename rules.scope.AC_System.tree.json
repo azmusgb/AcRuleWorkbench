@@ -4,7 +4,7 @@
   "scopeId": "AC/System",
   "scopeKey": "AC_System",
   "kind": "other",
-  "generatedAtUtc": "2026-06-11T15:29:27.748Z",
+  "generatedAtUtc": "2026-06-11T21:13:20.166Z",
   "counts": {
     "rules": 0,
     "nodes": 0,
@@ -13,8 +13,8 @@
     "relationships": 0
   },
   "rulesData": {
-    "SnapshotId": "fwd-20260611-152907-6398194-24f389984828",
-    "GeneratedAtUtc": "2026-06-11T15:29:07.6398194Z",
+    "SnapshotId": "fwd-20260611-211258-9039224-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T21:12:58.9039224Z",
     "RequireNativeOk": false,
     "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
     "ProcessName": "AC",
@@ -2665,8 +2665,8 @@
     "Warnings": []
   },
   "treeData": {
-    "SnapshotId": "fwd-20260611-152907-6398194-24f389984828",
-    "GeneratedAtUtc": "2026-06-11T15:29:07.6398194Z",
+    "SnapshotId": "fwd-20260611-211258-9039224-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T21:12:58.9039224Z",
     "RequireNativeOk": false,
     "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
     "ProcessName": "AC",
@@ -2877,8 +2877,8 @@
     "Warnings": []
   },
   "relData": {
-    "SnapshotId": "fwd-20260611-152907-6398194-24f389984828",
-    "GeneratedAtUtc": "2026-06-11T15:29:07.6398194Z",
+    "SnapshotId": "fwd-20260611-211258-9039224-24f389984828",
+    "GeneratedAtUtc": "2026-06-11T21:12:58.9039224Z",
     "RequireNativeOk": false,
     "FwdPath": "C:\\dev\\AcRuleWorkbench\\fwd.cfd",
     "ProcessName": "AC",

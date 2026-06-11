@@ -1,4 +1,4 @@
-
+﻿
 /* PATCH: immediate boot placeholder so the viewer body never appears blank during startup. */
 .fw-boot-placeholder {
   position: fixed;
@@ -14,10 +14,11 @@
   pointer-events: none;
   opacity: 1;
   visibility: visible;
-  transition: opacity 180ms ease, visibility 180ms ease;
+  transition: none;
 }
 
 .fw-boot-placeholder.fw-boot-placeholder-done {
+  display: none;
   opacity: 0;
   visibility: hidden;
 }
@@ -114,3 +115,6 @@
     background: #1e293b;
   }
 }
+
+
+

@@ -1,0 +1,684 @@
+﻿/*
+  FW Editor Viewer startup layout stability patch.
+
+  Purpose:
+  - Stabilize the active product-shell-v70 viewer path.
+  - Keep legacy layout-v61 stable when older shells are used.
+  - Avoid runtime inline style mutation.
+  - Avoid so CSS debt/static checks stay controlled.
+
+  Root cause addressed:
+  The base bundle forces html/body/app to a desktop 1280px/100dvh/overflow-hidden
+  layout. At sub-1280 widths, Chrome can paint a blank-looking shell until a
+  DevTools resize/layout invalidation occurs. The DOM is rendered; this patch
+  corrects the active shell layout path.
+*/
+
+:root {
+  --fw-viewer-stable-vh: 100vh;
+}
+
+/* Class-based boot placeholder completion state. */
+.fw-boot-placeholder.fw-boot-placeholder-done {
+  display: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Active viewer shell: desktop-size viewports. */
+@media (min-width: 1280px) {
+  body.product-shell-v70.fw-editor-viewer-shell {
+    min-height: var(--fw-viewer-stable-vh);
+    overflow: hidden;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .app {
+    height: var(--fw-viewer-stable-vh);
+    min-height: var(--fw-viewer-stable-vh);
+    max-height: var(--fw-viewer-stable-vh);
+    overflow: hidden;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .shell {
+    height: calc(var(--fw-viewer-stable-vh) - var(--topbar-h, 72px));
+    min-height: 0;
+    max-height: calc(var(--fw-viewer-stable-vh) - var(--topbar-h, 72px));
+    overflow: hidden;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane,
+  body.product-shell-v70.fw-editor-viewer-shell #mainContent,
+  body.product-shell-v70.fw-editor-viewer-shell #content {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell #content,
+  body.product-shell-v70.fw-editor-viewer-shell .content,
+  body.product-shell-v70.fw-editor-viewer-shell #inspectorBody,
+  body.product-shell-v70.fw-editor-viewer-shell .inspector-body,
+  body.product-shell-v70.fw-editor-viewer-shell .scope-list {
+    overflow: auto;
+  }
+}
+
+/* Active viewer shell: sub-desktop viewports.
+   This is the key fix for 913px-ish browser widths. */
+@media (max-width: 1439px) {
+  html {
+    min-width: 0;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell {
+    min-width: 0;
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    overflow: auto;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .app {
+    min-width: 0;
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    max-height: none;
+    display: block;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .topbar {
+    min-width: 0;
+    width: 100%;
+    height: auto;
+    min-height: var(--topbar-h, 72px);
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .shell {
+    display: block;
+    min-width: 0;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane {
+    min-width: 0;
+    min-height: 0;
+    max-height: none;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.left {
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    overflow: auto;
+    transform: none;
+    margin-bottom: 10px;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.main,
+  body.product-shell-v70.fw-editor-viewer-shell #mainContent {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell #content,
+  body.product-shell-v70.fw-editor-viewer-shell .content {
+    width: auto;
+    height: auto;
+    min-height: 320px;
+    max-height: none;
+    overflow: auto;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.right {
+    display: none;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane-resizer {
+    display: none;
+  }
+}
+
+/* Legacy shell compatibility. */
+body.layout-v61 {
+  min-height: var(--fw-viewer-stable-vh);
+  overflow: hidden;
+}
+
+body.layout-v61 .app {
+  height: var(--fw-viewer-stable-vh);
+  min-height: var(--fw-viewer-stable-vh);
+  max-height: var(--fw-viewer-stable-vh);
+  display: grid;
+  grid-template-rows: var(--topbar-h, 72px) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+body.layout-v61 .shell {
+  height: calc(var(--fw-viewer-stable-vh) - var(--topbar-h, 72px));
+  min-height: 0;
+  max-height: calc(var(--fw-viewer-stable-vh) - var(--topbar-h, 72px));
+  overflow: hidden;
+}
+
+body.layout-v61 .pane,
+body.layout-v61 .left,
+body.layout-v61 .main,
+body.layout-v61 .right {
+  min-width: 0;
+  min-height: 0;
+}
+
+body.layout-v61 #content,
+body.layout-v61 .content,
+body.layout-v61 #inspectorBody,
+body.layout-v61 .inspector-body,
+body.layout-v61 .scope-list {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+@media (max-width: 1439px) {
+  body.layout-v61 {
+    min-width: 0;
+    overflow: auto;
+  }
+
+  body.layout-v61 .app,
+  body.layout-v61 .shell,
+  body.layout-v61 .pane,
+  body.layout-v61 .left,
+  body.layout-v61 .main,
+  body.layout-v61 .right {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+/* BEGIN FW PRODUCT SHELL V70 NO OVERLAP GUARD */
+/*
+  Product shell v70 no-overlap guard.
+  Below desktop width, only one pane layout mode should be active:
+  compact single-column shell, no pane splitters, no inspector column,
+  and no nested FW editor workarea columns that can exceed the viewport.
+*/
+@media (max-width: 1439px) {
+  html[data-ui-build="v103-fw-editor-viewer"],
+  body.product-shell-v70.fw-editor-viewer-shell {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .app,
+  body.product-shell-v70.fw-editor-viewer-shell .shell,
+  body.product-shell-v70.fw-editor-viewer-shell .pane,
+  body.product-shell-v70.fw-editor-viewer-shell #mainContent,
+  body.product-shell-v70.fw-editor-viewer-shell #content,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-root,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-workarea,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-scope-workarea,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-config-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-scope-config-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-fwd-tree-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rulelist-layout,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rulelist-fieldset,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rule-properties-fieldset {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .app {
+    width: 100%;
+    height: auto;
+    min-height: 100vh;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.left,
+  body.product-shell-v70.fw-editor-viewer-shell .pane.main,
+  body.product-shell-v70.fw-editor-viewer-shell #mainContent {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.left {
+    grid-column: 1;
+    grid-row: 1;
+    z-index: auto;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .pane.main,
+  body.product-shell-v70.fw-editor-viewer-shell #mainContent {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell #content,
+  body.product-shell-v70.fw-editor-viewer-shell .content {
+    width: 100%;
+    height: auto;
+    min-height: 360px;
+    max-height: none;
+    overflow: auto;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-workarea,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-scope-workarea,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rulelist-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-fwd-tree-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-config-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-scope-config-window,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rulelist-fieldset,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-rule-properties-fieldset {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-splitter,
+  body.product-shell-v70.fw-editor-viewer-shell .fweditor-tree-splitter,
+  body.product-shell-v70.fw-editor-viewer-shell .pane-resizer,
+  body.product-shell-v70.fw-editor-viewer-shell .pane.right {
+    display: none;
+  }
+}
+/* END FW PRODUCT SHELL V70 NO OVERLAP GUARD */
+
+
+
+/* BEGIN FW PRODUCT SHELL V70 SAFE POLISH LAYER */
+/*
+  Safe visual polish layer.
+  Scope: product-shell-v70 FW Editor Viewer only.
+  This layer is intentionally cosmetic. It does not change app/shell/pane
+  display, position, breakpoint, transform, or width contracts.
+*/
+:root {
+  --fw26-font-sans: "Segoe UI Variable", "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --fw26-font-mono: "Cascadia Mono", "SFMono-Regular", "Roboto Mono", Consolas, ui-monospace, monospace;
+  --fw26-bg-page: #f5f7fb;
+  --fw26-bg-canvas: #eef3f9;
+  --fw26-surface: #ffffff;
+  --fw26-surface-raised: rgba(255, 255, 255, .96);
+  --fw26-surface-soft: #f8fbff;
+  --fw26-surface-muted: #f1f5fb;
+  --fw26-border: #d9e3ef;
+  --fw26-border-strong: #b9c7d8;
+  --fw26-text: #111827;
+  --fw26-text-soft: #374151;
+  --fw26-muted: #64748b;
+  --fw26-quiet: #8a99ad;
+  --fw26-accent: #2563eb;
+  --fw26-accent-2: #0f9f8f;
+  --fw26-accent-soft: #e8f0ff;
+  --fw26-accent-soft-2: #e4f8f5;
+  --fw26-good: #13795b;
+  --fw26-good-soft: #e7f6ef;
+  --fw26-warn: #b45309;
+  --fw26-warn-soft: #fff3db;
+  --fw26-bad: #be123c;
+  --fw26-bad-soft: #ffe8ef;
+  --fw26-radius-xl: 22px;
+  --fw26-radius-lg: 18px;
+  --fw26-radius-md: 14px;
+  --fw26-radius-sm: 10px;
+  --fw26-shadow-soft: 0 10px 28px rgba(15, 23, 42, .08);
+  --fw26-shadow-card: 0 16px 42px rgba(15, 23, 42, .10);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell,
+body.product-shell-v70.ui-2026 {
+  font-family: var(--fw26-font-sans);
+  color: var(--fw26-text);
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--fw26-accent-soft) 74%, transparent) 0, transparent 34rem),
+    linear-gradient(180deg, var(--fw26-bg-page), var(--fw26-bg-canvas));
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .topbar,
+body.product-shell-v70.ui-2026 .topbar {
+  border-bottom: 1px solid var(--fw26-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 251, 255, .94));
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+  backdrop-filter: blur(18px);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .logo,
+body.product-shell-v70.ui-2026 .logo {
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--fw26-accent-2), var(--fw26-accent));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--fw26-accent) 24%, transparent);
+  font-weight: 850;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .brand h1,
+body.product-shell-v70.ui-2026 .brand h1 {
+  color: var(--fw26-text);
+  font-weight: 860;
+  letter-spacing: -.02em;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .brand-sub,
+body.product-shell-v70.ui-2026 .brand-sub {
+  color: var(--fw26-muted);
+  font-family: var(--fw26-font-mono);
+  letter-spacing: .01em;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .global-search input,
+body.product-shell-v70.fw-editor-viewer-shell .scope-search,
+body.product-shell-v70.fw-editor-viewer-shell .tree-filter input,
+body.product-shell-v70.fw-editor-viewer-shell .full-width,
+body.product-shell-v70.ui-2026 .global-search input,
+body.product-shell-v70.ui-2026 .scope-search,
+body.product-shell-v70.ui-2026 .tree-filter input,
+body.product-shell-v70.ui-2026 .full-width {
+  border-color: var(--fw26-border);
+  border-radius: var(--fw26-radius-md);
+  background: var(--fw26-surface-raised);
+  color: var(--fw26-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75), 0 8px 22px rgba(15, 23, 42, .04);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .global-search input::placeholder,
+body.product-shell-v70.fw-editor-viewer-shell .scope-search::placeholder,
+body.product-shell-v70.fw-editor-viewer-shell .tree-filter input::placeholder,
+body.product-shell-v70.ui-2026 .global-search input::placeholder,
+body.product-shell-v70.ui-2026 .scope-search::placeholder,
+body.product-shell-v70.ui-2026 .tree-filter input::placeholder {
+  color: color-mix(in srgb, var(--fw26-muted) 70%, white);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .global-search input:focus,
+body.product-shell-v70.fw-editor-viewer-shell .scope-search:focus,
+body.product-shell-v70.fw-editor-viewer-shell .tree-filter input:focus,
+body.product-shell-v70.fw-editor-viewer-shell select:focus,
+body.product-shell-v70.ui-2026 .global-search input:focus,
+body.product-shell-v70.ui-2026 .scope-search:focus,
+body.product-shell-v70.ui-2026 .tree-filter input:focus,
+body.product-shell-v70.ui-2026 select:focus {
+  border-color: color-mix(in srgb, var(--fw26-accent) 58%, var(--fw26-border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--fw26-accent) 14%, transparent);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .top-actions,
+body.product-shell-v70.ui-2026 .top-actions {
+  border-color: var(--fw26-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fw26-surface-raised) 92%, transparent);
+  box-shadow: var(--fw26-shadow-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .pill,
+body.product-shell-v70.fw-editor-viewer-shell .badge,
+body.product-shell-v70.fw-editor-viewer-shell .head-chip,
+body.product-shell-v70.fw-editor-viewer-shell .brand-badge,
+body.product-shell-v70.fw-editor-viewer-shell .action-list-chip,
+body.product-shell-v70.ui-2026 .pill,
+body.product-shell-v70.ui-2026 .badge,
+body.product-shell-v70.ui-2026 .head-chip,
+body.product-shell-v70.ui-2026 .brand-badge,
+body.product-shell-v70.ui-2026 .action-list-chip {
+  border-radius: 999px;
+  border-color: var(--fw26-border);
+  background: var(--fw26-surface-soft);
+  color: var(--fw26-text-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .dot,
+body.product-shell-v70.ui-2026 .dot {
+  background: var(--fw26-good);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--fw26-good) 15%, transparent);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .pane,
+body.product-shell-v70.fw-editor-viewer-shell .main-head,
+body.product-shell-v70.fw-editor-viewer-shell .pane-head,
+body.product-shell-v70.fw-editor-viewer-shell .inspector-head,
+body.product-shell-v70.fw-editor-viewer-shell .panel,
+body.product-shell-v70.fw-editor-viewer-shell .tree-detail-card,
+body.product-shell-v70.fw-editor-viewer-shell .table-card,
+body.product-shell-v70.fw-editor-viewer-shell .data-row,
+body.product-shell-v70.fw-editor-viewer-shell .empty-card,
+body.product-shell-v70.ui-2026 .pane,
+body.product-shell-v70.ui-2026 .main-head,
+body.product-shell-v70.ui-2026 .pane-head,
+body.product-shell-v70.ui-2026 .inspector-head,
+body.product-shell-v70.ui-2026 .panel,
+body.product-shell-v70.ui-2026 .tree-detail-card,
+body.product-shell-v70.ui-2026 .table-card,
+body.product-shell-v70.ui-2026 .data-row,
+body.product-shell-v70.ui-2026 .empty-card {
+  border-color: var(--fw26-border);
+  background: var(--fw26-surface-raised);
+  color: var(--fw26-text);
+  box-shadow: var(--fw26-shadow-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .pane,
+body.product-shell-v70.ui-2026 .pane {
+  border-radius: var(--fw26-radius-xl);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .main-head,
+body.product-shell-v70.ui-2026 .main-head {
+  border-radius: var(--fw26-radius-xl) var(--fw26-radius-xl) 0 0;
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--fw26-accent-soft) 80%, transparent), transparent 28rem),
+    var(--fw26-surface-raised);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell #content,
+body.product-shell-v70.fw-editor-viewer-shell .content,
+body.product-shell-v70.ui-2026 #content,
+body.product-shell-v70.ui-2026 .content {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--fw26-bg-page) 86%, transparent), var(--fw26-bg-canvas));
+  color: var(--fw26-text);
+  scrollbar-gutter: stable;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .scope-title h2,
+body.product-shell-v70.fw-editor-viewer-shell .product-hero h2,
+body.product-shell-v70.fw-editor-viewer-shell .global-hero h3,
+body.product-shell-v70.fw-editor-viewer-shell .panel h3,
+body.product-shell-v70.ui-2026 .scope-title h2,
+body.product-shell-v70.ui-2026 .product-hero h2,
+body.product-shell-v70.ui-2026 .global-hero h3,
+body.product-shell-v70.ui-2026 .panel h3 {
+  color: var(--fw26-text);
+  font-weight: 860;
+  letter-spacing: -.025em;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .eyebrow,
+body.product-shell-v70.fw-editor-viewer-shell .scope-kicker,
+body.product-shell-v70.fw-editor-viewer-shell .tree-detail-kicker,
+body.product-shell-v70.ui-2026 .eyebrow,
+body.product-shell-v70.ui-2026 .scope-kicker,
+body.product-shell-v70.ui-2026 .tree-detail-kicker {
+  color: var(--fw26-accent);
+  font-family: var(--fw26-font-mono);
+  letter-spacing: .14em;
+  font-weight: 850;
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .caption,
+body.product-shell-v70.fw-editor-viewer-shell .tree-detail-sub,
+body.product-shell-v70.fw-editor-viewer-shell .scope-row-meta,
+body.product-shell-v70.fw-editor-viewer-shell .data-sub,
+body.product-shell-v70.fw-editor-viewer-shell .tree-meta,
+body.product-shell-v70.fw-editor-viewer-shell .action-list-meta,
+body.product-shell-v70.ui-2026 .caption,
+body.product-shell-v70.ui-2026 .tree-detail-sub,
+body.product-shell-v70.ui-2026 .scope-row-meta,
+body.product-shell-v70.ui-2026 .data-sub,
+body.product-shell-v70.ui-2026 .tree-meta,
+body.product-shell-v70.ui-2026 .action-list-meta {
+  color: var(--fw26-muted);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .btn,
+body.product-shell-v70.fw-editor-viewer-shell .chip-btn,
+body.product-shell-v70.fw-editor-viewer-shell .segmented button,
+body.product-shell-v70.ui-2026 .btn,
+body.product-shell-v70.ui-2026 .chip-btn,
+body.product-shell-v70.ui-2026 .segmented button {
+  border-color: var(--fw26-border);
+  border-radius: var(--fw26-radius-sm);
+  background: var(--fw26-surface);
+  color: var(--fw26-text-soft);
+  box-shadow: 0 1px 0 rgba(255,255,255,.70);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .btn:hover,
+body.product-shell-v70.fw-editor-viewer-shell .chip-btn:hover,
+body.product-shell-v70.fw-editor-viewer-shell .segmented button:hover,
+body.product-shell-v70.ui-2026 .btn:hover,
+body.product-shell-v70.ui-2026 .chip-btn:hover,
+body.product-shell-v70.ui-2026 .segmented button:hover {
+  border-color: var(--fw26-border-strong);
+  background: color-mix(in srgb, var(--fw26-accent-soft) 34%, var(--fw26-surface));
+  color: var(--fw26-accent);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .btn.primary,
+body.product-shell-v70.fw-editor-viewer-shell .chip-btn.active,
+body.product-shell-v70.fw-editor-viewer-shell .segmented button.active,
+body.product-shell-v70.fw-editor-viewer-shell .scope-row.active,
+body.product-shell-v70.fw-editor-viewer-shell .global-view-row.active,
+body.product-shell-v70.fw-editor-viewer-shell .table-index-row.active,
+body.product-shell-v70.ui-2026 .btn.primary,
+body.product-shell-v70.ui-2026 .chip-btn.active,
+body.product-shell-v70.ui-2026 .segmented button.active,
+body.product-shell-v70.ui-2026 .scope-row.active,
+body.product-shell-v70.ui-2026 .global-view-row.active,
+body.product-shell-v70.ui-2026 .table-index-row.active {
+  border-color: color-mix(in srgb, var(--fw26-accent) 45%, var(--fw26-border));
+  background: color-mix(in srgb, var(--fw26-accent-soft) 72%, var(--fw26-surface));
+  color: var(--fw26-accent);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .scope-row,
+body.product-shell-v70.fw-editor-viewer-shell .global-view-row,
+body.product-shell-v70.fw-editor-viewer-shell .table-index-row,
+body.product-shell-v70.fw-editor-viewer-shell .tree-row,
+body.product-shell-v70.fw-editor-viewer-shell .action-list-row,
+body.product-shell-v70.ui-2026 .scope-row,
+body.product-shell-v70.ui-2026 .global-view-row,
+body.product-shell-v70.ui-2026 .table-index-row,
+body.product-shell-v70.ui-2026 .tree-row,
+body.product-shell-v70.ui-2026 .action-list-row {
+  border-radius: var(--fw26-radius-md);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .scope-row:hover,
+body.product-shell-v70.fw-editor-viewer-shell .global-view-row:hover,
+body.product-shell-v70.fw-editor-viewer-shell .table-index-row:hover,
+body.product-shell-v70.fw-editor-viewer-shell .tree-row:hover,
+body.product-shell-v70.fw-editor-viewer-shell .action-list-row:hover,
+body.product-shell-v70.ui-2026 .scope-row:hover,
+body.product-shell-v70.ui-2026 .global-view-row:hover,
+body.product-shell-v70.ui-2026 .table-index-row:hover,
+body.product-shell-v70.ui-2026 .tree-row:hover,
+body.product-shell-v70.ui-2026 .action-list-row:hover {
+  border-color: color-mix(in srgb, var(--fw26-accent) 24%, var(--fw26-border));
+  background: color-mix(in srgb, var(--fw26-accent-soft) 42%, var(--fw26-surface));
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .tree,
+body.product-shell-v70.ui-2026 .tree {
+  border-color: var(--fw26-border);
+  border-radius: var(--fw26-radius-lg);
+  background: var(--fw26-surface);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.70);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .table-def-item,
+body.product-shell-v70.fw-editor-viewer-shell .metric,
+body.product-shell-v70.fw-editor-viewer-shell .global-summary-tile,
+body.product-shell-v70.fw-editor-viewer-shell .global-usage-mini,
+body.product-shell-v70.fw-editor-viewer-shell .global-usage-row,
+body.product-shell-v70.ui-2026 .table-def-item,
+body.product-shell-v70.ui-2026 .metric,
+body.product-shell-v70.ui-2026 .global-summary-tile,
+body.product-shell-v70.ui-2026 .global-usage-mini,
+body.product-shell-v70.ui-2026 .global-usage-row {
+  border-color: var(--fw26-border);
+  border-radius: var(--fw26-radius-md);
+  background: var(--fw26-surface-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .badge.green,
+body.product-shell-v70.ui-2026 .badge.green {
+  color: var(--fw26-good);
+  border-color: color-mix(in srgb, var(--fw26-good) 32%, var(--fw26-border));
+  background: var(--fw26-good-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .badge.amber,
+body.product-shell-v70.ui-2026 .badge.amber {
+  color: var(--fw26-warn);
+  border-color: color-mix(in srgb, var(--fw26-warn) 32%, var(--fw26-border));
+  background: var(--fw26-warn-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .badge.red,
+body.product-shell-v70.ui-2026 .badge.red {
+  color: var(--fw26-bad);
+  border-color: color-mix(in srgb, var(--fw26-bad) 32%, var(--fw26-border));
+  background: var(--fw26-bad-soft);
+}
+
+body.product-shell-v70.fw-editor-viewer-shell .scroll,
+body.product-shell-v70.fw-editor-viewer-shell #content,
+body.product-shell-v70.fw-editor-viewer-shell .content,
+body.product-shell-v70.fw-editor-viewer-shell .pane.left,
+body.product-shell-v70.fw-editor-viewer-shell .inspector-body,
+body.product-shell-v70.ui-2026 .scroll,
+body.product-shell-v70.ui-2026 #content,
+body.product-shell-v70.ui-2026 .content,
+body.product-shell-v70.ui-2026 .pane.left,
+body.product-shell-v70.ui-2026 .inspector-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--fw26-border-strong) 72%, transparent) transparent;
+}
+/* END FW PRODUCT SHELL V70 SAFE POLISH LAYER */
+

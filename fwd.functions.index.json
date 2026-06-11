@@ -2,7 +2,7 @@
   "schema": "AcRuleViewer.FwdWorkspaceIndex",
   "schemaVersion": "1.0.0",
   "workspace": "functions",
-  "generatedAtUtc": "2026-06-11T15:29:28.300Z",
+  "generatedAtUtc": "2026-06-11T21:13:20.724Z",
   "functions": {
     "count": 760,
     "items": [

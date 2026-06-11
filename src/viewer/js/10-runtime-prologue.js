@@ -1,6 +1,7 @@
-
+﻿
 (function(){
 'use strict';
+
 // v62.12 resource-hydration fix: unwraps API data, loads canonical UDF/table endpoints, and displays tables/UDFs without hiding confirmed FWD resources.
 /*
   FormWorks Editor generated viewer.
@@ -69,12 +70,13 @@ function fwClearBootPlaceholder(){
 
   root.classList.add('fw-boot-placeholder-done');
   root.setAttribute('aria-hidden', 'true');
+  root.classList.add('fw-boot-placeholder-done');
 
-  window.setTimeout(() => {
-    if(root && root.parentNode){
-      root.parentNode.removeChild(root);
-    }
-  }, 220);
+  try {
+    root.remove();
+  } catch (_) {
+    if(root.parentNode) root.parentNode.removeChild(root);
+  }
 }
 
 function fwBootPlaceholderDiagnosticBridge(eventName, detail){
@@ -883,7 +885,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
   if(value===null||value===undefined)return value;
   const type=typeof value;
   if(type==='string'){
-    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}… (${fmt(value.length)} chars)`:value;
+    return value.length>opts.maxString?`${value.slice(0,opts.maxString)}â€¦ (${fmt(value.length)} chars)`:value;
   }
   if(type==='number'||type==='boolean')return value;
   if(type==='function')return '[Function]';
@@ -893,7 +895,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
     refs.weak.add(value);
     if(Array.isArray(value)){
       const out=value.slice(0,opts.maxArray).map(item=>boundedPreviewValue(item,opts,depth+1,refs));
-      if(value.length>opts.maxArray){refs.truncated=true;out.push(`… ${fmt(value.length-opts.maxArray)} more item(s)`);}
+      if(value.length>opts.maxArray){refs.truncated=true;out.push(`â€¦ ${fmt(value.length-opts.maxArray)} more item(s)`);}
       return out;
     }
     const out={};
@@ -905,7 +907,7 @@ function boundedPreviewValue(value,options={},depth=0,seen){
         out[key]=boundedPreviewValue(value[key],opts,depth+1,refs);
       }
     });
-    if(keys.length>opts.maxKeys){refs.truncated=true;out['…']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
+    if(keys.length>opts.maxKeys){refs.truncated=true;out['â€¦']=`${fmt(keys.length-opts.maxKeys)} more key(s)`;}
     return out;
   }
   return text(value);
@@ -915,7 +917,7 @@ function summaryForLargeValue(value){
   if(Array.isArray(value))return `[Array(${fmt(value.length)})]`;
   if(typeof value==='object')return `[Object(${fmt(Object.keys(value).length)} keys)]`;
   const s=text(value);
-  return s.length>180?`${s.slice(0,180)}…`:s;
+  return s.length>180?`${s.slice(0,180)}â€¦`:s;
 }
 function previewJson(value,options={}){
   const tracker={weak:new WeakSet(),nodes:0,truncated:false};
@@ -924,7 +926,7 @@ function previewJson(value,options={}){
   try{json=JSON.stringify(preview,null,2);}
   catch(error){json=`"[Preview unavailable: ${text(error&&error.message||error)}]"`;}
   const maxChars=Number(options.maxChars||18000);
-  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\n… (${fmt(json.length-maxChars)} more chars)`;}
+  if(json.length>maxChars){tracker.truncated=true;json=`${json.slice(0,maxChars)}\nâ€¦ (${fmt(json.length-maxChars)} more chars)`;}
   return {json,truncated:tracker.truncated};
 }
 function previewJsonHtml(value,options={}){
@@ -1024,7 +1026,7 @@ function isDesktopPrimaryDevice(){return window.matchMedia('(min-width: 1280px) 
 function isCompactShellLayout(){
   const w=Math.max(window.innerWidth||0,document.documentElement.clientWidth||0);
   const coarse=window.matchMedia('(pointer: coarse)').matches;
-  return w<1180||coarse;
+  return w<1440||coarse;
 }
 function isAdvancedMode(){
   try{
@@ -1136,9 +1138,9 @@ function ensureScrollablePaneFocus(){
 function scrollableElementFromTarget(target){
   let el=target&&target.nodeType===1?target:target?.parentElement;
   while(el&&el!==document.body&&el!==document.documentElement){
-    const style=window.getComputedStyle?window.getComputedStyle(el):null;
-    const overflowY=style?.overflowY||'';
-    const overflowX=style?.overflowX||'';
+    const computedStyle=window.getComputedStyle?window.getComputedStyle(el):null;
+    const overflowY=computedStyle?.overflowY||'';
+    const overflowX=computedStyle?.overflowX||'';
     const scrollY=/(auto|scroll|overlay)/.test(overflowY)&&el.scrollHeight>el.clientHeight+1;
     const scrollX=/(auto|scroll|overlay)/.test(overflowX)&&el.scrollWidth>el.clientWidth+1;
     if(scrollY||scrollX)return el;
@@ -1163,3 +1165,8 @@ function wheelFallbackTarget(target){
   if(el?.closest?.('.pane.right'))return optionalElement('inspectorBody');
   return optionalElement('content')||optionalElement('scopeList')||optionalElement('inspectorBody');
 }
+
+
+
+
+
