@@ -7,8 +7,87 @@
 <meta name="description" content="Read-only FW Editor-style viewer for FWD configuration, rule lists, UDFs, tables, SelectionLists, fields, pages, documents, and resources.">
 <title>FormWorks Editor Viewer - Read-only FWD Configuration</title>
 <link id="viewerStylesheet" rel="stylesheet" href="ac-rule-viewer.css?v=fw-editor-viewer-v104">
+<script id="workbenchMotionStyles" type="text/plain">
+/* Workbench Motion v1: restrained, state-oriented motion with no framework dependency. */
+:root{
+  --wm-duration-fast:120ms;
+  --wm-duration-standard:190ms;
+  --wm-duration-emphasis:280ms;
+  --wm-ease-standard:cubic-bezier(.2,.8,.2,1);
+  --wm-ease-emphasis:cubic-bezier(.16,1,.3,1);
+  --wm-selection-ring:color-mix(in srgb,var(--brand-2,#2563eb) 34%,transparent);
+}
+.fw-editor-viewer-shell .pane,
+.fw-editor-viewer-shell .modal,
+.fw-editor-viewer-shell .search-popover,
+.fw-editor-viewer-shell .toast,
+.fw-editor-viewer-shell .global-error{
+  transform-origin:center top;
+}
+.fw-editor-viewer-shell .fwd-tree-row,
+.fw-editor-viewer-shell .global-view-row,
+.fw-editor-viewer-shell .fwd-tree-resource-row,
+.fw-editor-viewer-shell .rule-row,
+.fw-editor-viewer-shell .action-list-row,
+.fw-editor-viewer-shell [role="tab"]{
+  transition:
+    background-color var(--wm-duration-fast) var(--wm-ease-standard),
+    border-color var(--wm-duration-fast) var(--wm-ease-standard),
+    box-shadow var(--wm-duration-fast) var(--wm-ease-standard),
+    color var(--wm-duration-fast) var(--wm-ease-standard),
+    transform var(--wm-duration-fast) var(--wm-ease-standard);
+}
+.fw-editor-viewer-shell .fwd-tree-row:active,
+.fw-editor-viewer-shell .global-view-row:active,
+.fw-editor-viewer-shell .fwd-tree-resource-row:active,
+.fw-editor-viewer-shell [role="tab"]:active{
+  transform:translateY(1px);
+}
+.fw-editor-viewer-shell .wm-selection-emphasis{
+  animation:wm-selection-emphasis var(--wm-duration-emphasis) var(--wm-ease-emphasis);
+}
+.fw-editor-viewer-shell .wm-status-emphasis{
+  animation:wm-status-emphasis var(--wm-duration-emphasis) var(--wm-ease-emphasis);
+}
+.fw-editor-viewer-shell .wm-inspector-enter{
+  animation:wm-inspector-enter var(--wm-duration-emphasis) var(--wm-ease-emphasis);
+}
+.fw-editor-viewer-shell .wm-modal-enter{
+  animation:wm-modal-enter var(--wm-duration-emphasis) var(--wm-ease-emphasis);
+}
+@keyframes wm-selection-emphasis{
+  0%{box-shadow:0 0 0 0 transparent}
+  45%{box-shadow:0 0 0 3px var(--wm-selection-ring)}
+  100%{box-shadow:0 0 0 0 transparent}
+}
+@keyframes wm-status-emphasis{
+  0%{transform:scale(.985);opacity:.72}
+  100%{transform:scale(1);opacity:1}
+}
+@keyframes wm-inspector-enter{
+  0%{opacity:0;transform:translateX(12px)}
+  100%{opacity:1;transform:translateX(0)}
+}
+@keyframes wm-modal-enter{
+  0%{opacity:0;transform:translateY(-8px) scale(.99)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+@media (prefers-reduced-motion:reduce){
+  :root{
+    --wm-duration-fast:.01ms;
+    --wm-duration-standard:.01ms;
+    --wm-duration-emphasis:.01ms;
+  }
+  .fw-editor-viewer-shell .wm-selection-emphasis,
+  .fw-editor-viewer-shell .wm-status-emphasis,
+  .fw-editor-viewer-shell .wm-inspector-enter,
+  .fw-editor-viewer-shell .wm-modal-enter{
+    animation:none;
+  }
+}
+</script>
 </head>
-<body class="product-shell-v70 fw-editor-viewer-shell ui-2026 density-standard">
+<body class="product-shell-v70 fw-editor-viewer-shell ui-2026 density-standard workbench-motion">
 
   <div id="fwBootPlaceholder" class="fw-boot-placeholder" role="status" aria-live="polite">
     <div class="fw-boot-placeholder-card">
@@ -133,5 +212,180 @@
 <div id="globalErrorBanner" class="global-error" role="alert" hidden></div>
 <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script defer src="ac-rule-viewer.js?v=fw-editor-viewer-v104"></script>
+<script id="workbenchMotionRuntime">
+(() => {
+  'use strict';
+
+  const encodedStyles = document.getElementById('workbenchMotionStyles');
+  if (encodedStyles && !document.getElementById('workbenchMotionStyleSheet')) {
+    const sheet = document.createElement('style');
+    sheet.id = 'workbenchMotionStyleSheet';
+    sheet.textContent = encodedStyles.textContent || '';
+    document.head.appendChild(sheet);
+  }
+
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const supportsWebAnimations = typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function';
+  const activeAnimations = new WeakMap();
+  const pendingRoots = new Set();
+  let frameId = 0;
+  let inspectorWasOpen = document.body.classList.contains('inspector-open');
+  let helpWasVisible = false;
+  let lastEmphasized = null;
+
+  const motionEnabled = () => supportsWebAnimations && !reduceMotion?.matches;
+  const isHTMLElement = value => value instanceof HTMLElement;
+
+  function animateElement(element, keyframes, options) {
+    if (!motionEnabled() || !isHTMLElement(element)) return null;
+    activeAnimations.get(element)?.cancel();
+    const animation = element.animate(keyframes, {
+      duration: 190,
+      easing: 'cubic-bezier(.2,.8,.2,1)',
+      fill: 'both',
+      ...options
+    });
+    activeAnimations.set(element, animation);
+    animation.addEventListener('finish', () => {
+      if (activeAnimations.get(element) === animation) activeAnimations.delete(element);
+    }, { once: true });
+    animation.addEventListener('cancel', () => {
+      if (activeAnimations.get(element) === animation) activeAnimations.delete(element);
+    }, { once: true });
+    return animation;
+  }
+
+  function revealRoot(root) {
+    if (!motionEnabled() || !isHTMLElement(root) || root.hidden) return;
+    animateElement(root, [
+      { opacity: .72, transform: 'translateY(3px)' },
+      { opacity: 1, transform: 'translateY(0)' }
+    ], { duration: 170 });
+
+    const children = Array.from(root.children)
+      .filter(child => isHTMLElement(child) && !child.matches('script,style,.sr-only,[hidden]'))
+      .slice(0, 10);
+
+    children.forEach((child, index) => {
+      animateElement(child, [
+        { opacity: 0, transform: 'translateY(5px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 180, delay: Math.min(index * 18, 126) });
+    });
+  }
+
+  function queueReveal(root) {
+    if (!isHTMLElement(root)) return;
+    pendingRoots.add(root);
+    if (frameId) return;
+    frameId = requestAnimationFrame(() => {
+      frameId = 0;
+      const roots = Array.from(pendingRoots);
+      pendingRoots.clear();
+      roots.forEach(revealRoot);
+    });
+  }
+
+  function restartClassAnimation(element, className) {
+    if (!motionEnabled() || !isHTMLElement(element)) return;
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+    window.setTimeout(() => element.classList.remove(className), 340);
+  }
+
+  function emphasizeSelection(element) {
+    if (!isHTMLElement(element) || element === lastEmphasized) return;
+    lastEmphasized = element;
+    restartClassAnimation(element, 'wm-selection-emphasis');
+  }
+
+  function visibleModal(element) {
+    if (!isHTMLElement(element) || element.hidden) return false;
+    const computed = window.getComputedStyle(element);
+    return computed.display !== 'none' && computed.visibility !== 'hidden' && Number(computed.opacity || 1) !== 0;
+  }
+
+  function handleBodyClassChange() {
+    const inspectorOpen = document.body.classList.contains('inspector-open');
+    if (inspectorOpen && !inspectorWasOpen) {
+      const inspector = document.querySelector('.pane.right');
+      restartClassAnimation(inspector, 'wm-inspector-enter');
+    }
+    inspectorWasOpen = inspectorOpen;
+  }
+
+  function nearestRevealRoot(target) {
+    if (!isHTMLElement(target)) return null;
+    return target.closest('#content,#globalNav,#scopeList,#inspectorBody,#tabs,#viewbar,#searchPopover,#helpBody,#diagnosticsDock');
+  }
+
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      const target = record.target;
+      if (record.type === 'childList') {
+        const root = nearestRevealRoot(target);
+        if (root) queueReveal(root);
+        if (isHTMLElement(target)) {
+          const status = target.closest('#statusPill,#sourceSummaryWarnings');
+          if (status) restartClassAnimation(status, 'wm-status-emphasis');
+        }
+      }
+
+      if (record.type !== 'attributes' || !isHTMLElement(target)) continue;
+
+      if (target === document.body && record.attributeName === 'class') {
+        handleBodyClassChange();
+        continue;
+      }
+
+      if (target.id === 'helpModal') {
+        const helpVisible = visibleModal(target);
+        if (helpVisible && !helpWasVisible) restartClassAnimation(target, 'wm-modal-enter');
+        helpWasVisible = helpVisible;
+      }
+
+      const becameSelected = target.classList.contains('active')
+        || target.classList.contains('selected')
+        || target.getAttribute('aria-current') === 'page'
+        || target.getAttribute('aria-selected') === 'true';
+      if (becameSelected) emphasizeSelection(target);
+    }
+  });
+
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class', 'hidden', 'aria-current', 'aria-selected', 'aria-busy']
+  });
+
+  requestAnimationFrame(() => {
+    document.body.classList.add('wm-ready');
+    document.querySelectorAll('.topbar,.pane').forEach((element, index) => {
+      animateElement(element, [
+        { opacity: 0, transform: 'translateY(6px)' },
+        { opacity: 1, transform: 'translateY(0)' }
+      ], { duration: 220, delay: index * 32, easing: 'cubic-bezier(.16,1,.3,1)' });
+    });
+  });
+
+  reduceMotion?.addEventListener?.('change', event => {
+    document.body.classList.toggle('wm-reduced-motion', event.matches);
+    if (event.matches) {
+      document.getAnimations?.().forEach(animation => animation.finish());
+    }
+  });
+
+  window.WorkbenchMotion = Object.freeze({
+    refresh() {
+      ['content', 'globalNav', 'scopeList', 'inspectorBody'].forEach(id => queueReveal(document.getElementById(id)));
+    },
+    get enabled() {
+      return motionEnabled();
+    }
+  });
+})();
+</script>
 </body>
 </html>
